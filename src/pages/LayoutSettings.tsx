@@ -166,7 +166,7 @@ function TemplateSection() {
           </div>
         </div>
       ))}
-      <InfoBanner style={{ marginTop: 10 }}>Posizionamento X/Y, dimensioni e font configurabili nella versione con backend.</InfoBanner>
+      <div style={{ marginTop: 10 }}><InfoBanner>Posizionamento X/Y, dimensioni e font configurabili nella versione con backend.</InfoBanner>ß</div>
     </>
   );
 }
