@@ -1,5 +1,5 @@
 import React from 'react';
-import { PostSource, PostStatus } from '../types';
+import { Platform, PostStatus } from '../types';
 
 // ── Page Header ───────────────────────────────────────────
 interface PageHeaderProps {
@@ -28,12 +28,12 @@ export function PageHeader({ title, onBack, badge, badgeVariant = 'purple', righ
 }
 
 // ── Source Badge ──────────────────────────────────────────
-export function SourceBadge({ src }: { src: PostSource }) {
-  const styles: Record<PostSource, React.CSSProperties> = {
-    az: { background: '#1a1000', color: '#f59e0b', border: '1px solid #3a2000', padding: '2px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700 },
-    ali: { background: '#1a0808', color: '#ff6b6b', border: '1px solid #3a1010', padding: '2px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700 },
+export function SourceBadge({ platform }: { platform: Platform }) {
+  const styles: Record<Platform, React.CSSProperties> = {
+    amazon: { background: '#1a1000', color: '#f59e0b', border: '1px solid #3a2000', padding: '2px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700 },
+    aliexpress: { background: '#1a0808', color: '#ff6b6b', border: '1px solid #3a1010', padding: '2px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700 },
   };
-  return <span style={styles[src]}>{src === 'az' ? 'Amazon' : 'AliExpress'}</span>;
+  return <span style={styles[platform]}>{platform === 'amazon' ? 'Amazon' : 'AliExpress'}</span>;
 }
 
 // ── Status Badge ──────────────────────────────────────────
@@ -97,17 +97,6 @@ export function DiscountBadge({ pct }: { pct: number }) {
   return <span className="dbdg">-{pct}%</span>;
 }
 
-// ── Price Row ─────────────────────────────────────────────
-export function PriceRow({ orig, sc, sconto }: { orig?: string; sc: string; sconto?: number }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-      <span className="pnew">€{sc}</span>
-      {orig && <span className="pold">€{orig}</span>}
-      {sconto && <DiscountBadge pct={sconto} />}
-    </div>
-  );
-}
-
 // ── Empty State ───────────────────────────────────────────
 export function EmptyState({ icon, text, action }: { icon: string; text: string; action?: React.ReactNode }) {
   return (
@@ -129,14 +118,18 @@ export function ErrorBanner({ children }: { children: React.ReactNode }) {
 
 // ── Telegram Preview ──────────────────────────────────────
 interface TelegramPreviewProps {
-  lines: React.ReactNode;
+  text?: string;
+  lines?: React.ReactNode;
   buttons?: string[];
 }
-export function TelegramPreview({ lines, buttons = ['🛒 Compra ora'] }: TelegramPreviewProps) {
+export function TelegramPreview({ text, lines, buttons = ['🛒 Compra ora'] }: TelegramPreviewProps) {
   return (
     <div className="pvbox">
       <span className="pvbdg">PREVIEW TELEGRAM</span>
-      <div className="pvmsg">{lines}</div>
+      {text !== undefined
+        ? <div className="pvmsg" style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
+        : <div className="pvmsg">{lines}</div>
+      }
       {buttons.map((b, i) => (
         <div key={i} className="tgbtn">{b}</div>
       ))}

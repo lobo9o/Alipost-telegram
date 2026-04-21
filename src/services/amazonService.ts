@@ -1,16 +1,18 @@
 export interface AmazonProduct {
   asin: string;
   title: string;
-  price: number;
-  originalPrice: number;
   image: string;
+  originalPrice: number;
+  discountedPrice: number;
+  discountPercent: number;
 }
 
 const MOCK_CATALOG: Record<string, AmazonProduct> = {
-  B08N5WRWNW: { asin: 'B08N5WRWNW', title: 'Sony WH-1000XM5 Wireless Noise Cancelling', price: 189.00, originalPrice: 299.00, image: 'placeholder.jpg' },
-  B09G9HD6PD: { asin: 'B09G9HD6PD', title: 'Anker MagSafe Wireless Charger 15W Fast', price: 24.99, originalPrice: 39.99, image: 'placeholder.jpg' },
-  B07CZNHLFJ: { asin: 'B07CZNHLFJ', title: 'Logitech MX Master 3S Wireless Mouse', price: 69.99, originalPrice: 99.99, image: 'placeholder.jpg' },
-  B09B8YWXDF: { asin: 'B09B8YWXDF', title: 'Samsung Galaxy Buds2 Pro True Wireless', price: 149.00, originalPrice: 229.00, image: 'placeholder.jpg' },
+  B08N5WRWNW: { asin: 'B08N5WRWNW', title: 'Sony WH-1000XM5 Wireless Noise Cancelling Headphones', image: '', originalPrice: 299.00, discountedPrice: 189.00, discountPercent: 37 },
+  B09G9HD6PD: { asin: 'B09G9HD6PD', title: 'Anker MagSafe Wireless Charger 15W Fast Charge', image: '', originalPrice: 39.99, discountedPrice: 24.99, discountPercent: 37 },
+  B07CZNHLFJ: { asin: 'B07CZNHLFJ', title: 'Logitech MX Master 3S Wireless Performance Mouse', image: '', originalPrice: 99.99, discountedPrice: 69.99, discountPercent: 30 },
+  B09B8YWXDF: { asin: 'B09B8YWXDF', title: 'Samsung Galaxy Buds2 Pro True Wireless Earbuds', image: '', originalPrice: 229.00, discountedPrice: 149.00, discountPercent: 35 },
+  B0C1234567: { asin: 'B0C1234567', title: 'Fire TV Stick 4K Max con Alexa', image: '', originalPrice: 74.99, discountedPrice: 34.99, discountPercent: 53 },
 };
 
 export function detectAmazonLink(url: string): boolean {
@@ -24,25 +26,31 @@ export function extractASIN(url: string): string | null {
     /\/ASIN\/([A-Z0-9]{10})/i,
     /[?&]asin=([A-Z0-9]{10})/i,
   ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1].toUpperCase();
+  for (const pat of patterns) {
+    const m = url.match(pat);
+    if (m) return m[1].toUpperCase();
   }
   return null;
 }
 
-// Simulates a backend call — never use Amazon PA-API directly in the frontend.
-// In production: POST /api/amazon/product { asin }
-export async function fetchAmazonProduct(asin: string): Promise<AmazonProduct> {
-  await new Promise(r => setTimeout(r, 400));
+// Never calls Amazon PA-API directly from the frontend.
+// In production: POST /api/amazon/product { asin } → backend handles credentials.
+export async function fetchAmazonProduct(input: string): Promise<AmazonProduct> {
+  const asin = (extractASIN(input) ?? input).toUpperCase();
+  await new Promise(r => setTimeout(r, 500));
 
   if (MOCK_CATALOG[asin]) return MOCK_CATALOG[asin];
 
+  const disc = Math.round(Math.random() * 40 + 15);
+  const origPrice = Math.round((Math.random() * 120 + 20) * 100) / 100;
+  const discPrice = Math.round(origPrice * (1 - disc / 100) * 100) / 100;
+
   return {
     asin,
-    title: `Prodotto Amazon (ASIN: ${asin})`,
-    price: 29.99,
-    originalPrice: 49.99,
-    image: 'placeholder.jpg',
+    title: `Prodotto Amazon (${asin})`,
+    image: '',
+    originalPrice: origPrice,
+    discountedPrice: discPrice,
+    discountPercent: disc,
   };
 }

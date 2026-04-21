@@ -1,44 +1,41 @@
-export type PostSource = 'az' | 'ali';
+export type Platform = 'amazon' | 'aliexpress';
 export type PostType = 'single' | 'multi';
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'error';
-export type LayoutType = 'normale' | 'minimo_storico' | 'multiplo';
+export type LayoutType = 'normal' | 'historical_low' | 'multi';
+export type TemplateType = 'normal' | 'historical_low';
 export type NavPage = 'dash' | 'search' | 'newpost' | 'queue' | 'published' | 'layout' | 'settings';
 
 export interface Tag {
   id: string;
-  name: string;  // e.g. "{titolo}"
-  value: string; // e.g. "Titolo del prodotto"
+  name: string;
+  value: string;
 }
 
-export interface Product {
+export interface CreatedPost {
   id: string;
-  titolo: string;
-  prezzo_orig: string;
-  prezzo_sc: string;
-  sconto: number;
+  platform: Platform;
+  sourceUrl: string;
+  productId: string;
+  title: string;
+  image: string;
+  originalPrice: number;
+  discountedPrice: number;
+  discountPercent: number;
+  customText: string;
+  isHistoricalLow: boolean;
+  templateId: string;
+  layoutId: string;
   emoji: string;
-  src: PostSource;
-  custom: string;
-  asin?: string;
 }
 
-export interface QueueItem {
+export interface CatalogProduct {
   id: string;
-  tipo: PostType;
-  src: PostSource;
-  products: Partial<Product>[];
-  sched: string;
-  status: PostStatus;
-  sel: boolean;
-}
-
-export interface PublishedPost {
-  id: string;
+  platform: Platform;
   emoji: string;
-  titolo: string;
-  prezzo: string;
-  src: PostSource;
-  ts: string;
+  title: string;
+  originalPrice: number;
+  discountedPrice: number;
+  discountPercent: number;
 }
 
 export interface TextLayout {
@@ -48,14 +45,31 @@ export interface TextLayout {
   contenuto: string;
 }
 
-export interface TemplateElement {
+export interface Template {
   id: string;
   nome: string;
-  color: string;
-  vis: boolean;
-  x: number;
-  y: number;
-  w: number;
+  tipo: TemplateType;
+  overlay: string | null;
+  logo: string | null;
+  badgeEnabled: boolean;
+}
+
+export interface QueueItem {
+  id: string;
+  tipo: PostType;
+  posts: CreatedPost[];
+  sched: string;
+  status: PostStatus;
+  sel: boolean;
+}
+
+export interface PublishedPost {
+  id: string;
+  emoji: string;
+  title: string;
+  price: string;
+  platform: Platform;
+  ts: string;
 }
 
 export interface AmazonSettings {
@@ -72,17 +86,6 @@ export interface AliExpressSettings {
   trackingId: string;
 }
 
-export interface TemplateSettings {
-  overlay: string | null;
-  logo: string | null;
-  badgeEnabled: boolean;
-  positions: {
-    productImage: { x: number; y: number; w: number };
-    price: { x: number; y: number; w: number };
-    discount: { x: number; y: number; w: number };
-  };
-}
-
 export interface AppSettings {
   oraI: string;
   oraF: string;
@@ -94,22 +97,22 @@ export interface AppSettings {
 }
 
 export interface AppState {
+  createdPosts: CreatedPost[];
   queue: QueueItem[];
   published: PublishedPost[];
   tags: Tag[];
   layouts: TextLayout[];
+  templates: Template[];
   settings: AppSettings;
-  telElems: TemplateElement[];
-  templateSettings: TemplateSettings;
 }
 
 export interface AppContextType extends AppState {
+  setCreatedPosts: React.Dispatch<React.SetStateAction<CreatedPost[]>>;
   setQueue: React.Dispatch<React.SetStateAction<QueueItem[]>>;
   setPublished: React.Dispatch<React.SetStateAction<PublishedPost[]>>;
   setTags: React.Dispatch<React.SetStateAction<Tag[]>>;
   setLayouts: React.Dispatch<React.SetStateAction<TextLayout[]>>;
+  setTemplates: React.Dispatch<React.SetStateAction<Template[]>>;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
-  setTelElems: React.Dispatch<React.SetStateAction<TemplateElement[]>>;
-  setTemplateSettings: React.Dispatch<React.SetStateAction<TemplateSettings>>;
   stats: { inCoda: number; sched: number; pub: number };
 }

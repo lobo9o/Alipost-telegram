@@ -1,30 +1,228 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, Product, QueueItem } from '../types';
-import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, PriceRow, EmptyState, InfoBanner, ErrorBanner, TelegramPreview } from '../components/Shared';
-import { MOCK_PRODUCTS, genId, fetchProductMock } from '../data/mock';
-import { detectAmazonLink, extractASIN, fetchAmazonProduct } from '../services/amazonService';
+import { NavPage, CreatedPost, CatalogProduct, QueueItem, Platform, Template } from '../types';
+import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
+import { MOCK_CATALOG, genId } from '../data/mock';
+import { detectAmazonLink, fetchAmazonProduct } from '../services/amazonService';
+import { fetchAliExpressProduct } from '../services/aliexpressService';
+import { resolvePostTags } from '../utils/tagUtils';
+
+// ── Template image preview (reused in PostCard + standalone) ──
+function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
+  const showBadge = post.isHistoricalLow || (template?.badgeEnabled ?? false);
+  const hasImage = post.image && post.image !== 'placeholder.jpg';
+
+  return (
+    <div className="tpl-preview">
+      {/* Product image or emoji */}
+      <div className="tpl-product">
+        {hasImage
+          ? <img src={post.image} alt="" style={{ width: '65%', height: '65%', objectFit: 'contain' }} />
+          : <span style={{ fontSize: 88, filter: 'drop-shadow(0 4px 24px rgba(0,0,0,0.6))' }}>{post.emoji}</span>
+        }
+      </div>
+
+      {/* Overlay PNG */}
+      {template?.overlay && <img src={template.overlay} alt="" className="tpl-overlay" />}
+
+      {/* Logo */}
+      {template?.logo
+        ? <img src={template.logo} alt="" className="tpl-logo" />
+        : <div className="tpl-platform" style={{ background: post.platform === 'amazon' ? 'rgba(245,158,11,0.15)' : 'rgba(255,107,107,0.15)', color: post.platform === 'amazon' ? '#f59e0b' : '#ff6b6b', backdropFilter: 'blur(6px)' }}>
+            {post.platform === 'amazon' ? '🟡 Amazon' : '🔴 AliExpress'}
+          </div>
+      }
+
+      {/* Historical Low Badge */}
+      {showBadge && <div className="tpl-badge">🏆 MIN. STORICO</div>}
+
+      {/* Price bar */}
+      <div className="tpl-price-bar">
+        <div className="tpl-price-row">
+          <span className="tpl-price-new">€{post.discountedPrice.toFixed(2)}</span>
+          <span className="tpl-price-old">€{post.originalPrice.toFixed(2)}</span>
+          <span className="tpl-price-disc">-{post.discountPercent}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Single post card (used in carousel) ───────────────────────
+function PostCard({ postId, onDelete, onQueue, onPublish }: {
+  postId: string;
+  onDelete: () => void;
+  onQueue: () => void;
+  onPublish: () => void;
+}) {
+  const { createdPosts, setCreatedPosts, layouts, templates, tags } = useApp();
+  const post = createdPosts.find(p => p.id === postId);
+  if (!post) return null;
+
+  const currentTemplate = templates.find(t => t.id === post.templateId);
+  const currentLayout = layouts.find(l => l.id === post.layoutId);
+  const previewText = currentLayout ? resolvePostTags(currentLayout.contenuto, post, tags) : '—';
+
+  const update = (changes: Partial<CreatedPost>) =>
+    setCreatedPosts(prev => prev.map(p => p.id === postId ? { ...p, ...changes } : p));
+
+  const handlePrice = (field: 'originalPrice' | 'discountedPrice', raw: string) => {
+    const num = parseFloat(raw) || 0;
+    const orig = field === 'originalPrice' ? num : post.originalPrice;
+    const disc = field === 'discountedPrice' ? num : post.discountedPrice;
+    const pct = orig > 0 ? Math.round((1 - disc / orig) * 100) : 0;
+    update({ [field]: num, discountPercent: Math.max(0, pct) });
+  };
+
+  const handleHistoricalLow = (v: boolean) => {
+    const tplId = v
+      ? (templates.find(t => t.tipo === 'historical_low')?.id ?? post.templateId)
+      : (templates.find(t => t.tipo === 'normal')?.id ?? post.templateId);
+    const layId = v
+      ? (layouts.find(l => l.tipo === 'historical_low')?.id ?? post.layoutId)
+      : (layouts.find(l => l.tipo === 'normal')?.id ?? post.layoutId);
+    update({ isHistoricalLow: v, templateId: tplId, layoutId: layId });
+  };
+
+  return (
+    <div>
+      {/* Template image preview */}
+      <TemplateImagePreview post={post} template={currentTemplate} />
+
+      <div className="post-card">
+        {/* Header */}
+        <div className="post-card-header">
+          <SourceBadge platform={post.platform} />
+          {post.isHistoricalLow && (
+            <span style={{ fontSize: 10, background: '#2a0808', color: '#ef4444', border: '1px solid #5a1515', padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>🏆 Min. Storico</span>
+          )}
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--t3)' }}>prodotto da link</span>
+        </div>
+
+        {/* Title */}
+        <div style={{ marginBottom: 10 }}>
+          <div className="lbl">TITOLO</div>
+          <input className="inp" value={post.title} onChange={e => update({ title: e.target.value })} />
+        </div>
+
+        {/* Prices */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>
+            <div className="lbl">PREZZO ORIG. → {'{prezzo}'}</div>
+            <input className="inp" type="number" step="0.01" value={post.originalPrice}
+              onChange={e => handlePrice('originalPrice', e.target.value)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="lbl">PREZZO SCONT. → {'{prezzo_scontato}'}</div>
+            <input className="inp" type="number" step="0.01" value={post.discountedPrice}
+              onChange={e => handlePrice('discountedPrice', e.target.value)} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '7px 12px', background: '#2a1800', borderRadius: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1 }}>Sconto calcolato automaticamente</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--am2)', fontFamily: 'Syne, sans-serif' }}>-{post.discountPercent}%</span>
+        </div>
+
+        {/* Historical Low toggle */}
+        <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+          <ToggleRow label="Minimo Storico" sub="Cambia template e layout automaticamente"
+            value={post.isHistoricalLow} onChange={handleHistoricalLow} />
+        </div>
+
+        {/* Template selector */}
+        <div style={{ marginBottom: 8 }}>
+          <div className="lbl">TEMPLATE IMMAGINE</div>
+          <select className="sel" value={post.templateId} onChange={e => update({ templateId: e.target.value })}>
+            {templates.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
+        </div>
+
+        {/* Layout selector */}
+        <div style={{ marginBottom: 8 }}>
+          <div className="lbl">LAYOUT TESTO</div>
+          <select className="sel" value={post.layoutId} onChange={e => update({ layoutId: e.target.value })}>
+            {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+          </select>
+        </div>
+
+        {/* Custom text */}
+        <div style={{ marginBottom: 10 }}>
+          <div className="lbl">TESTO PERSONALIZZATO → {'{custom}'}</div>
+          <textarea className="txta" rows={2} value={post.customText}
+            onChange={e => update({ customText: e.target.value })}
+            placeholder="Inserisci un testo aggiuntivo..." />
+        </div>
+      </div>
+
+      {/* Live text preview */}
+      <div className="stit">ANTEPRIMA TESTO (aggiornamento in tempo reale)</div>
+      <TelegramPreview
+        text={previewText}
+        buttons={[`🛒 Compra su ${post.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]}
+      />
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 16px' }}>
+        <button className="btn bre bsm" style={{ flex: 1 }} onClick={onDelete}>🗑️ Elimina</button>
+        <button className="btn bgr bsm" style={{ flex: 1 }} onClick={onPublish}>⚡ Pubblica</button>
+        <button className="btn bp bsm" style={{ flex: 2 }} onClick={onQueue}>📬 Aggiungi coda</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Post list summary row ─────────────────────────────────────
+function PostListItem({ post, isActive, onEdit, onDelete, onQueue, onPublish }: {
+  post: CreatedPost;
+  isActive: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onQueue: () => void;
+  onPublish: () => void;
+}) {
+  return (
+    <div className={`post-list-item ${isActive ? 'post-list-active' : ''}`}>
+      <div className="post-list-thumb">{post.emoji}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{post.title}</div>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--gr2)', fontFamily: 'Syne, sans-serif' }}>€{post.discountedPrice.toFixed(2)}</span>
+          <span style={{ fontSize: 11, color: 'var(--t3)', textDecoration: 'line-through' }}>€{post.originalPrice.toFixed(2)}</span>
+          <span className="dbdg">-{post.discountPercent}%</span>
+          <SourceBadge platform={post.platform} />
+          {post.isHistoricalLow && <span style={{ fontSize: 10, color: '#ef4444' }}>🏆</span>}
+        </div>
+        <div style={{ display: 'flex', gap: 5 }}>
+          <button className="btn bgh bsm" style={{ padding: '3px 8px', fontSize: 11, background: isActive ? 'var(--bg4)' : undefined }} onClick={onEdit}>✏️ Modifica</button>
+          <button className="btn bgh bsm" style={{ padding: '3px 8px', fontSize: 11, color: 'var(--re)' }} onClick={onDelete}>🗑️</button>
+          <button className="btn bgr bsm" style={{ padding: '3px 8px', fontSize: 11 }} onClick={onPublish}>⚡</button>
+          <button className="btn bp bsm" style={{ padding: '3px 8px', fontSize: 11 }} onClick={onQueue}>+ Coda</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ============================================================
 // DASHBOARD
 // ============================================================
 export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
-  const { stats, settings } = useApp();
+  const { stats, settings, createdPosts } = useApp();
   const items = [
     { id: 'search', ic: '🔍', lb: 'Cerca Offerte', sub: 'Amazon & AliExpress', c: 'var(--bl)' },
-    { id: 'newpost', ic: '✏️', lb: 'Nuovo Post', sub: 'singolo / multiplo', c: 'var(--a1)' },
+    { id: 'newpost', ic: '✏️', lb: 'Nuovo Post', sub: createdPosts.length > 0 ? `${createdPosts.length} bozze in attesa` : 'singolo / multiplo', c: 'var(--a1)' },
     { id: 'queue', ic: '🗓️', lb: 'Coda AutoPost', sub: `${stats.inCoda} in coda`, c: 'var(--or)' },
     { id: 'published', ic: '✅', lb: 'Pubblicati', sub: `${stats.pub} oggi`, c: 'var(--gr)' },
-    { id: 'layout', ic: '🎨', lb: 'Layout', sub: 'tag · testo · immagine', c: 'var(--a2)' },
+    { id: 'layout', ic: '🎨', lb: 'Layout', sub: 'tag · testo · template', c: 'var(--a2)' },
     { id: 'settings', ic: '⚙️', lb: 'Impostazioni', sub: 'API · canali · orari', c: 'var(--t2)' },
   ];
   return (
     <div className="pg">
       <div className="hero">
         <div className="hero-top">
-          <div className="logo">A</div>
+          <div className="logo">P</div>
           <div>
-            <div className="brand">Ali<span>Post</span> <span style={{ color: 'var(--t2)', fontSize: 14, fontWeight: 400 }}>v2</span></div>
+            <div className="brand">PostDeal<span>Bot</span></div>
             <div style={{ fontSize: 11, color: 'var(--t2)' }}>Gestione post affiliati</div>
           </div>
           {settings.attivo && <div className="hbdg" style={{ marginLeft: 'auto' }}>AUTO ON</div>}
@@ -54,23 +252,29 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const { setQueue } = useApp();
-  const [src, setSrc] = useState<'ali' | 'az' | 'all'>('ali');
+  const [src, setSrc] = useState<'aliexpress' | 'amazon' | 'all'>('aliexpress');
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<Product[]>([]);
+  const [results, setResults] = useState<CatalogProduct[]>([]);
   const [searched, setSearched] = useState(false);
 
   const search = () => {
-    const filtered = MOCK_PRODUCTS.filter(p => src === 'all' || p.src === src);
-    setResults(q ? filtered.filter(p => p.titolo.toLowerCase().includes(q.toLowerCase())) : filtered);
+    const filtered = MOCK_CATALOG.filter(p => src === 'all' || p.platform === src);
+    setResults(q ? filtered.filter(p => p.title.toLowerCase().includes(q.toLowerCase())) : filtered);
     setSearched(true);
   };
 
-  const addToQueue = (p: Product, publishNow: boolean) => {
+  const addToQueue = (p: CatalogProduct, publishNow: boolean) => {
+    const post: CreatedPost = {
+      id: genId(), platform: p.platform,
+      sourceUrl: `https://${p.platform === 'amazon' ? 'amazon.it' : 'aliexpress.com'}/item/${p.id}`,
+      productId: p.id, title: p.title, image: '', emoji: p.emoji,
+      originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent,
+      customText: '', isHistoricalLow: false, templateId: 'tpl1', layoutId: 'l1',
+    };
     setQueue(prev => [...prev, {
-      id: genId(), tipo: 'single', src: p.src, products: [p],
+      id: genId(), tipo: 'single', posts: [post],
       sched: publishNow ? 'Subito' : 'Auto',
-      status: publishNow ? 'published' : 'scheduled',
-      sel: false,
+      status: publishNow ? 'published' : 'scheduled', sel: false,
     }]);
     nav(publishNow ? 'published' : 'queue');
   };
@@ -80,7 +284,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       <PageHeader title="Cerca Offerte" onBack={() => nav('dash')} />
       <div style={{ padding: '12px 16px 0' }}>
         <SwitchTabs
-          options={[['ali', 'AliExpress'], ['az', 'Amazon'], ['all', 'Entrambi']]}
+          options={[['aliexpress', 'AliExpress'], ['amazon', 'Amazon'], ['all', 'Entrambi']]}
           value={src} onChange={v => setSrc(v as any)}
         />
         <div className="irow" style={{ marginTop: 10, marginBottom: 12 }}>
@@ -95,12 +299,12 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
         <div key={p.id} className="pcard">
           <div className="pthumb">{p.emoji}</div>
           <div className="pinfo">
-            <div className="ptit">{p.titolo}</div>
+            <div className="ptit">{p.title}</div>
             <div className="prow">
-              <span className="pnew" style={{ fontSize: 14 }}>€{p.prezzo_sc}</span>
-              <span className="pold">€{p.prezzo_orig}</span>
-              <span className="dbdg">-{p.sconto}%</span>
-              <SourceBadge src={p.src} />
+              <span className="pnew" style={{ fontSize: 14 }}>€{p.discountedPrice.toFixed(2)}</span>
+              <span className="pold">€{p.originalPrice.toFixed(2)}</span>
+              <span className="dbdg">-{p.discountPercent}%</span>
+              <SourceBadge platform={p.platform} />
             </div>
             <div className="pacts">
               <button className="btn bgr bsm" onClick={() => addToQueue(p, true)}>⚡ Pubblica</button>
@@ -114,76 +318,117 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 }
 
 // ============================================================
-// NEW POST
+// NEW POST PAGE
 // ============================================================
-interface LinkItem { id: string; url: string; src: 'az' | 'ali'; asin?: string; }
+interface LinkItem { id: string; url: string; platform: Platform; }
 
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { setQueue } = useApp();
+  const { createdPosts, setCreatedPosts, setQueue, setPublished, layouts, templates } = useApp();
+
+  // Start in 'posts' phase if there are pending posts
+  const [phase, setPhase] = useState<'input' | 'loading' | 'posts'>(() =>
+    createdPosts.length > 0 ? 'posts' : 'input'
+  );
   const [mode, setMode] = useState<'single' | 'multi'>('single');
   const [linkInput, setLinkInput] = useState('');
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [err, setErr] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [analyzed, setAnalyzed] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [currentIdx, setCurrentIdx] = useState(0);
+
+  const safeIdx = Math.min(currentIdx, Math.max(0, createdPosts.length - 1));
+
+  const showFeedback = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(''), 2500); };
 
   const sendLink = () => {
     if (!linkInput.trim()) return;
-    if (mode === 'multi' && links.length >= 6) { setErr('Massimo 6 articoli per post multiplo.'); return; }
+    if (mode === 'multi' && links.length >= 6) { setErr('Massimo 6 link per post multiplo.'); return; }
     const url = linkInput.trim();
-    const isAmazon = detectAmazonLink(url);
-    const asin = isAmazon ? (extractASIN(url) ?? undefined) : undefined;
-    setLinks(prev => [...prev, { id: genId(), url, src: isAmazon ? 'az' : 'ali', asin }]);
+    const platform: Platform = detectAmazonLink(url) ? 'amazon' : 'aliexpress';
+    setLinks(prev => [...prev, { id: genId(), url, platform }]);
     setLinkInput(''); setErr('');
+    showFeedback(`✅ Link ${platform === 'amazon' ? 'Amazon' : 'AliExpress'} rilevato`);
   };
-
-  const removeLink = (id: string) => setLinks(prev => prev.filter(l => l.id !== id));
 
   const creaPost = async () => {
-    setLoading(true);
-    const prods = await Promise.all(links.map(async (l, i) => {
-      if (l.src === 'az' && l.asin) {
-        const ap = await fetchAmazonProduct(l.asin);
-        const discount = Math.round((1 - ap.price / ap.originalPrice) * 100);
-        return { id: genId(), titolo: ap.title, prezzo_orig: ap.originalPrice.toFixed(2), prezzo_sc: ap.price.toFixed(2), sconto: discount, emoji: '📦', src: 'az' as const, custom: '', asin: l.asin };
-      }
-      return fetchProductMock(l.url, i);
-    }));
-    setProducts(prods as Product[]);
-    setAnalyzed(true);
-    setLoading(false);
+    if (!links.length) return;
+    const prevLen = createdPosts.length;
+    setPhase('loading');
+    setErr('');
+    try {
+      const defaultNormalTpl = templates.find(t => t.tipo === 'normal')?.id ?? 'tpl1';
+      const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
+
+      const newPosts: CreatedPost[] = await Promise.all(links.map(async l => {
+        if (l.platform === 'amazon') {
+          const p = await fetchAmazonProduct(l.url);
+          return { id: genId(), platform: 'amazon' as const, sourceUrl: l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, emoji: '📦' };
+        } else {
+          const p = await fetchAliExpressProduct(l.url);
+          return { id: genId(), platform: 'aliexpress' as const, sourceUrl: l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, emoji: '📦' };
+        }
+      }));
+
+      setCreatedPosts(prev => [...prev, ...newPosts]);
+      setCurrentIdx(prevLen);
+      setLinks([]);
+      setPhase('posts');
+      showFeedback(`✅ ${newPosts.length} post creati con successo`);
+    } catch {
+      setErr('Errore durante l\'analisi dei link. Riprova.');
+      setPhase('input');
+    }
   };
 
-  const updateProd = (id: string, field: keyof Product, val: string) =>
-    setProducts(ps => ps.map(p => p.id === id ? { ...p, [field]: val } : p));
-  const delProd = (id: string) => setProducts(ps => ps.filter(p => p.id !== id));
+  const deletePost = (id: string) => {
+    setCreatedPosts(prev => prev.filter(p => p.id !== id));
+    setCurrentIdx(i => Math.max(0, i - 1));
+  };
 
-  const addToQueue = () => {
-    setQueue(prev => [...prev, {
-      id: genId(), tipo: mode, src: products[0]?.src || 'ali', products,
-      sched: 'Auto', status: 'draft', sel: false,
-    }]);
-    nav('queue');
+  const addToQueue = (post: CreatedPost) => {
+    setQueue(prev => [...prev, { id: genId(), tipo: 'single', posts: [post], sched: 'Auto', status: 'draft', sel: false }]);
+    deletePost(post.id);
+    showFeedback('📬 Post aggiunto alla coda');
+  };
+
+  const publishPost = (post: CreatedPost) => {
+    setPublished(prev => [...prev, { id: genId(), emoji: post.emoji, title: post.title, price: post.discountedPrice.toFixed(2), platform: post.platform, ts: 'ora' }]);
+    deletePost(post.id);
+    nav('published');
   };
 
   return (
     <div className="pg">
-      <PageHeader title="Nuovo Post" onBack={() => nav('dash')} />
-      <div className="cbar">
-        <div className="cb"><div className="cbnum" style={{ color: 'var(--a3)' }}>1</div><div className="cblb">Singoli</div></div>
-        <div className="cb"><div className="cbnum" style={{ color: 'var(--am2)' }}>1</div><div className="cblb">Multipli</div></div>
-        <div className="cb"><div className="cbnum" style={{ color: 'var(--gr2)' }}>{links.length}</div><div className="cblb">Link aggiunti</div></div>
-      </div>
+      <PageHeader title="Nuovo Post" onBack={() => nav('dash')}
+        badge={createdPosts.length > 0 ? createdPosts.length : undefined} badgeVariant="purple"
+        right={phase === 'posts' && createdPosts.length > 0
+          ? <button className="btn bgh bsm" style={{ fontSize: 11 }} onClick={() => setPhase('input')}>+ Link</button>
+          : undefined
+        }
+      />
 
-      {!analyzed ? (
+      {/* ── INPUT PHASE ── */}
+      {phase === 'input' && (
         <>
+          <div className="cbar">
+            <div className="cb">
+              <div className="cbnum" style={{ color: 'var(--a3)' }}>{links.length}</div>
+              <div className="cblb">Link</div>
+            </div>
+            <div className="cb">
+              <div className="cbnum" style={{ color: 'var(--am2)' }}>{createdPosts.length}</div>
+              <div className="cblb">Bozze</div>
+            </div>
+          </div>
+
           <SwitchTabs
             options={[['single', 'Singolo'], ['multi', 'Multiplo']]}
             value={mode} onChange={v => { setMode(v as any); setLinks([]); setErr(''); }}
           />
-          {mode === 'multi' && <InfoBanner>📦 Modalità multipla — max 6 articoli. Incolla i link uno alla volta.</InfoBanner>}
+
+          {mode === 'multi' && <InfoBanner>📦 Modalità multipla — max 6 link. Incolla i link uno alla volta.</InfoBanner>}
           {err && <ErrorBanner>{err}</ErrorBanner>}
+          {feedback && <div className="feedback-ok">{feedback}</div>}
 
           <div className="stit">INSERISCI LINK</div>
           <div style={{ padding: '0 16px 10px' }}>
@@ -200,68 +445,95 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
               <div className="stit">LINK AGGIUNTI ({links.length})</div>
               {links.map(l => (
                 <div key={l.id} className="llink">
-                  <SourceBadge src={l.src} />
-                  {l.asin && (
-                    <span style={{ fontSize: 10, background: '#1a1000', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>
-                      ASIN: {l.asin}
-                    </span>
-                  )}
+                  <SourceBadge platform={l.platform} />
                   <span className="llink-url">{l.url}</span>
-                  <button className="btn bgh bsm" onClick={() => removeLink(l.id)} style={{ color: 'var(--re)', padding: '4px 8px', flexShrink: 0 }}>×</button>
+                  <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '4px 8px', flexShrink: 0 }}
+                    onClick={() => setLinks(prev => prev.filter(x => x.id !== l.id))}>×</button>
                 </div>
               ))}
               <div style={{ padding: '8px 16px 16px' }}>
-                <button className="btn bp bfull" onClick={creaPost} disabled={loading}>
-                  {loading ? '⏳ Analisi in corso...' : `🚀 Crea Post (${links.length})`}
-                </button>
+                <button className="btn bp bfull" onClick={creaPost}>🚀 Crea Post ({links.length})</button>
               </div>
             </>
           )}
-        </>
-      ) : (
-        <>
-          <InfoBanner>✅ {products.length} prodotti — modifica se necessario</InfoBanner>
-          {products.map((p, i) => (
-            <div key={p.id} className="card">
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
-                <div className="cn">{i + 1}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{p.titolo}</div>
-                <button className="btn bgh bsm" onClick={() => delProd(p.id)} style={{ color: 'var(--re)', padding: '3px 7px' }}>×</button>
-              </div>
-              <div className="prow">
-                <span className="pnew">€{p.prezzo_sc}</span>
-                <span className="pold">€{p.prezzo_orig}</span>
-                <span className="dbdg">-{p.sconto}%</span>
-                <SourceBadge src={p.src} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <input className="inp" value={p.titolo} onChange={e => updateProd(p.id, 'titolo', e.target.value)} placeholder="Titolo" />
-                <div className="irow">
-                  <input className="inp" value={p.prezzo_sc} onChange={e => updateProd(p.id, 'prezzo_sc', e.target.value)} placeholder="€ scontato" />
-                  <input className="inp" value={p.prezzo_orig} onChange={e => updateProd(p.id, 'prezzo_orig', e.target.value)} placeholder="€ orig." />
-                </div>
-                <input className="inp" value={p.custom} onChange={e => updateProd(p.id, 'custom', e.target.value)} placeholder="Testo personalizzato..." />
-              </div>
-            </div>
-          ))}
 
-          {products.length > 0 && (
+          {createdPosts.length > 0 && (
+            <div style={{ padding: links.length > 0 ? '0 16px 16px' : '8px 16px 16px' }}>
+              <button className="btn bs bfull" onClick={() => setPhase('posts')}>
+                📋 Visualizza bozze ({createdPosts.length})
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── LOADING PHASE ── */}
+      {phase === 'loading' && (
+        <div className="loading-phase">
+          <div style={{ fontSize: 44 }}>⏳</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>Analisi in corso...</div>
+          <div style={{ fontSize: 13, color: 'var(--t2)', textAlign: 'center' }}>
+            Recupero dati da {links.length} {links.length === 1 ? 'link' : 'link'}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            {links.map(l => <SourceBadge key={l.id} platform={l.platform} />)}
+          </div>
+        </div>
+      )}
+
+      {/* ── POSTS PHASE ── */}
+      {phase === 'posts' && (
+        <>
+          {createdPosts.length === 0 ? (
+            <EmptyState icon="✅" text="Tutti i post aggiunti alla coda!"
+              action={<button className="btn bp" onClick={() => setPhase('input')}>+ Crea nuovi post</button>}
+            />
+          ) : (
             <>
-              <div className="stit">ANTEPRIMA TELEGRAM</div>
-              <TelegramPreview
-                lines={<>
-                  <b>🔥 {mode === 'multi' ? 'OFFERTE DEL GIORNO' : 'OFFERTA'} 🔥{'\n\n'}</b>
-                  {mode === 'single'
-                    ? <>📌 <b>{products[0]?.titolo}</b>{`\n\n💰 €${products[0]?.prezzo_sc} ~~€${products[0]?.prezzo_orig}~~\n🏷️ -${products[0]?.sconto}% di sconto\n\n👇 Link nel pulsante`}</>
-                    : products.map((p, i) => <span key={p.id}>{`${i + 1}. ${p.titolo} — €${p.prezzo_sc}\n`}</span>)
-                  }
-                </>}
-                buttons={mode === 'single' ? ['🛒 Compra ora', '💰 Vedi offerta'] : products.map((p, i) => `🛒 ${i + 1}. ${p.titolo.slice(0, 24)}...`)}
-              />
-              <div style={{ padding: '0 16px 16px', display: 'flex', gap: 8 }}>
-                <button className="btn bs" style={{ flex: 1 }} onClick={() => { setAnalyzed(false); setProducts([]); }}>← Indietro</button>
-                <button className="btn bp" style={{ flex: 1 }} onClick={addToQueue}>📬 Aggiungi coda</button>
+              {feedback && <div className="feedback-ok" style={{ margin: '8px 16px 0' }}>{feedback}</div>}
+
+              {/* Carousel navigation */}
+              <div className="carousel-ctrl">
+                <button className="btn bgh bsm" disabled={safeIdx === 0} onClick={() => setCurrentIdx(i => i - 1)}>←</button>
+                <span style={{ flex: 1, textAlign: 'center', fontSize: 12, color: 'var(--t2)', fontWeight: 600 }}>
+                  Post {safeIdx + 1} / {createdPosts.length}
+                </span>
+                <button className="btn bgh bsm" disabled={safeIdx === createdPosts.length - 1} onClick={() => setCurrentIdx(i => i + 1)}>→</button>
               </div>
+
+              {/* Dot navigator */}
+              <div className="dots-row">
+                {createdPosts.map((_, i) => (
+                  <div key={i} className={`dot ${i === safeIdx ? 'on' : ''}`}
+                    style={{ width: i === safeIdx ? 18 : 6 }} onClick={() => setCurrentIdx(i)} />
+                ))}
+              </div>
+
+              {/* Current post card */}
+              <PostCard
+                postId={createdPosts[safeIdx].id}
+                onDelete={() => deletePost(createdPosts[safeIdx].id)}
+                onQueue={() => addToQueue(createdPosts[safeIdx])}
+                onPublish={() => publishPost(createdPosts[safeIdx])}
+              />
+
+              {/* POST CREATI list overview */}
+              {createdPosts.length > 0 && (
+                <>
+                  <div className="stit">POST CREATI ({createdPosts.length})</div>
+                  {createdPosts.map((p, i) => (
+                    <PostListItem
+                      key={p.id}
+                      post={p}
+                      isActive={i === safeIdx}
+                      onEdit={() => setCurrentIdx(i)}
+                      onDelete={() => deletePost(p.id)}
+                      onQueue={() => addToQueue(p)}
+                      onPublish={() => publishPost(p)}
+                    />
+                  ))}
+                </>
+              )}
             </>
           )}
         </>
@@ -289,6 +561,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     return a;
   });
 
+  const firstPost = (item: QueueItem) => item.posts[0];
+
   return (
     <div className="pg">
       <PageHeader title="Coda AutoPost" onBack={() => nav('dash')} badge={queue.length}
@@ -303,7 +577,6 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       {multiSelect && selCount > 0 && (
         <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: 'var(--bg2)', borderBottom: '1px solid var(--bd)' }}>
           <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1, alignSelf: 'center' }}>{selCount} selezionati</span>
-          <button className="btn bam bsm">🔗 Unisci in multiplo</button>
           <button className="btn bre bsm" onClick={delSelected}>🗑️ Elimina</button>
         </div>
       )}
@@ -313,36 +586,39 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       ) : (
         <>
           <div style={{ height: 10 }} />
-          {queue.map((item, idx) => (
-            <div key={item.id} className="qi" style={{ position: 'relative' }}>
-              {multiSelect && (
-                <div className={`qsel ${item.sel ? 'on' : ''}`} onClick={() => toggle(item.id)}>
-                  {item.sel && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
+          {queue.map((item, idx) => {
+            const p = firstPost(item);
+            return (
+              <div key={item.id} className="qi" style={{ position: 'relative' }}>
+                {multiSelect && (
+                  <div className={`qsel ${item.sel ? 'on' : ''}`} onClick={() => toggle(item.id)}>
+                    {item.sel && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                  </div>
+                )}
+                <div className="qi-h">
+                  <span className={`qtype ${item.tipo}`}>{item.tipo === 'single' ? 'Singolo' : 'Multi'}</span>
+                  <SourceBadge platform={p?.platform ?? 'amazon'} />
+                  <span style={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', paddingLeft: 4 }}>
+                    {p?.emoji} {p?.title?.slice(0, 22)}
+                    {item.posts.length > 1 && ` +${item.posts.length - 1}`}
+                  </span>
+                  <StatusBadge status={item.status} />
                 </div>
-              )}
-              <div className="qi-h">
-                <span className={`qtype ${item.tipo}`}>{item.tipo === 'single' ? 'Singolo' : 'Multi'}</span>
-                <SourceBadge src={item.src} />
-                <span style={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', paddingLeft: 4 }}>
-                  {(item.products[0] as any)?.emoji} {(item.products[0] as any)?.titolo?.slice(0, 22)}
-                  {item.products.length > 1 && ` +${item.products.length - 1}`}
-                </span>
-                <StatusBadge status={item.status} />
+                <div className="qmeta">
+                  <span>🕐 {item.sched}</span>
+                  <span>💰 €{p?.discountedPrice?.toFixed(2)}</span>
+                  <span>📦 {item.posts.length} prod.</span>
+                  {p?.isHistoricalLow && <span>🏆 Min. Storico</span>}
+                </div>
+                <div className="qacts">
+                  <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060' }} onClick={() => move(item.id, 'up')} disabled={idx === 0}>↑</button>
+                  <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060' }} onClick={() => move(item.id, 'down')} disabled={idx === queue.length - 1}>↓</button>
+                  <button className="btn bgr bsm" onClick={() => publish(item.id)}>⚡ Pubblica</button>
+                  <button className="btn bre bsm" onClick={() => del(item.id)}>🗑️</button>
+                </div>
               </div>
-              <div className="qmeta">
-                <span>🕐 {item.sched}</span>
-                <span>💰 €{(item.products[0] as any)?.prezzo_sc}</span>
-                <span>📦 {item.products.length} prod.</span>
-              </div>
-              <div className="qacts">
-                <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060' }} onClick={() => move(item.id, 'up')} disabled={idx === 0}>↑</button>
-                <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060' }} onClick={() => move(item.id, 'down')} disabled={idx === queue.length - 1}>↓</button>
-                <button className="btn bgr bsm" onClick={() => publish(item.id)}>⚡ Pubblica</button>
-                <button className="btn bbl bsm">✏️ Modifica</button>
-                <button className="btn bre bsm" onClick={() => del(item.id)}>🗑️</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </>
       )}
     </div>
@@ -356,11 +632,15 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
   const { published, setQueue } = useApp();
 
   const reinsert = (p: typeof published[0]) => {
-    setQueue(prev => [...prev, {
-      id: genId(), tipo: 'single', src: p.src,
-      products: [{ titolo: p.titolo, prezzo_sc: p.prezzo, emoji: p.emoji }],
-      sched: 'Auto', status: 'draft', sel: false,
-    }]);
+    const post: CreatedPost = {
+      id: genId(), platform: p.platform, sourceUrl: '', productId: '',
+      title: p.title, image: '', emoji: p.emoji,
+      originalPrice: parseFloat(p.price) * 1.5,
+      discountedPrice: parseFloat(p.price),
+      discountPercent: 33,
+      customText: '', isHistoricalLow: false, templateId: 'tpl1', layoutId: 'l1',
+    };
+    setQueue(prev => [...prev, { id: genId(), tipo: 'single', posts: [post], sched: 'Auto', status: 'draft', sel: false }]);
     nav('queue');
   };
 
@@ -373,9 +653,9 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
         <div key={p.id} className="pub-card">
           <div className="pub-thumb">{p.emoji}</div>
           <div className="pub-info">
-            <div className="pub-tit">{p.titolo}</div>
+            <div className="pub-tit">{p.title}</div>
             <div className="pub-meta">
-              <SourceBadge src={p.src} /> {p.ts} · €{p.prezzo}
+              <SourceBadge platform={p.platform} /> {p.ts} · €{p.price}
             </div>
             <div style={{ display: 'flex', gap: 5 }}>
               <button className="btn bsm bs">✏️ Modifica</button>

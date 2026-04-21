@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, TextLayout, LayoutType, Tag } from '../types';
+import { NavPage, TextLayout, LayoutType, Tag, Template, TemplateType } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ToggleRow } from '../components/Shared';
 import { genId } from '../data/mock';
 
@@ -32,30 +32,25 @@ function TagsSection() {
   const [editName, setEditName] = useState('');
   const [editValue, setEditValue] = useState('');
 
-  const formatName = (n: string) => n.trim().startsWith('{') ? n.trim() : `{${n.trim()}}`;
+  const fmt = (n: string) => n.trim().startsWith('{') ? n.trim() : `{${n.trim()}}`;
 
   const addTag = () => {
     if (!newName.trim()) return;
-    setTags(t => [...t, { id: genId(), name: formatName(newName), value: newValue.trim() }]);
-    setNewName('');
-    setNewValue('');
+    setTags(t => [...t, { id: genId(), name: fmt(newName), value: newValue.trim() }]);
+    setNewName(''); setNewValue('');
   };
 
-  const startEdit = (tag: Tag) => {
-    setEditId(tag.id);
-    setEditName(tag.name);
-    setEditValue(tag.value);
-  };
+  const startEdit = (t: Tag) => { setEditId(t.id); setEditName(t.name); setEditValue(t.value); };
 
   const saveEdit = () => {
     if (!editId) return;
-    setTags(ts => ts.map(t => t.id === editId ? { ...t, name: formatName(editName), value: editValue } : t));
+    setTags(ts => ts.map(t => t.id === editId ? { ...t, name: fmt(editName), value: editValue } : t));
     setEditId(null);
   };
 
   return (
     <>
-      <div className="stit">TAG DISPONIBILI</div>
+      <div className="stit">TAG DISPONIBILI ({tags.length})</div>
       {tags.map(t => (
         <div key={t.id} className="card" style={{ margin: '0 16px 8px', padding: '10px 12px' }}>
           {editId === t.id ? (
@@ -64,9 +59,9 @@ function TagsSection() {
                 placeholder="{nome_tag}" style={{ marginBottom: 7 }} />
               <div className="irow">
                 <input className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
-                  placeholder="Valore / descrizione"
+                  placeholder="Valore sostituito nel post"
                   onKeyDown={e => e.key === 'Enter' && saveEdit()} />
-                <button className="btn bp bsm" onClick={saveEdit} style={{ flexShrink: 0 }}>✓ Salva</button>
+                <button className="btn bp bsm" onClick={saveEdit} style={{ flexShrink: 0 }}>✓</button>
                 <button className="btn bs bsm" onClick={() => setEditId(null)} style={{ flexShrink: 0 }}>×</button>
               </div>
             </>
@@ -74,10 +69,10 @@ function TagsSection() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="tag-pill" style={{ flexShrink: 0 }}>{t.name}</span>
               <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {t.value || <span style={{ color: 'var(--t3)', fontStyle: 'italic' }}>nessun valore</span>}
+                {t.value || <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>nessun valore</span>}
               </span>
-              <button className="btn bgh bsm" style={{ padding: '3px 8px', flexShrink: 0 }} onClick={() => startEdit(t)}>✏️</button>
-              <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px', flexShrink: 0 }}
+              <button className="btn bgh bsm" style={{ padding: '3px 8px' }} onClick={() => startEdit(t)}>✏️</button>
+              <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }}
                 onClick={() => setTags(ts => ts.filter(x => x.id !== t.id))}>×</button>
             </div>
           )}
@@ -91,34 +86,34 @@ function TagsSection() {
           onKeyDown={e => e.key === 'Enter' && addTag()} />
         <div className="irow">
           <input className="inp" value={newValue} onChange={e => setNewValue(e.target.value)}
-            placeholder="Valore / descrizione del tag"
+            placeholder="Valore / descrizione"
             onKeyDown={e => e.key === 'Enter' && addTag()} />
           <button className="btn bp" onClick={addTag} style={{ padding: '0 16px', flexShrink: 0 }}>+ Aggiungi</button>
         </div>
       </div>
-      <InfoBanner>Il <b>nome</b> è il placeholder usato nei layout (es. {'{titolo}'}). Il <b>valore</b> viene sostituito durante la pubblicazione.</InfoBanner>
+      <InfoBanner>Il <b>nome</b> è il placeholder nei layout (es. {'{titolo}'}). Il <b>valore</b> viene sostituito durante la pubblicazione.</InfoBanner>
     </>
   );
 }
 
 // ── Text Layouts ──────────────────────────────────────────────
 const TIPO_STYLE: Record<LayoutType, string> = {
-  normale: 'ltype norm',
-  minimo_storico: 'ltype min',
-  multiplo: 'ltype mult',
+  normal: 'ltype norm',
+  historical_low: 'ltype hist',
+  multi: 'ltype mult',
 };
 const TIPO_LABEL: Record<LayoutType, string> = {
-  normale: 'Normale',
-  minimo_storico: 'Min. Storico',
-  multiplo: 'Multiplo',
+  normal: 'Normale',
+  historical_low: 'Min. Storico',
+  multi: 'Multiplo',
 };
 
 function TextLayoutSection() {
   const { layouts, setLayouts } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<TextLayout, 'id'>>({ nome: '', tipo: 'normale', contenuto: '' });
+  const [form, setForm] = useState<Omit<TextLayout, 'id'>>({ nome: '', tipo: 'normal', contenuto: '' });
 
-  const startNew = () => { setForm({ nome: '', tipo: 'normale', contenuto: '' }); setEditing('new'); };
+  const startNew = () => { setForm({ nome: '', tipo: 'normal', contenuto: '' }); setEditing('new'); };
   const startEdit = (l: TextLayout) => { setForm({ nome: l.nome, tipo: l.tipo, contenuto: l.contenuto }); setEditing(l.id); };
 
   const save = () => {
@@ -138,14 +133,14 @@ function TextLayoutSection() {
         <div className="fld">
           <label className="lbl">Tipo</label>
           <select className="sel" value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value as LayoutType })}>
-            <option value="normale">Normale</option>
-            <option value="minimo_storico">Minimo Storico</option>
-            <option value="multiplo">Multiplo</option>
+            <option value="normal">Normale</option>
+            <option value="historical_low">Minimo Storico</option>
+            <option value="multi">Multiplo</option>
           </select>
         </div>
         <div className="fld">
-          <label className="lbl">Contenuto (usa i tag)</label>
-          <textarea className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={7} />
+          <label className="lbl">Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{custom}'}</label>
+          <textarea className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={8} />
         </div>
         <div style={{ padding: '0 16px 16px', display: 'flex', gap: 8 }}>
           <button className="btn bs" style={{ flex: 1 }} onClick={() => setEditing(null)}>Annulla</button>
@@ -176,77 +171,164 @@ function TextLayoutSection() {
 }
 
 // ── Template Image Editor ─────────────────────────────────────
+const TPL_TYPE_LABEL: Record<TemplateType, string> = {
+  normal: 'Normale',
+  historical_low: 'Min. Storico',
+};
+
+function TemplatePreviewer({ tpl }: { tpl: Template }) {
+  return (
+    <div className="tpl-preview">
+      {/* Product placeholder */}
+      <div className="tpl-product">
+        <span style={{ fontSize: 64, opacity: tpl.overlay ? 0.15 : 0.35 }}>📦</span>
+      </div>
+
+      {/* Overlay PNG */}
+      {tpl.overlay && (
+        <img src={tpl.overlay} alt="" className="tpl-overlay" />
+      )}
+
+      {/* Logo */}
+      {tpl.logo && (
+        <img src={tpl.logo} alt="" className="tpl-logo" />
+      )}
+
+      {/* Historical Low Badge */}
+      {tpl.badgeEnabled && (
+        <div className="tpl-badge">🏆 MIN. STORICO</div>
+      )}
+
+      {/* Platform label placeholder (top-left if no logo) */}
+      {!tpl.logo && (
+        <div className="tpl-platform" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--am2)' }}>
+          🟡 Amazon
+        </div>
+      )}
+
+      {/* Price bar */}
+      <div className="tpl-price-bar">
+        <div className="tpl-price-row">
+          <span className="tpl-price-new">€00.00</span>
+          <span className="tpl-price-old">€00.00</span>
+          <span className="tpl-price-disc">-0%</span>
+        </div>
+      </div>
+
+      {/* Empty state hint */}
+      {!tpl.overlay && !tpl.logo && (
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', color: 'var(--t3)', fontSize: 11, pointerEvents: 'none', marginTop: -10 }}>
+          Carica overlay o logo
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TemplateSection() {
-  const { telElems, setTelElems, templateSettings, setTemplateSettings } = useApp();
-  const [overlayName, setOverlayName] = useState(templateSettings.overlay ?? '');
-  const [logoName, setLogoName] = useState(templateSettings.logo ?? '');
+  const { templates, setTemplates } = useApp();
+  const [editId, setEditId] = useState<string | null>(null);
 
-  const toggleVis = (id: string) => setTelElems(els => els.map(e => e.id === id ? { ...e, vis: !e.vis } : e));
+  const updateTpl = (id: string, changes: Partial<Template>) =>
+    setTemplates(ts => ts.map(t => t.id === id ? { ...t, ...changes } : t));
 
-  const handleOverlay = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name = e.target.files?.[0]?.name ?? '';
-    setOverlayName(name);
-    setTemplateSettings(ts => ({ ...ts, overlay: name || null }));
+  const handleOverlay = (tplId: string, file: File | null) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    updateTpl(tplId, { overlay: url });
   };
 
-  const handleLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name = e.target.files?.[0]?.name ?? '';
-    setLogoName(name);
-    setTemplateSettings(ts => ({ ...ts, logo: name || null }));
+  const handleLogo = (tplId: string, file: File | null) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    updateTpl(tplId, { logo: url });
+  };
+
+  const addTemplate = () => {
+    setTemplates(ts => [...ts, { id: genId(), nome: 'Nuovo Template', tipo: 'normal', overlay: null, logo: null, badgeEnabled: false }]);
   };
 
   return (
     <>
-      <div className="stit">CANVAS IMMAGINE</div>
-      <div className="canvas-wrap" style={{ margin: '0 16px 12px' }}>
-        <div className="mock-canvas">
-          <div style={{ textAlign: 'center', color: 'var(--t3)', fontSize: 13 }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🖼️</div>
-            Canvas 1:1
-            {templateSettings.overlay && (
-              <div style={{ fontSize: 11, color: 'var(--a3)', marginTop: 4 }}>Overlay: {templateSettings.overlay}</div>
-            )}
-            {templateSettings.logo && (
-              <div style={{ fontSize: 11, color: 'var(--gr2)', marginTop: 2 }}>Logo: {templateSettings.logo}</div>
-            )}
-            {!templateSettings.overlay && !templateSettings.logo && (
-              <div style={{ fontSize: 11, marginTop: 4 }}>Immagine prodotto + overlay PNG</div>
-            )}
-          </div>
-        </div>
+      <div style={{ padding: '10px 16px 0', display: 'flex', justifyContent: 'flex-end' }}>
+        <button className="btn bp bsm" onClick={addTemplate}>+ Nuovo template</button>
       </div>
 
-      <div className="stit">UPLOAD RISORSE</div>
-      <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center' }}>
-          📁 {overlayName ? `Overlay: ${overlayName}` : 'Carica overlay PNG'}
-          <input type="file" accept="image/png" style={{ display: 'none' }} onChange={handleOverlay} />
-        </label>
-        <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center' }}>
-          ✦ {logoName ? `Logo: ${logoName}` : 'Carica logo'}
-          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogo} />
-        </label>
-      </div>
-
-      <ToggleRow
-        label="Badge Minimo Storico"
-        sub="Mostra il badge nel template immagine"
-        value={templateSettings.badgeEnabled}
-        onChange={v => setTemplateSettings(ts => ({ ...ts, badgeEnabled: v }))}
-      />
-
-      <div className="stit">ELEMENTI TEMPLATE</div>
-      {telElems.map(el => (
-        <div key={el.id} className="el-row">
-          <div className="el-dot" style={{ background: el.color }} />
-          <div className="el-name">{el.nome}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, color: 'var(--t2)' }}>{el.vis ? 'Visibile' : 'Nascosto'}</span>
-            <div className={`el-vis ${el.vis ? 'on' : ''}`} onClick={() => toggleVis(el.id)} />
+      {templates.map(tpl => (
+        <div key={tpl.id} className="tpl-card">
+          <div className="tpl-card-header">
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: tpl.tipo === 'historical_low' ? '#2a1800' : '#1a1a40', color: tpl.tipo === 'historical_low' ? 'var(--am)' : 'var(--a3)' }}>
+              {TPL_TYPE_LABEL[tpl.tipo]}
+            </span>
+            {editId === tpl.id ? (
+              <input className="inp" value={tpl.nome} onChange={e => updateTpl(tpl.id, { nome: e.target.value })}
+                style={{ flex: 1, fontSize: 13, padding: '6px 10px' }} />
+            ) : (
+              <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{tpl.nome}</span>
+            )}
+            <button className="btn bgh bsm" onClick={() => setEditId(editId === tpl.id ? null : tpl.id)}>
+              {editId === tpl.id ? '✓' : '✏️'}
+            </button>
+            <button className="btn bgh bsm" style={{ color: 'var(--re)' }}
+              onClick={() => setTemplates(ts => ts.filter(t => t.id !== tpl.id))}>×</button>
           </div>
+
+          {editId === tpl.id && (
+            <div className="tpl-card-body">
+              {/* Preview */}
+              <TemplatePreviewer tpl={tpl} />
+
+              {/* Tipo */}
+              <div className="fld" style={{ paddingLeft: 0, paddingRight: 0 }}>
+                <label className="lbl">Tipo template</label>
+                <select className="sel" value={tpl.tipo} onChange={e => updateTpl(tpl.id, { tipo: e.target.value as TemplateType })}>
+                  <option value="normal">Normale</option>
+                  <option value="historical_low">Minimo Storico</option>
+                </select>
+              </div>
+
+              {/* Upload overlay */}
+              <div style={{ marginBottom: 8 }}>
+                <div className="lbl">OVERLAY PNG</div>
+                <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center' }}>
+                  📁 {tpl.overlay ? '✓ Overlay caricato' : 'Carica overlay PNG'}
+                  <input type="file" accept="image/png,image/webp" style={{ display: 'none' }}
+                    onChange={e => handleOverlay(tpl.id, e.target.files?.[0] ?? null)} />
+                </label>
+                {tpl.overlay && (
+                  <button className="btn bgh bsm" style={{ color: 'var(--re)', marginTop: 5 }}
+                    onClick={() => updateTpl(tpl.id, { overlay: null })}>× Rimuovi overlay</button>
+                )}
+              </div>
+
+              {/* Upload logo */}
+              <div style={{ marginBottom: 8 }}>
+                <div className="lbl">LOGO</div>
+                <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center' }}>
+                  ✦ {tpl.logo ? '✓ Logo caricato' : 'Carica logo'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={e => handleLogo(tpl.id, e.target.files?.[0] ?? null)} />
+                </label>
+                {tpl.logo && (
+                  <button className="btn bgh bsm" style={{ color: 'var(--re)', marginTop: 5 }}
+                    onClick={() => updateTpl(tpl.id, { logo: null })}>× Rimuovi logo</button>
+                )}
+              </div>
+
+              {/* Badge toggle */}
+              <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden' }}>
+                <ToggleRow
+                  label="Badge Minimo Storico"
+                  sub="Mostra il badge nel template"
+                  value={tpl.badgeEnabled}
+                  onChange={v => updateTpl(tpl.id, { badgeEnabled: v })}
+                />
+              </div>
+            </div>
+          )}
         </div>
       ))}
-      <InfoBanner>Posizionamento X/Y, dimensioni e font configurabili nella versione con backend.</InfoBanner>
+      <InfoBanner>Clicca ✏️ per espandere e modificare ogni template. La preview si aggiorna in tempo reale.</InfoBanner>
     </>
   );
 }
@@ -284,14 +366,11 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         <ToggleRow label="Attiva Amazon" value={s.amazon.enabled} onChange={v => setAmazon('enabled', v)} />
         <div className="fld">
           <label className="lbl">Affiliate Tag (Tracking ID)</label>
-          <input className="inp" value={s.amazon.affiliateTag}
-            onChange={e => setAmazon('affiliateTag', e.target.value)}
-            placeholder="miosite-21" />
+          <input className="inp" value={s.amazon.affiliateTag} onChange={e => setAmazon('affiliateTag', e.target.value)} placeholder="miosite-21" />
         </div>
         <div className="fld">
           <label className="lbl">Marketplace</label>
-          <select className="sel" value={s.amazon.marketplace}
-            onChange={e => setAmazon('marketplace', e.target.value)}>
+          <select className="sel" value={s.amazon.marketplace} onChange={e => setAmazon('marketplace', e.target.value)}>
             {MARKETPLACES.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
@@ -300,20 +379,16 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
             Access Key
             <span style={{ fontSize: 10, background: '#2a1800', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SOLO BACKEND</span>
           </label>
-          <input className="inp" type="password" value={s.amazon.accessKey}
-            onChange={e => setAmazon('accessKey', e.target.value)}
-            placeholder="AKIAIOSFODNN7EXAMPLE" />
+          <input className="inp" type="password" value={s.amazon.accessKey} onChange={e => setAmazon('accessKey', e.target.value)} placeholder="AKIAIOSFODNN7EXAMPLE" />
         </div>
         <div className="fld">
           <label className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             Secret Key
             <span style={{ fontSize: 10, background: '#2a1800', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SOLO BACKEND</span>
           </label>
-          <input className="inp" type="password" value={s.amazon.secretKey}
-            onChange={e => setAmazon('secretKey', e.target.value)}
-            placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCY..." />
+          <input className="inp" type="password" value={s.amazon.secretKey} onChange={e => setAmazon('secretKey', e.target.value)} placeholder="wJalrXUtnFEMI/K7MDENG/..." />
         </div>
-        <InfoBanner>🔒 Access Key e Secret Key non vengono mai utilizzate nel frontend. Sono preparate per la chiamata al tuo backend.</InfoBanner>
+        <InfoBanner>🔒 Access Key e Secret Key non vengono mai usate nel frontend. Pronte per il tuo backend.</InfoBanner>
       </div>
 
       {/* ── AliExpress ── */}
@@ -329,56 +404,38 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         <ToggleRow label="Attiva AliExpress" value={s.aliexpress.enabled} onChange={v => setAli('enabled', v)} />
         <div className="fld">
           <label className="lbl">Affiliate ID</label>
-          <input className="inp" value={s.aliexpress.affiliateId}
-            onChange={e => setAli('affiliateId', e.target.value)}
-            placeholder="12345678" />
+          <input className="inp" value={s.aliexpress.affiliateId} onChange={e => setAli('affiliateId', e.target.value)} placeholder="12345678" />
         </div>
         <div className="fld">
           <label className="lbl">Tracking ID</label>
-          <input className="inp" value={s.aliexpress.trackingId}
-            onChange={e => setAli('trackingId', e.target.value)}
-            placeholder="affiliate_tracking_id" />
+          <input className="inp" value={s.aliexpress.trackingId} onChange={e => setAli('trackingId', e.target.value)} placeholder="affiliate_tracking_id" />
         </div>
       </div>
 
-      {/* ── Canali Telegram ── */}
+      {/* ── Telegram ── */}
       <div className="stit">CANALI TELEGRAM</div>
       <div className="card">
         {s.channels.map((ch, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: i < s.channels.length - 1 ? 8 : 0 }}>
-            <input className="inp" value={ch}
-              onChange={e => setS({ ...s, channels: s.channels.map((c, j) => j === i ? e.target.value : c) })} />
+            <input className="inp" value={ch} onChange={e => setS({ ...s, channels: s.channels.map((c, j) => j === i ? e.target.value : c) })} />
             <button className="btn bre bic" onClick={() => setS({ ...s, channels: s.channels.filter((_, j) => j !== i) })}>×</button>
           </div>
         ))}
         <button className="btn bp bsm" style={{ marginTop: 8, width: '100%' }}
-          onClick={() => setS({ ...s, channels: [...s.channels, ''] })}>
-          + Aggiungi canale
-        </button>
+          onClick={() => setS({ ...s, channels: [...s.channels, ''] })}>+ Aggiungi canale</button>
       </div>
 
       {/* ── AutoPost ── */}
       <div className="stit">AUTOPOST</div>
-      <ToggleRow label="AutoPost attivo" sub="Pubblicazione automatica programmata"
-        value={s.attivo} onChange={v => setS({ ...s, attivo: v })} />
+      <ToggleRow label="AutoPost attivo" sub="Pubblicazione automatica programmata" value={s.attivo} onChange={v => setS({ ...s, attivo: v })} />
       <div style={{ height: 12 }} />
-      <div className="fld">
-        <label className="lbl">Ora inizio</label>
-        <input type="time" className="inp" value={s.oraI} onChange={e => setS({ ...s, oraI: e.target.value })} />
-      </div>
-      <div className="fld">
-        <label className="lbl">Ora fine</label>
-        <input type="time" className="inp" value={s.oraF} onChange={e => setS({ ...s, oraF: e.target.value })} />
-      </div>
+      <div className="fld"><label className="lbl">Ora inizio</label><input type="time" className="inp" value={s.oraI} onChange={e => setS({ ...s, oraI: e.target.value })} /></div>
+      <div className="fld"><label className="lbl">Ora fine</label><input type="time" className="inp" value={s.oraF} onChange={e => setS({ ...s, oraF: e.target.value })} /></div>
       <div className="fld">
         <label className="lbl">Intervallo (minuti)</label>
-        <input type="number" className="inp" value={s.interv} min={15} max={1440}
-          onChange={e => setS({ ...s, interv: parseInt(e.target.value) || 60 })} />
+        <input type="number" className="inp" value={s.interv} min={15} max={1440} onChange={e => setS({ ...s, interv: parseInt(e.target.value) || 60 })} />
       </div>
-
-      <div className="fld">
-        <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>
-      </div>
+      <div className="fld"><button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button></div>
     </div>
   );
 }

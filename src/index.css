@@ -195,3 +195,43 @@ html, body, #root { height: 100%; background: var(--bg); color: var(--t1); font-
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 44px 24px; gap: 10px; color: var(--t3); text-align: center; }
 .eic { font-size: 36px; opacity: .4; }
 .etx { font-size: 14px; line-height: 1.6; }
+
+/* ── Template Image Preview ─────────────────────────── */
+.tpl-preview { position: relative; width: calc(100% - 32px); margin: 0 16px 12px; aspect-ratio: 1/1; background: #0a0a14; border-radius: 14px; overflow: hidden; }
+.tpl-product { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.tpl-overlay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.tpl-logo { position: absolute; top: 10px; left: 10px; width: 48px; height: 48px; object-fit: contain; border-radius: 8px; }
+.tpl-badge { position: absolute; top: 10px; right: 10px; background: rgba(239,68,68,0.95); color: #fff; font-size: 9px; font-weight: 800; padding: 5px 10px; border-radius: 8px; letter-spacing: 0.5px; }
+.tpl-platform { position: absolute; top: 10px; left: 10px; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; backdrop-filter: blur(4px); }
+.tpl-price-bar { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 55%, transparent 100%); padding: 28px 14px 12px; }
+.tpl-price-row { display: flex; align-items: center; gap: 8px; }
+.tpl-price-new { font-size: 22px; font-weight: 800; color: #34d399; font-family: 'Syne', sans-serif; }
+.tpl-price-old { font-size: 13px; color: rgba(255,255,255,0.4); text-decoration: line-through; }
+.tpl-price-disc { background: rgba(239,68,68,0.9); color: #fff; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 20px; margin-left: auto; }
+
+/* ── Post Card (carousel) ────────────────────────────── */
+.post-card { background: var(--bg2); border: 1px solid var(--bd); border-radius: var(--r); margin: 0 16px 10px; padding: 14px; }
+.post-card-header { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
+.post-list-item { background: var(--bg2); border: 1px solid var(--bd); border-radius: var(--r); margin: 0 16px 8px; padding: 12px; display: flex; gap: 10px; align-items: flex-start; }
+.post-list-thumb { width: 48px; height: 48px; background: #0a0a14; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+.post-list-active { border-color: var(--a1); background: #0d0d1f; }
+
+/* ── Carousel nav dots ───────────────────────────────── */
+.carousel-ctrl { display: flex; align-items: center; padding: 10px 16px 4px; gap: 8px; }
+.dots-row { display: flex; justify-content: center; gap: 5px; padding: 4px 0 8px; }
+.dot { height: 6px; border-radius: 3px; background: var(--bg4); cursor: pointer; transition: all 0.2s; }
+.dot.on { background: var(--a1); }
+
+/* ── Loading phase ───────────────────────────────────── */
+.loading-phase { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 24px; gap: 14px; }
+
+/* ── Feedback toast ──────────────────────────────────── */
+.feedback-ok { background: #0d2e1e; border: 1px solid #0e4a28; border-radius: var(--r2); margin: 0 16px 8px; padding: 8px 12px; font-size: 12px; color: var(--gr2); display: flex; align-items: center; gap: 6px; }
+
+/* ── Ltype classes for new layout types ──────────────── */
+.ltype.hist { background: #2a1800; color: var(--am); }
+
+/* ── Template cards in settings ──────────────────────── */
+.tpl-card { background: var(--bg2); border: 1px solid var(--bd); border-radius: var(--r); margin: 0 16px 12px; overflow: hidden; }
+.tpl-card-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; }
+.tpl-card-body { padding: 0 14px 14px; }
