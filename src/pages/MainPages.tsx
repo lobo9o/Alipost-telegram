@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { NavPage, Product, QueueItem } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, PriceRow, EmptyState, InfoBanner, ErrorBanner, TelegramPreview } from '../components/Shared';
-import { MOCK_PRODUCTS, genId, detectSource, fetchProductMock } from '../data/mock';
+import { MOCK_PRODUCTS, genId, fetchProductMock } from '../data/mock';
+import { detectAmazonLink, extractASIN, fetchAmazonProduct } from '../services/amazonService';
 
 // ============================================================
 // DASHBOARD
@@ -115,7 +116,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 // NEW POST
 // ============================================================
-interface LinkItem { id: string; url: string; src: 'az' | 'ali'; }
+interface LinkItem { id: string; url: string; src: 'az' | 'ali'; asin?: string; }
 
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const { setQueue } = useApp();
@@ -125,19 +126,33 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const [err, setErr] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [analyzed, setAnalyzed] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const sendLink = () => {
     if (!linkInput.trim()) return;
     if (mode === 'multi' && links.length >= 6) { setErr('Massimo 6 articoli per post multiplo.'); return; }
-    setLinks(prev => [...prev, { id: genId(), url: linkInput.trim(), src: detectSource(linkInput) }]);
+    const url = linkInput.trim();
+    const isAmazon = detectAmazonLink(url);
+    const asin = isAmazon ? (extractASIN(url) ?? undefined) : undefined;
+    setLinks(prev => [...prev, { id: genId(), url, src: isAmazon ? 'az' : 'ali', asin }]);
     setLinkInput(''); setErr('');
   };
 
   const removeLink = (id: string) => setLinks(prev => prev.filter(l => l.id !== id));
 
   const creaPost = async () => {
-    const prods = await Promise.all(links.map((l, i) => fetchProductMock(l.url, i)));
-    setProducts(prods); setAnalyzed(true);
+    setLoading(true);
+    const prods = await Promise.all(links.map(async (l, i) => {
+      if (l.src === 'az' && l.asin) {
+        const ap = await fetchAmazonProduct(l.asin);
+        const discount = Math.round((1 - ap.price / ap.originalPrice) * 100);
+        return { id: genId(), titolo: ap.title, prezzo_orig: ap.originalPrice.toFixed(2), prezzo_sc: ap.price.toFixed(2), sconto: discount, emoji: '📦', src: 'az' as const, custom: '', asin: l.asin };
+      }
+      return fetchProductMock(l.url, i);
+    }));
+    setProducts(prods as Product[]);
+    setAnalyzed(true);
+    setLoading(false);
   };
 
   const updateProd = (id: string, field: keyof Product, val: string) =>
@@ -186,12 +201,19 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
               {links.map(l => (
                 <div key={l.id} className="llink">
                   <SourceBadge src={l.src} />
+                  {l.asin && (
+                    <span style={{ fontSize: 10, background: '#1a1000', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>
+                      ASIN: {l.asin}
+                    </span>
+                  )}
                   <span className="llink-url">{l.url}</span>
                   <button className="btn bgh bsm" onClick={() => removeLink(l.id)} style={{ color: 'var(--re)', padding: '4px 8px', flexShrink: 0 }}>×</button>
                 </div>
               ))}
               <div style={{ padding: '8px 16px 16px' }}>
-                <button className="btn bp bfull" onClick={creaPost}>🚀 Crea Post ({links.length})</button>
+                <button className="btn bp bfull" onClick={creaPost} disabled={loading}>
+                  {loading ? '⏳ Analisi in corso...' : `🚀 Crea Post (${links.length})`}
+                </button>
               </div>
             </>
           )}

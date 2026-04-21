@@ -1,4 +1,4 @@
-import { Product, QueueItem, PublishedPost, TextLayout, TemplateElement, AppSettings } from '../types';
+import { Product, QueueItem, PublishedPost, TextLayout, TemplateElement, AppSettings, Tag, TemplateSettings } from '../types';
 
 export function genId(): string {
   return Math.random().toString(36).slice(2, 8);
@@ -40,9 +40,14 @@ export const INITIAL_PUBLISHED: PublishedPost[] = [
   { id: 'pub3', emoji: '💡', titolo: 'LED Strip RGB 10m WiFi', prezzo: '9.80', src: 'ali', ts: 'ieri · 20:00' },
 ];
 
-export const INITIAL_TAGS: string[] = [
-  '{titolo}', '{prezzo}', '{prezzo_scontato}', '{custom}',
-  '{link_affiliato}', '{sconto}', '{minimo_storico}',
+export const INITIAL_TAGS: Tag[] = [
+  { id: 'tag1', name: '{titolo}', value: 'Titolo del prodotto' },
+  { id: 'tag2', name: '{prezzo}', value: 'Prezzo originale' },
+  { id: 'tag3', name: '{prezzo_scontato}', value: 'Prezzo scontato' },
+  { id: 'tag4', name: '{custom}', value: 'Testo personalizzato' },
+  { id: 'tag5', name: '{link_affiliato}', value: 'Link affiliato prodotto' },
+  { id: 'tag6', name: '{sconto}', value: 'Percentuale di sconto' },
+  { id: 'tag7', name: '{minimo_storico}', value: 'Badge minimo storico' },
 ];
 
 export const INITIAL_LAYOUTS: TextLayout[] = [
@@ -68,24 +73,39 @@ export const INITIAL_TEMELEMS: TemplateElement[] = [
   { id: 'e5', nome: 'Cornice overlay', color: '#8b5cf6', vis: false, x: 0, y: 0, w: 300 },
 ];
 
-export const INITIAL_SETTINGS: AppSettings = {
-  oraI: '08:00', oraF: '22:00', interv: 60, attivo: true,
-  azApi: '', aliApi: '', trackAz: '', trackAli: '',
-  channels: ['@miocanaleTelegram'],
+export const INITIAL_TEMPLATE_SETTINGS: TemplateSettings = {
+  overlay: null,
+  logo: null,
+  badgeEnabled: false,
+  positions: {
+    productImage: { x: 50, y: 50, w: 200 },
+    price: { x: 30, y: 75, w: 100 },
+    discount: { x: 70, y: 15, w: 60 },
+  },
 };
 
-// Simula il riconoscimento della piattaforma dal link
+export const INITIAL_SETTINGS: AppSettings = {
+  oraI: '08:00', oraF: '22:00', interv: 60, attivo: true,
+  channels: ['@miocanaleTelegram'],
+  amazon: {
+    enabled: true,
+    affiliateTag: '',
+    accessKey: '',
+    secretKey: '',
+    marketplace: 'IT',
+  },
+  aliexpress: {
+    enabled: true,
+    affiliateId: '',
+    trackingId: '',
+  },
+};
+
 export function detectSource(url: string): 'az' | 'ali' {
   return url.includes('amazon') ? 'az' : 'ali';
 }
 
-// Simula il recupero dati prodotto da URL (mock)
 export async function fetchProductMock(url: string, index: number): Promise<Product> {
   const p = MOCK_PRODUCTS[index % MOCK_PRODUCTS.length];
-  return {
-    ...p,
-    id: genId(),
-    src: detectSource(url),
-    custom: '',
-  };
+  return { ...p, id: genId(), src: detectSource(url), custom: '' };
 }
