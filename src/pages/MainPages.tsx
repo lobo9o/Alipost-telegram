@@ -3,9 +3,9 @@ import { useApp } from '../context/AppContext';
 import { NavPage, CreatedPost, CatalogProduct, QueueItem, Platform, Template } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
 import { MOCK_CATALOG, genId } from '../data/mock';
-import { detectAmazonLink, fetchAmazonProduct } from '../services/amazonService';
-import { fetchAliExpressProduct } from '../services/aliexpressService';
+import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags } from '../utils/tagUtils';
+import { productApi, postsApi, autopostApi } from '../lib/api';
 
 // ── Template image preview (reused in PostCard + standalone) ──
 function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
@@ -360,20 +360,23 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
 
       const newPosts: CreatedPost[] = await Promise.all(links.map(async l => {
+        const newId = genId();
         if (l.platform === 'amazon') {
-          const p = await fetchAmazonProduct(l.url);
-          return { id: genId(), platform: 'amazon' as const, sourceUrl: l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, emoji: '📦' };
+          const p = await productApi.fetchAmazon({ url: l.url });
+          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, emoji: '📦' };
         } else {
-          const p = await fetchAliExpressProduct(l.url);
-          return { id: genId(), platform: 'aliexpress' as const, sourceUrl: l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, emoji: '📦' };
+          const p = await productApi.fetchAliExpress({ url: l.url });
+          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, emoji: '📦' };
         }
       }));
 
+      // Optimistic local update first, then persist in background
       setCreatedPosts(prev => [...prev, ...newPosts]);
       setCurrentIdx(prevLen);
       setLinks([]);
       setPhase('posts');
       showFeedback(`✅ ${newPosts.length} post creati con successo`);
+      newPosts.forEach(p => postsApi.create(p).catch(() => {}));
     } catch {
       setErr('Errore durante l\'analisi dei link. Riprova.');
       setPhase('input');
@@ -383,10 +386,13 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const deletePost = (id: string) => {
     setCreatedPosts(prev => prev.filter(p => p.id !== id));
     setCurrentIdx(i => Math.max(0, i - 1));
+    postsApi.delete(id).catch(() => {});
   };
 
   const addToQueue = (post: CreatedPost) => {
-    setQueue(prev => [...prev, { id: genId(), tipo: 'single', posts: [post], sched: 'Auto', status: 'draft', sel: false }]);
+    const item: QueueItem = { id: genId(), tipo: 'single', posts: [post], sched: 'Auto', status: 'draft', sel: false };
+    setQueue(prev => [...prev, item]);
+    autopostApi.create(item).catch(() => {});
     deletePost(post.id);
     showFeedback('📬 Post aggiunto alla coda');
   };

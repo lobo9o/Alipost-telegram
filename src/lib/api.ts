@@ -1,0 +1,89 @@
+import { AppSettings, Tag, TextLayout, Template, CreatedPost, QueueItem } from '../types';
+
+const BASE = '';
+
+async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+export const settingsApi = {
+  get: () => req<AppSettings>('GET', '/api/settings'),
+  save: (data: AppSettings) => req<{ ok: boolean }>('POST', '/api/settings', data),
+};
+
+// ── Tags ──────────────────────────────────────────────────────────────────────
+export const tagsApi = {
+  list: () => req<Tag[]>('GET', '/api/tags'),
+  create: (tag: Tag) => req<Tag>('POST', '/api/tags', tag),
+  update: (id: string, tag: Partial<Tag>) => req<Tag>('PUT', `/api/tags/${id}`, tag),
+  delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/tags/${id}`),
+};
+
+// ── Layouts ───────────────────────────────────────────────────────────────────
+export const layoutsApi = {
+  list: () => req<TextLayout[]>('GET', '/api/layouts'),
+  create: (layout: TextLayout) => req<TextLayout>('POST', '/api/layouts', layout),
+  update: (id: string, layout: Partial<TextLayout>) => req<TextLayout>('PUT', `/api/layouts/${id}`, layout),
+  delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/layouts/${id}`),
+};
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+export const templatesApi = {
+  list: () => req<Template[]>('GET', '/api/templates'),
+  create: (t: Template) => req<Template>('POST', '/api/templates', t),
+  update: (id: string, t: Partial<Template>) => req<Template>('PUT', `/api/templates/${id}`, t),
+  delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/templates/${id}`),
+};
+
+// ── Posts ─────────────────────────────────────────────────────────────────────
+export const postsApi = {
+  list: () => req<CreatedPost[]>('GET', '/api/posts'),
+  create: (post: CreatedPost) => req<CreatedPost>('POST', '/api/posts', post),
+  update: (id: string, post: Partial<CreatedPost>) => req<CreatedPost>('PUT', `/api/posts/${id}`, post),
+  delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/posts/${id}`),
+};
+
+// ── Autopost Queue ────────────────────────────────────────────────────────────
+export const autopostApi = {
+  list: () => req<QueueItem[]>('GET', '/api/autopost'),
+  create: (item: QueueItem) => req<QueueItem>('POST', '/api/autopost', item),
+  update: (id: string, item: Partial<QueueItem>) => req<QueueItem>('PUT', `/api/autopost/${id}`, item),
+  delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/autopost/${id}`),
+};
+
+// ── Product fetch (via server — keeps API secrets safe) ───────────────────────
+export interface AmazonProductResult {
+  asin: string;
+  title: string;
+  image: string;
+  originalPrice: number;
+  discountedPrice: number;
+  discountPercent: number;
+  affiliateUrl: string;
+}
+export interface AliExpressProductResult {
+  productId: string;
+  title: string;
+  image: string;
+  originalPrice: number;
+  discountedPrice: number;
+  discountPercent: number;
+  affiliateUrl: string;
+}
+
+export const productApi = {
+  fetchAmazon: (payload: { asin?: string; url?: string }) =>
+    req<AmazonProductResult>('POST', '/api/amazon/product', payload),
+  fetchAliExpress: (payload: { url: string }) =>
+    req<AliExpressProductResult>('POST', '/api/aliexpress/product', payload),
+};

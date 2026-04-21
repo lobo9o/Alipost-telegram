@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, LayoutType, Tag, Template, TemplateType } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ToggleRow } from '../components/Shared';
 import { genId } from '../data/mock';
+import { tagsApi, layoutsApi, templatesApi, settingsApi } from '../lib/api';
 
 // ============================================================
 // LAYOUT PAGE (Tags / Text / Template)
@@ -36,15 +37,19 @@ function TagsSection() {
 
   const addTag = () => {
     if (!newName.trim()) return;
-    setTags(t => [...t, { id: genId(), name: fmt(newName), value: newValue.trim() }]);
+    const tag: Tag = { id: genId(), name: fmt(newName), value: newValue.trim() };
+    setTags(t => [...t, tag]);
     setNewName(''); setNewValue('');
+    tagsApi.create(tag).catch(() => {});
   };
 
   const startEdit = (t: Tag) => { setEditId(t.id); setEditName(t.name); setEditValue(t.value); };
 
   const saveEdit = () => {
     if (!editId) return;
-    setTags(ts => ts.map(t => t.id === editId ? { ...t, name: fmt(editName), value: editValue } : t));
+    const updated = { name: fmt(editName), value: editValue };
+    setTags(ts => ts.map(t => t.id === editId ? { ...t, ...updated } : t));
+    tagsApi.update(editId, updated).catch(() => {});
     setEditId(null);
   };
 
@@ -73,7 +78,7 @@ function TagsSection() {
               </span>
               <button className="btn bgh bsm" style={{ padding: '3px 8px' }} onClick={() => startEdit(t)}>✏️</button>
               <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }}
-                onClick={() => setTags(ts => ts.filter(x => x.id !== t.id))}>×</button>
+                onClick={() => { setTags(ts => ts.filter(x => x.id !== t.id)); tagsApi.delete(t.id).catch(() => {}); }}>×</button>
             </div>
           )}
         </div>
@@ -117,8 +122,14 @@ function TextLayoutSection() {
   const startEdit = (l: TextLayout) => { setForm({ nome: l.nome, tipo: l.tipo, contenuto: l.contenuto }); setEditing(l.id); };
 
   const save = () => {
-    if (editing === 'new') setLayouts(ls => [...ls, { id: genId(), ...form }]);
-    else setLayouts(ls => ls.map(x => x.id === editing ? { ...x, ...form } : x));
+    if (editing === 'new') {
+      const layout: TextLayout = { id: genId(), ...form };
+      setLayouts(ls => [...ls, layout]);
+      layoutsApi.create(layout).catch(() => {});
+    } else {
+      setLayouts(ls => ls.map(x => x.id === editing ? { ...x, ...form } : x));
+      if (editing) layoutsApi.update(editing, form).catch(() => {});
+    }
     setEditing(null);
   };
 
@@ -161,7 +172,7 @@ function TextLayoutSection() {
             <span className={TIPO_STYLE[l.tipo]}>{TIPO_LABEL[l.tipo]}</span>
             <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{l.nome}</span>
             <button className="btn bgh bsm" onClick={() => startEdit(l)}>✏️</button>
-            <button className="btn bgh bsm" style={{ color: 'var(--re)' }} onClick={() => setLayouts(ls => ls.filter(x => x.id !== l.id))}>×</button>
+            <button className="btn bgh bsm" style={{ color: 'var(--re)' }} onClick={() => { setLayouts(ls => ls.filter(x => x.id !== l.id)); layoutsApi.delete(l.id).catch(() => {}); }}>×</button>
           </div>
           <div className="lpreview">{l.contenuto}</div>
         </div>
@@ -229,8 +240,10 @@ function TemplateSection() {
   const { templates, setTemplates } = useApp();
   const [editId, setEditId] = useState<string | null>(null);
 
-  const updateTpl = (id: string, changes: Partial<Template>) =>
+  const updateTpl = (id: string, changes: Partial<Template>) => {
     setTemplates(ts => ts.map(t => t.id === id ? { ...t, ...changes } : t));
+    templatesApi.update(id, changes).catch(() => {});
+  };
 
   const handleOverlay = (tplId: string, file: File | null) => {
     if (!file) return;
@@ -245,7 +258,9 @@ function TemplateSection() {
   };
 
   const addTemplate = () => {
-    setTemplates(ts => [...ts, { id: genId(), nome: 'Nuovo Template', tipo: 'normal', overlay: null, logo: null, badgeEnabled: false }]);
+    const tpl: Template = { id: genId(), nome: 'Nuovo Template', tipo: 'normal', overlay: null, logo: null, badgeEnabled: false };
+    setTemplates(ts => [...ts, tpl]);
+    templatesApi.create(tpl).catch(() => {});
   };
 
   return (
@@ -270,7 +285,7 @@ function TemplateSection() {
               {editId === tpl.id ? '✓' : '✏️'}
             </button>
             <button className="btn bgh bsm" style={{ color: 'var(--re)' }}
-              onClick={() => setTemplates(ts => ts.filter(t => t.id !== tpl.id))}>×</button>
+              onClick={() => { setTemplates(ts => ts.filter(t => t.id !== tpl.id)); templatesApi.delete(tpl.id).catch(() => {}); }}>×</button>
           </div>
 
           {editId === tpl.id && (
@@ -341,7 +356,10 @@ const MARKETPLACES = ['IT', 'US', 'DE', 'FR', 'ES', 'UK', 'JP'];
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const { settings, setSettings } = useApp();
   const [s, setS] = useState(settings);
-  const save = () => setSettings(s);
+  const save = () => {
+    setSettings(s);
+    settingsApi.save(s).catch(() => {});
+  };
 
   const setAmazon = (field: keyof typeof s.amazon, value: string | boolean) =>
     setS(prev => ({ ...prev, amazon: { ...prev.amazon, [field]: value } }));
