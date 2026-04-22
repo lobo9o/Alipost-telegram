@@ -343,7 +343,13 @@ function TemplateSection() {
           )}
         </div>
       ))}
+<<<<<<< Updated upstream
       <InfoBanner>Clicca ✏️ per espandere e modificare ogni template. La preview si aggiorna in tempo reale.</InfoBanner>
+=======
+      <div style={{ marginTop: 10 }}>
+  <InfoBanner>Posizionamento X/Y, dimensioni e font configurabili nella versione con backend.</InfoBanner>
+</div>
+>>>>>>> Stashed changes
     </>
   );
 }
