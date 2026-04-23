@@ -82,8 +82,8 @@ export interface AliExpressProductResult {
 }
 
 export const productApi = {
-  fetchAmazon: (payload: { asin?: string; url?: string }) =>
-    req<AmazonProductResult>('POST', '/api/amazon/product', payload),
+  fetchAmazon: (payload: { asin?: string; url: string }) =>
+    req<AmazonProductResult>('POST', '/api/product', { platform: 'amazon', ...payload }),
   fetchAliExpress: (payload: { url: string }) =>
-    req<AliExpressProductResult>('POST', '/api/aliexpress/product', payload),
+    req<AliExpressProductResult>('POST', '/api/product', { platform: 'aliexpress', ...payload }),
 };
