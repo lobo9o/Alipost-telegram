@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import sql from '../../lib/db';
-import { withErrorHandler, allowMethods } from '../_utils';
+import sql from '../../lib/db.js';
+import { withErrorHandler, allowMethods } from '../_utils.js';
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['GET', 'POST'], req, res)) return;

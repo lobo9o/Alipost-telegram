@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { withErrorHandler, allowMethods } from './_utils';
+import { withErrorHandler, allowMethods } from './_utils.js';
 
 // Unified product fetch endpoint — keeps all API secrets server-side.
 // Body: { platform: 'amazon' | 'aliexpress', url: string, asin?: string }
