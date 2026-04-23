@@ -1,13 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../lib/db.js';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Protect with a secret so only you can run this
-  const secret = req.query.secret ?? req.headers['x-migrate-secret'];
-  if (!secret || secret !== process.env.MIGRATE_SECRET) {
-    res.status(401).json({ error: 'Unauthorized — pass ?secret=YOUR_MIGRATE_SECRET' });
-    return;
-  }
+export default async function handler(_req: VercelRequest, res: VercelResponse) {
 
   try {
     await sql`
