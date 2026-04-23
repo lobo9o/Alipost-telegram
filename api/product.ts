@@ -73,12 +73,13 @@ async function creatorsGetItem(
   const isCognito = version.startsWith('2');
   const authHeader = isCognito ? `Bearer ${token}, Version ${version}` : `Bearer ${token}`;
 
+  // Stessa struttura PA-API v5 (PascalCase) — Creators API condivide l'infrastruttura coral
   const requestBody = {
-    itemIds: [asin],
-    partnerTag,
-    partnerType: 'Associates',
-    marketplace: marketplaceDomain,
-    resources: [
+    ItemIds: [asin],
+    PartnerTag: partnerTag,
+    PartnerType: 'Associates',
+    Marketplace: marketplaceDomain,
+    Resources: [
       'Images.Primary.Large',
       'Offers.Listings.Price',
       'Offers.Listings.SavingBasis',
@@ -86,15 +87,23 @@ async function creatorsGetItem(
     ],
   };
 
-  const res = await fetch('https://creatorsapi.amazon/getItems', {
+  // Endpoint PA-API v5 con Bearer token (migrazione Creators API)
+  const paHost = marketplaceDomain.replace('www.', 'webservices.');
+  const apiUrl = `https://${paHost}/paapi5/getitems`;
+
+  const res = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
+      'x-amz-target': 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems',
+      'Content-Encoding': 'amz-1.0',
       'x-marketplace': marketplaceDomain,
       'Authorization': authHeader,
     },
     body: JSON.stringify(requestBody),
   });
+
+  console.log('[product] PA-API url:', apiUrl);
 
   const responseText = await res.text();
   console.log('[product] Creators API status:', res.status);
