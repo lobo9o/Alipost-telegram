@@ -131,7 +131,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!platform || !url) { res.status(400).json({ error: 'platform e url sono richiesti' }); return; }
 
   const [settingsRow] = await sql`SELECT data FROM settings WHERE id = 1`;
-  const cfg = (settingsRow?.data ?? {}) as Record<string, any>;
+  const rawData = settingsRow?.data ?? {};
+  const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
+  console.log('[product] cfg.amazon:', JSON.stringify(cfg.amazon));
 
   if (platform === 'amazon') {
     const resolvedAsin = (asin ?? extractAsin(url) ?? '').toUpperCase();

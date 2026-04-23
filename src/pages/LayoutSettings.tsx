@@ -356,12 +356,19 @@ const MARKETPLACES = ['IT', 'US', 'DE', 'FR', 'ES', 'UK', 'JP'];
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const { settings, setSettings } = useApp();
   const [s, setS] = useState(settings);
+  const [saved, setSaved] = useState(false);
 
-  // Sync when settings load from DB after mount
   React.useEffect(() => { setS(settings); }, [settings]);
-  const save = () => {
-    setSettings(s);
-    settingsApi.save(s).catch(() => {});
+
+  const save = async () => {
+    try {
+      await settingsApi.save(s);
+      setSettings(s);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      // errore silenzioso — il backend logga
+    }
   };
 
   const setAmazon = (field: keyof typeof s.amazon, value: string | boolean) =>
@@ -467,7 +474,10 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         <label className="lbl">Intervallo (minuti)</label>
         <input type="number" className="inp" value={s.interv} min={15} max={1440} onChange={e => setS({ ...s, interv: parseInt(e.target.value) || 60 })} />
       </div>
-      <div className="fld"><button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button></div>
+      <div className="fld">
+        <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>
+        {saved && <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a2a0a', border: '1px solid #1a5c1a', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>✓ Impostazioni salvate con successo</div>}
+      </div>
     </div>
   );
 }
