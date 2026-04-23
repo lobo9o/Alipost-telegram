@@ -46,7 +46,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       tryFetch(tagsApi.list, INITIAL_TAGS),
       tryFetch(layoutsApi.list, INITIAL_LAYOUTS),
       tryFetch(templatesApi.list, INITIAL_TEMPLATES),
-      tryFetch(settingsApi.get, {}),
+      tryFetch(settingsApi.get, {} as AppSettings),
     ]).then(([posts, q, t, l, tmpl, s]) => {
       if (posts.length > 0) setCreatedPosts(posts);
       setQueue(q as QueueItem[]);

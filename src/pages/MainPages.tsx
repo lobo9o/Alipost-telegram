@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, CreatedPost, CatalogProduct, QueueItem, Platform, Template } from '../types';
+import { NavPage, CreatedPost, QueueItem, Platform, Template } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
-import { MOCK_CATALOG, genId } from '../data/mock';
+import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi } from '../lib/api';
@@ -251,68 +251,18 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
 // SEARCH PAGE
 // ============================================================
 export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { setQueue } = useApp();
-  const [src, setSrc] = useState<'aliexpress' | 'amazon' | 'all'>('aliexpress');
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState<CatalogProduct[]>([]);
-  const [searched, setSearched] = useState(false);
-
-  const search = () => {
-    const filtered = MOCK_CATALOG.filter(p => src === 'all' || p.platform === src);
-    setResults(q ? filtered.filter(p => p.title.toLowerCase().includes(q.toLowerCase())) : filtered);
-    setSearched(true);
-  };
-
-  const addToQueue = (p: CatalogProduct, publishNow: boolean) => {
-    const post: CreatedPost = {
-      id: genId(), platform: p.platform,
-      sourceUrl: `https://${p.platform === 'amazon' ? 'amazon.it' : 'aliexpress.com'}/item/${p.id}`,
-      productId: p.id, title: p.title, image: '', emoji: p.emoji,
-      originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent,
-      customText: '', isHistoricalLow: false, templateId: 'tpl1', layoutId: 'l1',
-    };
-    setQueue(prev => [...prev, {
-      id: genId(), tipo: 'single', posts: [post],
-      sched: publishNow ? 'Subito' : 'Auto',
-      status: publishNow ? 'published' : 'scheduled', sel: false,
-    }]);
-    nav(publishNow ? 'published' : 'queue');
-  };
-
   return (
     <div className="pg">
       <PageHeader title="Cerca Offerte" onBack={() => nav('dash')} />
-      <div style={{ padding: '12px 16px 0' }}>
-        <SwitchTabs
-          options={[['aliexpress', 'AliExpress'], ['amazon', 'Amazon'], ['all', 'Entrambi']]}
-          value={src} onChange={v => setSrc(v as any)}
-        />
-        <div className="irow" style={{ marginTop: 10, marginBottom: 12 }}>
-          <input className="inp" value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Cerca prodotti..." onKeyDown={e => e.key === 'Enter' && search()} />
-          <button className="btn bp" onClick={search} style={{ padding: '0 16px', flexShrink: 0 }}>🔍</button>
-        </div>
-      </div>
-      {!searched && <InfoBanner>Seleziona piattaforma e cerca, oppure premi 🔍 per vedere tutte le offerte mock.</InfoBanner>}
-      {searched && !results.length && <EmptyState icon="🔎" text="Nessun prodotto trovato." />}
-      {results.map(p => (
-        <div key={p.id} className="pcard">
-          <div className="pthumb">{p.emoji}</div>
-          <div className="pinfo">
-            <div className="ptit">{p.title}</div>
-            <div className="prow">
-              <span className="pnew" style={{ fontSize: 14 }}>€{p.discountedPrice.toFixed(2)}</span>
-              <span className="pold">€{p.originalPrice.toFixed(2)}</span>
-              <span className="dbdg">-{p.discountPercent}%</span>
-              <SourceBadge platform={p.platform} />
-            </div>
-            <div className="pacts">
-              <button className="btn bgr bsm" onClick={() => addToQueue(p, true)}>⚡ Pubblica</button>
-              <button className="btn bbl bsm" onClick={() => addToQueue(p, false)}>+ AutoPost</button>
-            </div>
-          </div>
-        </div>
-      ))}
+      <EmptyState
+        icon="🔍"
+        text="La ricerca prodotti non è ancora disponibile."
+        action={
+          <button className="btn bp" onClick={() => nav('newpost')}>
+            ✏️ Crea post da link
+          </button>
+        }
+      />
     </div>
   );
 }
