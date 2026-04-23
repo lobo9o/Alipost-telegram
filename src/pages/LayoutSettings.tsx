@@ -375,7 +375,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       <PageHeader title="Impostazioni" onBack={() => nav('dash')} />
 
       {/* ── Amazon ── */}
-      <div className="stit">AMAZON SETTINGS</div>
+      <div className="stit">AMAZON CREATORS API</div>
       <div className="api-card">
         <div className="api-top">
           <div className="api-ico" style={{ background: '#1a1000' }}>🟡</div>
@@ -386,8 +386,19 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
         <ToggleRow label="Attiva Amazon" value={s.amazon.enabled} onChange={v => setAmazon('enabled', v)} />
         <div className="fld">
-          <label className="lbl">Affiliate Tag (Tracking ID)</label>
+          <label className="lbl">Partner Tag (Affiliate Tag)</label>
           <input className="inp" value={s.amazon.affiliateTag} onChange={e => setAmazon('affiliateTag', e.target.value)} placeholder="miosite-21" />
+        </div>
+        <div className="fld">
+          <label className="lbl">Versione credenziale</label>
+          <select className="sel" value={s.amazon.version} onChange={e => setAmazon('version', e.target.value)}>
+            <option value="2.1">2.1 — Nord America</option>
+            <option value="2.2">2.2 — Europa</option>
+            <option value="2.3">2.3 — Far East</option>
+            <option value="3.1">3.1 — Nord America (LWA)</option>
+            <option value="3.2">3.2 — Europa (LWA)</option>
+            <option value="3.3">3.3 — Far East (LWA)</option>
+          </select>
         </div>
         <div className="fld">
           <label className="lbl">Marketplace</label>
@@ -397,19 +408,19 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
         <div className="fld">
           <label className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            Access Key
+            Credential ID
             <span style={{ fontSize: 10, background: '#2a1800', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SOLO BACKEND</span>
           </label>
-          <input className="inp" type="password" value={s.amazon.accessKey} onChange={e => setAmazon('accessKey', e.target.value)} placeholder="AKIAIOSFODNN7EXAMPLE" />
+          <input className="inp" type="password" value={s.amazon.credentialId} onChange={e => setAmazon('credentialId', e.target.value)} placeholder="amzn1.application-oa2-client...." />
         </div>
         <div className="fld">
           <label className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            Secret Key
+            Credential Secret
             <span style={{ fontSize: 10, background: '#2a1800', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SOLO BACKEND</span>
           </label>
-          <input className="inp" type="password" value={s.amazon.secretKey} onChange={e => setAmazon('secretKey', e.target.value)} placeholder="wJalrXUtnFEMI/K7MDENG/..." />
+          <input className="inp" type="password" value={s.amazon.credentialSecret} onChange={e => setAmazon('credentialSecret', e.target.value)} placeholder="amzn1.oa2-cs.v1...." />
         </div>
-        <InfoBanner>🔒 Access Key e Secret Key non vengono mai usate nel frontend. Pronte per il tuo backend.</InfoBanner>
+        <InfoBanner>🔒 Credential ID e Secret non vengono mai esposti nel frontend. Creali su Associates → Strumenti → CreatorsAPI.</InfoBanner>
       </div>
 
       {/* ── AliExpress ── */}

@@ -75,8 +75,9 @@ export interface PublishedPost {
 export interface AmazonSettings {
   enabled: boolean;
   affiliateTag: string;
-  accessKey: string;
-  secretKey: string;
+  credentialId: string;
+  credentialSecret: string;
+  version: string;
   marketplace: string;
 }
 
