@@ -13,8 +13,9 @@ const sql = postgres(connectionString, {
   max_lifetime: 60 * 30,
 });
 
-// Auto-create tables on cold start (idempotent — safe to run every time)
-export const ready: Promise<void> = (async () => {
+// Top-level await: module does not finish loading until all tables exist.
+// CREATE TABLE IF NOT EXISTS is idempotent — safe to run on every cold start.
+try {
   await sql`CREATE TABLE IF NOT EXISTS settings (
     id         SERIAL PRIMARY KEY,
     data       JSONB NOT NULL DEFAULT '{}',
@@ -77,6 +78,8 @@ export const ready: Promise<void> = (async () => {
   )`;
   await sql`CREATE INDEX IF NOT EXISTS price_history_product_idx
     ON price_history (product_id, platform, recorded_at DESC)`;
-})().catch(err => console.error('[auto-migrate]', err));
+} catch (err) {
+  console.error('[db init failed]', err);
+}
 
 export default sql;
