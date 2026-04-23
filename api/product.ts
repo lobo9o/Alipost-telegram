@@ -1,24 +1,93 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createHmac, createHash } from 'crypto';
 import { withErrorHandler, allowMethods } from './_utils.js';
+import sql from '../lib/db.js';
 
-// Unified product fetch endpoint — keeps all API secrets server-side.
-// Body: { platform: 'amazon' | 'aliexpress', url: string, asin?: string }
+function sha256hex(data: string): string {
+  return createHash('sha256').update(data, 'utf8').digest('hex');
+}
 
-const AMAZON_MOCK: Record<string, { title: string; image: string; originalPrice: number; discountedPrice: number; discountPercent: number }> = {
-  'B0CHX3QBCH': { title: 'Amazfit GTR 4 Smartwatch', image: 'https://m.media-amazon.com/images/I/71qKQZiGhRL._AC_SX466_.jpg', originalPrice: 199.90, discountedPrice: 89.90, discountPercent: 55 },
-  'B09G9HD6PD': { title: 'Echo Dot (5ª gen.) Altoparlante smart con Alexa', image: 'https://m.media-amazon.com/images/I/71xoR4A6q9L._AC_SX466_.jpg', originalPrice: 64.99, discountedPrice: 24.99, discountPercent: 62 },
-  'B0BVZM41G3': { title: 'Philips Hue Starter Kit 3 lampadine E27', image: 'https://m.media-amazon.com/images/I/61fxBxF6tXL._AC_SX466_.jpg', originalPrice: 119.95, discountedPrice: 69.95, discountPercent: 42 },
+function hmacBuf(key: Buffer | string, data: string): Buffer {
+  return createHmac('sha256', key).update(data, 'utf8').digest();
+}
+
+const MK: Record<string, { host: string; domain: string }> = {
+  it: { host: 'webservices.amazon.it',    domain: 'www.amazon.it' },
+  us: { host: 'webservices.amazon.com',   domain: 'www.amazon.com' },
+  de: { host: 'webservices.amazon.de',    domain: 'www.amazon.de' },
+  fr: { host: 'webservices.amazon.fr',    domain: 'www.amazon.fr' },
+  es: { host: 'webservices.amazon.es',    domain: 'www.amazon.es' },
+  uk: { host: 'webservices.amazon.co.uk', domain: 'www.amazon.co.uk' },
+  jp: { host: 'webservices.amazon.co.jp', domain: 'www.amazon.co.jp' },
 };
 
-const ALI_MOCK: Record<string, { title: string; image: string; originalPrice: number; discountedPrice: number; discountPercent: number }> = {
-  '1005006033': { title: 'Xiaomi Redmi Buds 5 TWS Auricolari Wireless', image: '', originalPrice: 39.99, discountedPrice: 18.50, discountPercent: 54 },
-  '1005005801': { title: 'Anker PowerBank 20000mAh USB-C PD 65W', image: '', originalPrice: 59.99, discountedPrice: 28.99, discountPercent: 52 },
-  '1005004212': { title: 'Baseus Caricatore GaN 65W 4 porte', image: '', originalPrice: 45.00, discountedPrice: 19.99, discountPercent: 56 },
-};
+async function paApiGetItem(
+  asin: string,
+  accessKey: string,
+  secretKey: string,
+  partnerTag: string,
+  marketplace: string,
+) {
+  const mk = MK[marketplace.toLowerCase()] ?? MK.it;
+  const path = '/paapi5/getitems';
+  const target = 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems';
+  const region = 'us-east-1';
+  const service = 'ProductAdvertisingAPI';
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[-:]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+
+  const body = JSON.stringify({
+    ItemIds: [asin],
+    Resources: ['Images.Primary.Large', 'Offers.Listings.Price', 'Offers.Listings.SavingBasis', 'ItemInfo.Title'],
+    PartnerTag: partnerTag,
+    PartnerType: 'Associates',
+    Marketplace: mk.domain,
+  });
+
+  const payloadHash = sha256hex(body);
+
+  const sortedHeaders: [string, string][] = [
+    ['content-encoding', 'amz-1.0'],
+    ['content-type', 'application/json; charset=utf-8'],
+    ['host', mk.host],
+    ['x-amz-date', amzDate],
+    ['x-amz-target', target],
+  ];
+
+  const canonicalHeaders = sortedHeaders.map(([k, v]) => `${k}:${v}`).join('\n') + '\n';
+  const signedHeaders = sortedHeaders.map(([k]) => k).join(';');
+  const canonicalRequest = `POST\n${path}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${sha256hex(canonicalRequest)}`;
+
+  const kDate   = hmacBuf(`AWS4${secretKey}`, dateStamp);
+  const kRegion = hmacBuf(kDate, region);
+  const kSvc    = hmacBuf(kRegion, service);
+  const kSign   = hmacBuf(kSvc, 'aws4_request');
+  const sig     = hmacBuf(kSign, stringToSign).toString('hex');
+
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${sig}`;
+
+  const res = await fetch(`https://${mk.host}${path}`, {
+    method: 'POST',
+    headers: Object.fromEntries([...sortedHeaders, ['Authorization', authorization]]),
+    body,
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`PA-API ${res.status}: ${txt}`);
+  }
+  return res.json();
+}
 
 function extractAsin(url: string): string | null {
-  for (const p of [/\/dp\/([A-Z0-9]{10})/, /\/gp\/product\/([A-Z0-9]{10})/, /\/ASIN\/([A-Z0-9]{10})/, /[?&]asin=([A-Z0-9]{10})/i]) {
-    const m = url.match(p); if (m) return m[1];
+  for (const p of [/\/dp\/([A-Z0-9]{10})/i, /\/gp\/product\/([A-Z0-9]{10})/i, /\/ASIN\/([A-Z0-9]{10})/i, /[?&]asin=([A-Z0-9]{10})/i]) {
+    const m = url.match(p);
+    if (m) return m[1].toUpperCase();
   }
   return null;
 }
@@ -34,30 +103,55 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const { platform, url, asin } = req.body ?? {};
   if (!platform || !url) { res.status(400).json({ error: 'platform and url required' }); return; }
 
+  const [settingsRow] = await sql`SELECT data FROM settings WHERE id = 1`;
+  const cfg = (settingsRow?.data ?? {}) as Record<string, any>;
+
   if (platform === 'amazon') {
-    const affiliateTag = process.env.AMAZON_AFFILIATE_TAG ?? '';
-    const marketplace = process.env.AMAZON_MARKETPLACE ?? 'it';
-    const resolvedAsin = asin ?? extractAsin(url) ?? '';
+    const resolvedAsin = (asin ?? extractAsin(url) ?? '').toUpperCase();
     if (!resolvedAsin) { res.status(400).json({ error: 'Could not extract ASIN' }); return; }
 
-    // ── Real PA-API 5.0 call goes here ──────────────────────────
-    // const result = await callPaApi({ asin: resolvedAsin, ... });
-    // ────────────────────────────────────────────────────────────
+    const accessKey  = cfg.amazon?.accessKey   ?? process.env.AMAZON_ACCESS_KEY   ?? '';
+    const secretKey  = cfg.amazon?.secretKey   ?? process.env.AMAZON_SECRET_KEY   ?? '';
+    const partnerTag = cfg.amazon?.affiliateTag ?? process.env.AMAZON_AFFILIATE_TAG ?? '';
+    const marketplace = (cfg.amazon?.marketplace ?? process.env.AMAZON_MARKETPLACE ?? 'IT').toLowerCase();
 
-    const mock = AMAZON_MOCK[resolvedAsin] ?? { title: `Prodotto Amazon (${resolvedAsin})`, image: '', originalPrice: 49.99, discountedPrice: 29.99, discountPercent: 40 };
-    res.json({ ...mock, asin: resolvedAsin, affiliateUrl: `https://www.amazon.${marketplace}/dp/${resolvedAsin}?tag=${affiliateTag}` });
+    if (!accessKey || !secretKey || !partnerTag) {
+      res.status(400).json({ error: 'Credenziali Amazon PA-API non configurate. Vai in Impostazioni e inserisci Access Key, Secret Key e Affiliate Tag.' });
+      return;
+    }
+
+    const data = await paApiGetItem(resolvedAsin, accessKey, secretKey, partnerTag, marketplace) as any;
+    const item = data.ItemsResult?.Items?.[0];
+    if (!item) { res.status(404).json({ error: 'Prodotto non trovato nella risposta PA-API' }); return; }
+
+    const title = item.ItemInfo?.Title?.DisplayValue ?? '';
+    const image = item.Images?.Primary?.Large?.URL ?? '';
+    const discountedPrice: number = item.Offers?.Listings?.[0]?.Price?.Amount ?? 0;
+    const savingBasis: number = item.Offers?.Listings?.[0]?.SavingBasis?.Amount ?? discountedPrice;
+    const originalPrice = savingBasis > discountedPrice ? savingBasis : discountedPrice;
+    const discountPercent = originalPrice > discountedPrice
+      ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
+    const mkDomain = MK[marketplace]?.domain ?? 'www.amazon.it';
+
+    res.json({ asin: resolvedAsin, title, image, originalPrice, discountedPrice, discountPercent, affiliateUrl: `https://${mkDomain}/dp/${resolvedAsin}?tag=${partnerTag}` });
 
   } else if (platform === 'aliexpress') {
-    const trackingId = process.env.ALIEXPRESS_TRACKING_ID ?? '';
     const productId = extractAliId(url);
     if (!productId) { res.status(400).json({ error: 'Could not extract product ID' }); return; }
 
-    // ── Real AliExpress API call goes here ───────────────────────
-    // const result = await callAliexpressApi({ productId, ... });
-    // ────────────────────────────────────────────────────────────
+    const trackingId = cfg.aliexpress?.trackingId ?? process.env.ALIEXPRESS_TRACKING_ID ?? '';
 
-    const mock = ALI_MOCK[productId] ?? { title: `Prodotto AliExpress (${productId})`, image: '', originalPrice: 29.99, discountedPrice: 14.99, discountPercent: 50 };
-    res.json({ ...mock, productId, affiliateUrl: `https://s.click.aliexpress.com/e/_link?productId=${productId}&trackingId=${trackingId}` });
+    // AliExpress Open API richiede OAuth — non ancora implementato.
+    // L'utente può inserire manualmente titolo e prezzo nel form.
+    res.json({
+      productId,
+      title: `Prodotto AliExpress #${productId}`,
+      image: '',
+      originalPrice: 0,
+      discountedPrice: 0,
+      discountPercent: 0,
+      affiliateUrl: `https://s.click.aliexpress.com/e/_link?productId=${productId}&trackingId=${trackingId}`,
+    });
 
   } else {
     res.status(400).json({ error: 'platform must be amazon or aliexpress' });

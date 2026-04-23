@@ -356,6 +356,9 @@ const MARKETPLACES = ['IT', 'US', 'DE', 'FR', 'ES', 'UK', 'JP'];
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const { settings, setSettings } = useApp();
   const [s, setS] = useState(settings);
+
+  // Sync when settings load from DB after mount
+  React.useEffect(() => { setS(settings); }, [settings]);
   const save = () => {
     setSettings(s);
     settingsApi.save(s).catch(() => {});

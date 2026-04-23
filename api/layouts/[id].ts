@@ -12,11 +12,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const { nome, tipo, body, active } = req.body ?? {};
+  const { nome, tipo, contenuto, active } = req.body ?? {};
   const [row] = await sql`
-    UPDATE layouts SET nome = ${nome}, tipo = ${tipo}, body = ${body}, active = ${active}
+    UPDATE layouts SET nome = ${nome}, tipo = ${tipo}, body = ${contenuto}, active = ${active}
     WHERE id = ${id}
-    RETURNING id, nome, tipo, body, active
+    RETURNING id, nome, tipo, body AS contenuto, active
   `;
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(row);
