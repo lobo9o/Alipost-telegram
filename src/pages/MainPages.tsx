@@ -327,8 +327,8 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       setPhase('posts');
       showFeedback(`✅ ${newPosts.length} post creati con successo`);
       newPosts.forEach(p => postsApi.create(p).catch(() => {}));
-    } catch {
-      setErr('Errore durante l\'analisi dei link. Riprova.');
+    } catch (err) {
+      setErr(err instanceof Error ? err.message : 'Errore durante l\'analisi dei link. Riprova.');
       setPhase('input');
     }
   };
