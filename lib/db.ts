@@ -13,9 +13,9 @@ const sql = postgres(connectionString, {
   max_lifetime: 60 * 30,
 });
 
-// Top-level await: module does not finish loading until all tables exist.
-// CREATE TABLE IF NOT EXISTS is idempotent — safe to run on every cold start.
-try {
+// Runs once per cold start. No .catch() — errors propagate so the handler
+// returns a clear 500 instead of silently running with missing tables.
+export const ready: Promise<void> = (async () => {
   await sql`CREATE TABLE IF NOT EXISTS settings (
     id         SERIAL PRIMARY KEY,
     data       JSONB NOT NULL DEFAULT '{}',
@@ -78,8 +78,6 @@ try {
   )`;
   await sql`CREATE INDEX IF NOT EXISTS price_history_product_idx
     ON price_history (product_id, platform, recorded_at DESC)`;
-} catch (err) {
-  console.error('[db init failed]', err);
-}
+})();
 
 export default sql;
