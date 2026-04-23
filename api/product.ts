@@ -73,6 +73,19 @@ async function creatorsGetItem(
   const isCognito = version.startsWith('2');
   const authHeader = isCognito ? `Bearer ${token}, Version ${version}` : `Bearer ${token}`;
 
+  const requestBody = {
+    itemIds: [asin],
+    partnerTag,
+    partnerType: 'Associates',
+    marketplace: marketplaceDomain,
+    resources: [
+      'Images.Primary.Large',
+      'Offers.Listings.Price',
+      'Offers.Listings.SavingBasis',
+      'ItemInfo.Title',
+    ],
+  };
+
   const res = await fetch('https://creatorsapi.amazon/getItems', {
     method: 'POST',
     headers: {
@@ -80,25 +93,17 @@ async function creatorsGetItem(
       'x-marketplace': marketplaceDomain,
       'Authorization': authHeader,
     },
-    body: JSON.stringify({
-      itemIds: [asin],
-      partnerTag,
-      partnerType: 'Associates',
-      marketplace: marketplaceDomain,
-      resources: [
-        'Images.Primary.Large',
-        'Offers.Listings.Price',
-        'Offers.Listings.SavingBasis',
-        'ItemInfo.Title',
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
+  const responseText = await res.text();
+  console.log('[product] Creators API status:', res.status);
+  console.log('[product] Creators API response:', responseText.slice(0, 500));
+
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Creators API (${res.status}): ${txt}`);
+    throw new Error(`Creators API (${res.status}): ${responseText}`);
   }
-  return res.json();
+  return JSON.parse(responseText);
 }
 
 function extractAsin(url: string): string | null {
