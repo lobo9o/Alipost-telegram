@@ -13,9 +13,8 @@ const sql = postgres(connectionString, {
   max_lifetime: 60 * 30,
 });
 
-// Runs once per cold start. No .catch() — errors propagate so the handler
-// returns a clear 500 instead of silently running with missing tables.
 export const ready: Promise<void> = (async () => {
+  console.log('[DB] migrazione avviata');
   await sql`CREATE TABLE IF NOT EXISTS settings (
     id         SERIAL PRIMARY KEY,
     data       JSONB NOT NULL DEFAULT '{}',
@@ -78,6 +77,10 @@ export const ready: Promise<void> = (async () => {
   )`;
   await sql`CREATE INDEX IF NOT EXISTS price_history_product_idx
     ON price_history (product_id, platform, recorded_at DESC)`;
-})();
+  console.log('[DB] migrazione completata');
+})().catch((err) => {
+  console.error('[DB] migrazione FALLITA:', err);
+  throw err;
+});
 
 export default sql;
