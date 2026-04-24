@@ -72,22 +72,17 @@ async function creatorsGetItem(
   const isCognito = version.startsWith('2');
   const authHeader = isCognito ? `Bearer ${token}, Version ${version}` : `Bearer ${token}`;
 
+  // Minimal request — Marketplace via header only, no Content-Encoding
   const requestBody = {
     ItemIds: [asin],
     PartnerTag: partnerTag,
     PartnerType: 'Associates',
-    Marketplace: marketplaceDomain,
-    Resources: [
-      'Images.Primary.Large',
-      'Offers.Listings.Price',
-      'ItemInfo.Title',
-    ],
+    Resources: ['ItemInfo.Title', 'Images.Primary.Large', 'Offers.Listings.Price'],
   };
 
-  // Creators API endpoint (POST, coral-based, Bearer auth)
   const apiUrl = 'https://creatorsapi.amazon/getItems';
 
-  console.log('[product] url:', apiUrl);
+  console.log('[product] asin:', asin, 'tag:', partnerTag, 'marketplace:', marketplaceDomain, 'version:', version);
   console.log('[product] body:', JSON.stringify(requestBody));
 
   const res = await fetch(apiUrl, {
@@ -95,7 +90,6 @@ async function creatorsGetItem(
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'x-amz-target': 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems',
-      'Content-Encoding': 'amz-1.0',
       'x-marketplace': marketplaceDomain,
       'Authorization': authHeader,
     },
