@@ -78,7 +78,7 @@ async function creatorsGetItem(
     resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
   };
 
-  const apiUrl = 'https://creatorsapi.amazon/getItems';
+  const apiUrl = 'https://creatorsapi.amazon/getProducts';
 
   const res = await fetch(apiUrl, {
     method: 'POST',
