@@ -72,12 +72,12 @@ async function creatorsGetItem(
   const isCognito = version.startsWith('2');
   const authHeader = isCognito ? `Bearer ${token}, Version ${version}` : `Bearer ${token}`;
 
-  // Minimal request — Marketplace via header only, no Content-Encoding
+  // Creators API usa camelCase (diverso da PA-API che usava PascalCase)
   const requestBody = {
-    ItemIds: [asin],
-    PartnerTag: partnerTag,
-    PartnerType: 'Associates',
-    Resources: ['ItemInfo.Title', 'Images.Primary.Large', 'Offers.Listings.Price'],
+    itemIds: [asin],
+    partnerTag: partnerTag,
+    partnerType: 'Associates',
+    resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
   };
 
   const apiUrl = 'https://creatorsapi.amazon/getItems';
@@ -167,10 +167,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     const titleObj   = pick(pick(pick(item, 'itemInfo', 'ItemInfo'), 'title', 'Title'), 'displayValue', 'DisplayValue');
     const imageUrl   = pick(pick(pick(pick(item, 'images', 'Images'), 'primary', 'Primary'), 'large', 'Large'), 'url', 'URL');
-    const listings   = (pick(pick(item, 'offers', 'Offers'), 'listings', 'Listings') as any[])?.[0];
+    // Creators API usa offersV2 (non offers/Offers come PA-API)
+    const listings   = (pick(pick(item, 'offersV2', 'offers', 'Offers'), 'listings', 'Listings') as any[])?.[0];
     const priceAmt   = pick(pick(listings, 'price', 'Price'), 'amount', 'Amount') as number ?? 0;
-    const basisAmt   = pick(pick(listings, 'savingBasis', 'SavingBasis'), 'amount', 'Amount') as number ?? priceAmt;
-    const originalPrice   = basisAmt > priceAmt ? basisAmt : priceAmt;
+    const originalPrice   = priceAmt;
     const discountedPrice = priceAmt;
     const discountPercent = originalPrice > discountedPrice
       ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
