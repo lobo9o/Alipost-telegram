@@ -71,18 +71,19 @@ async function creatorsGetItem(
   const token = await getToken(credentialId, credentialSecret, version);
   const authHeader = `Bearer ${token}`;
 
-  // Creators API usa camelCase (diverso da PA-API che usava PascalCase)
   const requestBody = {
     itemIds: [asin],
     partnerTag: partnerTag,
-    partnerType: 'Associates',
     resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
   };
 
   const apiUrl = 'https://creatorsapi.amazon/getItems';
 
-  console.log('[product] asin:', asin, 'tag:', partnerTag, 'marketplace:', marketplaceDomain, 'version:', version);
-  console.log('[product] body:', JSON.stringify(requestBody));
+  // Log tutto in un'unica riga JSON per non perdersi nei log
+  console.log('[product] DEBUG', JSON.stringify({
+    asin, partnerTag: partnerTag.slice(0, 12), version, marketplace: marketplaceDomain,
+    tokenPrefix: token.slice(0, 20), url: apiUrl,
+  }));
 
   const res = await fetch(apiUrl, {
     method: 'POST',
@@ -94,11 +95,8 @@ async function creatorsGetItem(
     body: JSON.stringify(requestBody),
   });
 
-  console.log('[product] Creators API url:', apiUrl);
-
   const responseText = await res.text();
-  console.log('[product] Creators API status:', res.status);
-  console.log('[product] Creators API response:', responseText.slice(0, 500));
+  console.log('[product] status:', res.status, '| resp:', responseText.slice(0, 300));
 
   if (!res.ok) {
     throw new Error(`Creators API (${res.status}): ${responseText}`);

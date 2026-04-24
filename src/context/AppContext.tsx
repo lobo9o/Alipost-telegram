@@ -19,13 +19,28 @@ async function tryFetch<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 }
 
 function mergeSettings(fetched: unknown): AppSettings {
-  const s = (fetched ?? {}) as Partial<AppSettings>;
+  const r = (fetched ?? {}) as Record<string, any>;
+  const am = (r.amazon ?? {}) as Record<string, any>;
+  const al = (r.aliexpress ?? {}) as Record<string, any>;
   return {
-    ...INITIAL_SETTINGS,
-    ...s,
-    amazon: { ...INITIAL_SETTINGS.amazon, ...(s.amazon ?? {}) },
-    aliexpress: { ...INITIAL_SETTINGS.aliexpress, ...(s.aliexpress ?? {}) },
-    channels: s.channels ?? INITIAL_SETTINGS.channels,
+    oraI: typeof r.oraI === 'string' ? r.oraI : INITIAL_SETTINGS.oraI,
+    oraF: typeof r.oraF === 'string' ? r.oraF : INITIAL_SETTINGS.oraF,
+    interv: typeof r.interv === 'number' ? r.interv : INITIAL_SETTINGS.interv,
+    attivo: typeof r.attivo === 'boolean' ? r.attivo : INITIAL_SETTINGS.attivo,
+    channels: Array.isArray(r.channels) ? r.channels as string[] : INITIAL_SETTINGS.channels,
+    amazon: {
+      enabled: typeof am.enabled === 'boolean' ? am.enabled : INITIAL_SETTINGS.amazon.enabled,
+      affiliateTag: typeof am.affiliateTag === 'string' ? am.affiliateTag : '',
+      credentialId: typeof am.credentialId === 'string' ? am.credentialId : '',
+      credentialSecret: typeof am.credentialSecret === 'string' ? am.credentialSecret : '',
+      version: typeof am.version === 'string' ? am.version : '2.2',
+      marketplace: typeof am.marketplace === 'string' ? am.marketplace : 'IT',
+    },
+    aliexpress: {
+      enabled: typeof al.enabled === 'boolean' ? al.enabled : INITIAL_SETTINGS.aliexpress.enabled,
+      affiliateId: typeof al.affiliateId === 'string' ? al.affiliateId : '',
+      trackingId: typeof al.trackingId === 'string' ? al.trackingId : '',
+    },
   };
 }
 
