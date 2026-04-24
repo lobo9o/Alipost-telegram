@@ -393,8 +393,9 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
         <ToggleRow label="Attiva Amazon" value={s.amazon.enabled} onChange={v => setAmazon('enabled', v)} />
         <div className="fld">
-          <label className="lbl">Partner Tag (Affiliate Tag)</label>
-          <input className="inp" value={s.amazon.affiliateTag} onChange={e => setAmazon('affiliateTag', e.target.value)} placeholder="miosite-21" />
+          <label className="lbl">Partner Tag / Application ID</label>
+          <input className="inp" value={s.amazon.affiliateTag} onChange={e => setAmazon('affiliateTag', e.target.value)} placeholder="cavalieridelr-21.alipost2" />
+          <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>Inserisci l'Application ID dalla dashboard Creators API (formato: tag-21.nomeapp)</div>
         </div>
         <div className="fld">
           <label className="lbl">Versione credenziale</label>
