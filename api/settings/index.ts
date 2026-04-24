@@ -10,7 +10,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const data = rows[0]?.data ?? {};
     const size = JSON.stringify(data).length;
     console.log('[settings] data size bytes:', size);
-    if (size > 200_000) {
+    if (size > 10_000) {
       console.warn('[settings] data troppo grande — reset a {}');
       await sql`UPDATE settings SET data = '{}'::jsonb, updated_at = now() WHERE id = 1`;
       res.json({});

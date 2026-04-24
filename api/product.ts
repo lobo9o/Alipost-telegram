@@ -69,8 +69,7 @@ async function creatorsGetItem(
   marketplaceDomain: string,
 ): Promise<unknown> {
   const token = await getToken(credentialId, credentialSecret, version);
-  const isCognito = version.startsWith('2');
-  const authHeader = isCognito ? `Bearer ${token}, Version ${version}` : `Bearer ${token}`;
+  const authHeader = `Bearer ${token}`;
 
   // Creators API usa camelCase (diverso da PA-API che usava PascalCase)
   const requestBody = {
