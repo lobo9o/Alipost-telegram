@@ -53,11 +53,10 @@ async function getToken(credentialId: string, credentialSecret: string, version:
     });
   }
 
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Errore token Amazon (${res.status}): ${txt}`);
-  }
-  const data = await res.json() as { access_token: string };
+  const tokenText = await res.text();
+  console.log(`[product] token ${res.status}:`, tokenText.slice(0, 120));
+  if (!res.ok) throw new Error(`Errore token Amazon (${res.status}): ${tokenText}`);
+  const data = JSON.parse(tokenText) as { access_token: string };
   return data.access_token;
 }
 
@@ -73,7 +72,6 @@ async function creatorsGetItem(
   const isCognito = version.startsWith('2');
   const authHeader = isCognito ? `Bearer ${token}, Version ${version}` : `Bearer ${token}`;
 
-  // Stessa struttura PA-API v5 (PascalCase) — Creators API condivide l'infrastruttura coral
   const requestBody = {
     ItemIds: [asin],
     PartnerTag: partnerTag,
@@ -82,14 +80,15 @@ async function creatorsGetItem(
     Resources: [
       'Images.Primary.Large',
       'Offers.Listings.Price',
-      'Offers.Listings.SavingBasis',
       'ItemInfo.Title',
     ],
   };
 
-  // Endpoint PA-API v5 con Bearer token (migrazione Creators API)
-  const paHost = marketplaceDomain.replace('www.', 'webservices.');
-  const apiUrl = `https://${paHost}/paapi5/getitems`;
+  // Creators API endpoint (POST, coral-based, Bearer auth)
+  const apiUrl = 'https://creatorsapi.amazon/getItems';
+
+  console.log('[product] url:', apiUrl);
+  console.log('[product] body:', JSON.stringify(requestBody));
 
   const res = await fetch(apiUrl, {
     method: 'POST',
@@ -97,13 +96,12 @@ async function creatorsGetItem(
       'Content-Type': 'application/json; charset=utf-8',
       'x-amz-target': 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems',
       'Content-Encoding': 'amz-1.0',
-      'x-marketplace': marketplaceDomain,
       'Authorization': authHeader,
     },
     body: JSON.stringify(requestBody),
   });
 
-  console.log('[product] PA-API url:', apiUrl);
+  console.log('[product] Creators API url:', apiUrl);
 
   const responseText = await res.text();
   console.log('[product] Creators API status:', res.status);
