@@ -48,7 +48,7 @@ async function getToken(credentialId: string, credentialSecret: string, version:
         grant_type: 'client_credentials',
         client_id: credentialId,
         client_secret: credentialSecret,
-        scope: 'creatorsapi/default',
+        scope: 'creatorsapi::default',
       }),
     });
   }
@@ -74,7 +74,7 @@ async function creatorsGetItem(
   const requestBody = {
     itemIds: [asin],
     partnerTag: partnerTag,
-    partnerType: 'Associates',
+    partnerType: 'associates',
     resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
   };
 
