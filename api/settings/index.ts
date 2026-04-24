@@ -7,7 +7,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   if (req.method === 'GET') {
     const rows = await sql`SELECT data FROM settings WHERE id = 1`;
-    res.json(rows[0]?.data ?? {});
+    const data = rows[0]?.data ?? {};
+    const size = JSON.stringify(data).length;
+    console.log('[settings] data size bytes:', size);
+    if (size > 200_000) {
+      console.warn('[settings] data troppo grande — reset a {}');
+      await sql`UPDATE settings SET data = '{}'::jsonb, updated_at = now() WHERE id = 1`;
+      res.json({});
+      return;
+    }
+    res.json(data);
     return;
   }
 

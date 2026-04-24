@@ -96,6 +96,7 @@ async function creatorsGetItem(
       'Content-Type': 'application/json; charset=utf-8',
       'x-amz-target': 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems',
       'Content-Encoding': 'amz-1.0',
+      'x-marketplace': marketplaceDomain,
       'Authorization': authHeader,
     },
     body: JSON.stringify(requestBody),
