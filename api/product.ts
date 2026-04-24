@@ -48,7 +48,7 @@ async function getToken(credentialId: string, credentialSecret: string, version:
         grant_type: 'client_credentials',
         client_id: credentialId,
         client_secret: credentialSecret,
-        scope: 'creatorsapi::default',
+        scope: 'creatorsapi/default',
       }),
     });
   }
@@ -92,9 +92,11 @@ async function creatorsGetItem(
 
   const responseText = await res.text();
   // Unica riga finale — visibile senza espandere i log Vercel
+  const isCognitoVer = version.startsWith('2');
   console.log('[product] SUMMARY', JSON.stringify({
     asin, tag: partnerTag.slice(0, 30), ver: version, mkt: marketplaceDomain,
-    tok: token.slice(0, 25), status: res.status, resp: responseText.slice(0, 200),
+    scope: isCognitoVer ? 'creatorsapi/default' : 'creatorsapi/default',
+    tok: token.slice(0, 30), status: res.status, resp: responseText.slice(0, 200),
   }));
 
   if (!res.ok) {
