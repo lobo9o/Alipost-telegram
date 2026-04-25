@@ -514,13 +514,33 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 // QUEUE PAGE
 // ============================================================
 export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
-  const { queue, setQueue } = useApp();
+  const { queue, setQueue, layouts, setPublished } = useApp();
   const [multiSelect, setMultiSelect] = useState(false);
+  const [publishErr, setPublishErr] = useState<{ id: string; msg: string } | null>(null);
   const selCount = queue.filter(x => x.sel).length;
 
   const toggle = (id: string) => setQueue(q => q.map(x => x.id === id ? { ...x, sel: !x.sel } : x));
   const delSelected = () => setQueue(q => q.filter(x => !x.sel));
-  const publish = (id: string) => setQueue(q => q.map(x => x.id === id ? { ...x, status: 'published' } : x));
+  const publish = async (id: string) => {
+    const item = queue.find(x => x.id === id);
+    if (!item) return;
+    const post = item.posts[0];
+    if (!post) return;
+    const layout = layouts.find(l => l.id === post.layoutId);
+    setPublishErr(null);
+    setQueue(q => q.map(x => x.id === id ? { ...x, status: 'scheduled' } : x));
+    try {
+      await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto });
+      setQueue(q => q.map(x => x.id === id ? { ...x, status: 'published' } : x));
+      autopostApi.update(id, { status: 'published' }).catch(() => {});
+      setPublished(prev => [...prev, { id: post.id, emoji: post.emoji, title: post.title, price: post.discountedPrice.toFixed(2), platform: post.platform, ts: 'ora' }]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Errore pubblicazione';
+      setQueue(q => q.map(x => x.id === id ? { ...x, status: 'error' } : x));
+      autopostApi.update(id, { status: 'error' }).catch(() => {});
+      setPublishErr({ id, msg });
+    }
+  };
   const del = (id: string) => setQueue(q => q.filter(x => x.id !== id));
   const move = (id: string, dir: 'up' | 'down') => setQueue(q => {
     const a = [...q]; const i = a.findIndex(x => x.id === id);
@@ -548,6 +568,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           <button className="btn bre bsm" onClick={delSelected}>🗑️ Elimina</button>
         </div>
       )}
+
+      {publishErr && <ErrorBanner>{publishErr.msg}</ErrorBanner>}
 
       {!queue.length ? (
         <EmptyState icon="🗓️" text="Nessun post in coda." action={<button className="btn bp" onClick={() => nav('newpost')}>+ Nuovo post</button>} />
