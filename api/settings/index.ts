@@ -8,6 +8,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!userId) return;
 
   if (req.method === 'GET') {
+    const allRows = await sql`SELECT id, user_id, octet_length(data::text) AS size FROM settings ORDER BY id`;
+    console.log('[settings] ALL rows in table:', JSON.stringify(allRows));
     const rows = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
     const data = rows[0]?.data ?? {};
     const size = JSON.stringify(data).length;
@@ -26,17 +28,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const data = req.body;
   console.log('[settings] BODY keys:', data ? Object.keys(data) : 'null/undefined');
   console.log('[settings] BODY channels raw:', JSON.stringify(data?.channels));
-  console.log('[settings] BODY amazon.affiliateTag:', data?.amazon?.affiliateTag);
   const channels = Array.isArray(data?.channels) ? data.channels.filter((c: string) => typeof c === 'string' && c.trim()) : [];
   const cleaned = { ...data, channels };
-  const json = JSON.stringify(cleaned);
-  console.log('[settings] SAVE userId:', userId, 'channels:', channels, 'size:', json.length);
-  const existing = await sql`SELECT id FROM settings WHERE user_id = ${userId}`;
+  console.log('[settings] SAVE userId:', userId, 'channels:', channels, 'size:', JSON.stringify(cleaned).length);
+  const existing = await sql`SELECT id, user_id FROM settings WHERE user_id = ${userId}`;
+  console.log('[settings] existing rows:', existing.length, existing.map((r: any) => r.id + '/' + r.user_id));
   if (existing.length > 0) {
-    const result = await sql`UPDATE settings SET data = ${json}::jsonb, updated_at = now() WHERE user_id = ${userId} RETURNING id`;
-    console.log('[settings] UPDATE rows affected:', result.length);
+    const result = await sql`UPDATE settings SET data = ${sql.json(cleaned)}, updated_at = now() WHERE user_id = ${userId} RETURNING id, data->'channels' AS channels`;
+    console.log('[settings] UPDATE ok id:', result[0]?.id, 'stored channels:', JSON.stringify(result[0]?.channels));
   } else {
-    await sql`INSERT INTO settings (user_id, data, updated_at) VALUES (${userId}, ${json}::jsonb, now())`;
+    await sql`INSERT INTO settings (user_id, data, updated_at) VALUES (${userId}, ${sql.json(cleaned)}, now())`;
     console.log('[settings] INSERT done');
   }
   res.json({ ok: true });
