@@ -75,7 +75,7 @@ async function creatorsGetItem(
     itemIds: [asin],
     partnerTag: partnerTag,
     partnerType: 'associates',
-    resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price', 'offersV2.listings.savingBasis'],
+    resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
   };
 
   const apiUrl = 'https://creatorsapi.amazon/catalog/v1/getItems';
