@@ -66,13 +66,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!post) { res.status(400).json({ error: 'post required' }); return; }
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) { res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN non configurato su Vercel' }); return; }
+  console.log('[publish] start userId:', userId, 'botToken:', botToken ? `set(${botToken.length}chars)` : 'MISSING');
+  if (!botToken) { res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN non configurato su Vercel → vai in Vercel Settings → Environment Variables' }); return; }
 
   const [settingsRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
   const rawData = settingsRow?.data ?? {};
   const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
 
   const channels: string[] = Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
+  console.log('[publish] channels from settings:', channels);
   if (!channels.length) {
     res.status(400).json({ error: 'Nessun canale Telegram configurato. Vai in Impostazioni → Canali Telegram.' });
     return;
