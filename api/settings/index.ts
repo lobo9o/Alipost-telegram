@@ -25,9 +25,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // POST — replace settings
   const data = req.body;
   const json = JSON.stringify(data);
-  await sql`
-    INSERT INTO settings (user_id, data, updated_at) VALUES (${userId}, ${json}::jsonb, now())
-    ON CONFLICT (user_id) DO UPDATE SET data = ${json}::jsonb, updated_at = now()
-  `;
+  const existing = await sql`SELECT id FROM settings WHERE user_id = ${userId}`;
+  if (existing.length > 0) {
+    await sql`UPDATE settings SET data = ${json}::jsonb, updated_at = now() WHERE user_id = ${userId}`;
+  } else {
+    await sql`INSERT INTO settings (user_id, data, updated_at) VALUES (${userId}, ${json}::jsonb, now())`;
+  }
   res.json({ ok: true });
 });
