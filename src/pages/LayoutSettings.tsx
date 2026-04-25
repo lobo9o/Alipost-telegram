@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, LayoutType, Tag, Template, TemplateType } from '../types';
-import { PageHeader, SwitchTabs, InfoBanner, ToggleRow } from '../components/Shared';
+import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId } from '../data/mock';
 import { tagsApi, layoutsApi, templatesApi, settingsApi } from '../lib/api';
 
@@ -357,17 +357,19 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const { settings, setSettings } = useApp();
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
+  const [saveErr, setSaveErr] = useState('');
 
   React.useEffect(() => { setS(settings); }, [settings]);
 
   const save = async () => {
+    setSaveErr('');
     try {
       await settingsApi.save(s);
       setSettings(s);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch {
-      // errore silenzioso — il backend logga
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : 'Errore durante il salvataggio');
     }
   };
 
@@ -420,6 +422,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
             <span style={{ fontSize: 10, background: '#2a1800', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SOLO BACKEND</span>
           </label>
           <input className="inp" type="password" value={s.amazon.credentialId} onChange={e => setAmazon('credentialId', e.target.value)} placeholder="amzn1.application-oa2-client...." />
+          {s.amazon.credentialId && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialId.length} caratteri)</div>}
         </div>
         <div className="fld">
           <label className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -427,6 +430,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
             <span style={{ fontSize: 10, background: '#2a1800', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SOLO BACKEND</span>
           </label>
           <input className="inp" type="password" value={s.amazon.credentialSecret} onChange={e => setAmazon('credentialSecret', e.target.value)} placeholder="amzn1.oa2-cs.v1...." />
+          {s.amazon.credentialSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialSecret.length} caratteri)</div>}
         </div>
         <InfoBanner>🔒 Credential ID e Secret non vengono mai esposti nel frontend. Creali su Associates → Strumenti → CreatorsAPI.</InfoBanner>
       </div>
@@ -467,17 +471,22 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           2. Inserisci lo <b>username del canale</b> (es. <b>@miocanale</b>) o l'<b>ID numerico</b> (es. <b>-1001234567890</b>).<br />
           3. Il primo canale della lista è quello usato per la pubblicazione.
         </InfoBanner>
+        {settings.channels.filter(Boolean).length > 0 && (
+          <div style={{ fontSize: 11, color: '#4ade80', marginBottom: 8, padding: '6px 10px', background: '#0a2a0a', borderRadius: 6 }}>
+            ✓ Salvato in DB: {settings.channels.filter(Boolean).join(', ')}
+          </div>
+        )}
         {s.channels.map((ch, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
             <input className="inp" value={ch}
               placeholder="@username oppure -1001234567890"
-              onChange={e => setS({ ...s, channels: s.channels.map((c, j) => j === i ? e.target.value : c) })} />
-            <button className="btn bre bic" onClick={() => setS({ ...s, channels: s.channels.filter((_, j) => j !== i) })}>×</button>
+              onChange={e => { const v = e.target.value; setS(prev => ({ ...prev, channels: prev.channels.map((c, j) => j === i ? v : c) })); }} />
+            <button className="btn bre bic" onClick={() => setS(prev => ({ ...prev, channels: prev.channels.filter((_, j) => j !== i) }))}>×</button>
           </div>
         ))}
         <button className="btn bp bsm" style={{ marginTop: 4, width: '100%' }}
-          onClick={() => setS({ ...s, channels: [...s.channels, ''] })}>+ Aggiungi canale</button>
+          onClick={() => setS(prev => ({ ...prev, channels: [...prev.channels, ''] }))}>+ Aggiungi canale</button>
       </div>
 
       {/* ── AutoPost ── */}
@@ -493,6 +502,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       <div className="fld">
         <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>
         {saved && <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a2a0a', border: '1px solid #1a5c1a', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>✓ Impostazioni salvate con successo</div>}
+        {saveErr && <ErrorBanner>{saveErr}</ErrorBanner>}
       </div>
     </div>
   );

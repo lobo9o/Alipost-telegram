@@ -24,7 +24,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   // POST — replace settings
   const data = req.body;
-  const json = JSON.stringify(data);
+  const channels = Array.isArray(data?.channels) ? data.channels.filter((c: string) => typeof c === 'string' && c.trim()) : [];
+  const cleaned = { ...data, channels };
+  const json = JSON.stringify(cleaned);
+  console.log('[settings] SAVE userId:', userId, 'channels:', channels, 'size:', json.length);
   const existing = await sql`SELECT id FROM settings WHERE user_id = ${userId}`;
   if (existing.length > 0) {
     await sql`UPDATE settings SET data = ${json}::jsonb, updated_at = now() WHERE user_id = ${userId}`;
