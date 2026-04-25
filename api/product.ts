@@ -75,7 +75,7 @@ async function creatorsGetItem(
     itemIds: [asin],
     partnerTag: partnerTag,
     partnerType: 'associates',
-    resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
+    resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price', 'offersV2.listings.savingBasis'],
   };
 
   const apiUrl = 'https://creatorsapi.amazon/catalog/v1/getItems';
@@ -163,13 +163,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     const titleObj   = pick(pick(pick(item, 'itemInfo', 'ItemInfo'), 'title', 'Title'), 'displayValue', 'DisplayValue');
     const imageUrl   = pick(pick(pick(pick(item, 'images', 'Images'), 'primary', 'Primary'), 'large', 'Large'), 'url', 'URL');
-    // Creators API usa offersV2 (non offers/Offers come PA-API)
-    const listings   = (pick(pick(item, 'offersV2', 'offers', 'Offers'), 'listings', 'Listings') as any[])?.[0];
-    const priceAmt   = pick(pick(listings, 'price', 'Price'), 'amount', 'Amount') as number ?? 0;
-    const originalPrice   = priceAmt;
-    const discountedPrice = priceAmt;
-    const discountPercent = originalPrice > discountedPrice
-      ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
+    const listings       = (pick(pick(item, 'offersV2'), 'listings') as any[])?.[0];
+    const priceObj       = pick(listings, 'price') as any;
+    const discountedPrice = (pick(pick(priceObj, 'money'), 'amount') as number) ?? 0;
+    const savingBasisAmt  = (pick(pick(pick(priceObj, 'savingBasis'), 'money'), 'amount') as number) ?? 0;
+    const savingsPct      = (pick(pick(priceObj, 'savings'), 'percentage') as number) ?? 0;
+    const originalPrice   = savingBasisAmt > 0 ? savingBasisAmt : discountedPrice;
+    const discountPercent = savingsPct > 0
+      ? Math.round(savingsPct)
+      : originalPrice > discountedPrice
+        ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
 
     res.json({
       asin: resolvedAsin,
