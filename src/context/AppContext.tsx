@@ -52,6 +52,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [layouts, setLayouts] = useState<TextLayout[]>(INITIAL_LAYOUTS);
   const [templates, setTemplates] = useState<Template[]>(INITIAL_TEMPLATES);
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
+  const [loaded, setLoaded] = useState(IS_DEV);
 
   useEffect(() => {
     if (IS_DEV) return;
@@ -69,6 +70,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (l.length > 0) setLayouts(l);
       if (tmpl.length > 0) setTemplates(tmpl);
       setSettings(mergeSettings(s));
+      setLoaded(true);
     });
   }, []);
 
@@ -77,6 +79,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sched: queue.filter(x => x.status === 'scheduled').length,
     pub: published.length,
   };
+
+  if (!loaded) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', height: '100vh', gap: 16,
+        background: 'var(--bg)', color: 'var(--t1)',
+      }}>
+        <div style={{ fontSize: 40 }}>⚙️</div>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>PostDealBot</div>
+        <div style={{ fontSize: 13, color: 'var(--t2)' }}>Caricamento...</div>
+      </div>
+    );
+  }
 
   return (
     <AppCtx.Provider value={{
