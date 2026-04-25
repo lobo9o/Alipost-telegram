@@ -79,7 +79,11 @@ async function ensureMigrated() {
 
   // Migrazioni per tabelle già esistenti (aggiunta colonna user_id)
   await sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS user_id TEXT`;
-  await sql`CREATE UNIQUE INDEX IF NOT EXISTS settings_user_id_idx ON settings(user_id) WHERE user_id IS NOT NULL`;
+  try {
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS settings_user_id_idx ON settings(user_id) WHERE user_id IS NOT NULL`;
+  } catch (e: any) {
+    if (e?.code !== '23505' && e?.code !== '42P07') throw e;
+  }
   await sql`ALTER TABLE tags ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE layouts ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
