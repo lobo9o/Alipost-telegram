@@ -454,14 +454,29 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
 
       {/* ── Telegram ── */}
       <div className="stit">CANALI TELEGRAM</div>
-      <div className="card">
+      <div className="api-card">
+        <div className="api-top">
+          <div className="api-ico" style={{ background: '#0a1a2a' }}>✈️</div>
+          <div className="api-name">Canali di pubblicazione</div>
+          <div className={`api-st ${s.channels.filter(Boolean).length > 0 ? 'api-ok' : 'api-no'}`}>
+            {s.channels.filter(Boolean).length > 0 ? `${s.channels.filter(Boolean).length} canale` : 'Nessuno'}
+          </div>
+        </div>
+        <InfoBanner>
+          1. Aggiungi il bot come <b>amministratore</b> del tuo canale Telegram.<br />
+          2. Inserisci lo <b>username del canale</b> (es. <b>@miocanale</b>) o l'<b>ID numerico</b> (es. <b>-1001234567890</b>).<br />
+          3. Il primo canale della lista è quello usato per la pubblicazione.
+        </InfoBanner>
         {s.channels.map((ch, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: i < s.channels.length - 1 ? 8 : 0 }}>
-            <input className="inp" value={ch} onChange={e => setS({ ...s, channels: s.channels.map((c, j) => j === i ? e.target.value : c) })} />
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
+            <input className="inp" value={ch}
+              placeholder="@username oppure -1001234567890"
+              onChange={e => setS({ ...s, channels: s.channels.map((c, j) => j === i ? e.target.value : c) })} />
             <button className="btn bre bic" onClick={() => setS({ ...s, channels: s.channels.filter((_, j) => j !== i) })}>×</button>
           </div>
         ))}
-        <button className="btn bp bsm" style={{ marginTop: 8, width: '100%' }}
+        <button className="btn bp bsm" style={{ marginTop: 4, width: '100%' }}
           onClick={() => setS({ ...s, channels: [...s.channels, ''] })}>+ Aggiungi canale</button>
       </div>
 

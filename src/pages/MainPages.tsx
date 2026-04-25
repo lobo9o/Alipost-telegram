@@ -347,10 +347,22 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
     showFeedback('📬 Post aggiunto alla coda');
   };
 
-  const publishPost = (post: CreatedPost) => {
-    setPublished(prev => [...prev, { id: genId(), emoji: post.emoji, title: post.title, price: post.discountedPrice.toFixed(2), platform: post.platform, ts: 'ora' }]);
-    deletePost(post.id);
-    nav('published');
+  const publishPost = async (post: CreatedPost) => {
+    const currentLayout = layouts.find(l => l.id === post.layoutId);
+    setErr('');
+    setPhase('loading');
+    try {
+      await postsApi.publish(post.id, {
+        post,
+        layoutContenuto: currentLayout?.contenuto,
+      });
+      setPublished(prev => [...prev, { id: genId(), emoji: post.emoji, title: post.title, price: post.discountedPrice.toFixed(2), platform: post.platform, ts: 'ora' }]);
+      deletePost(post.id);
+      nav('published');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Errore durante la pubblicazione');
+      setPhase('posts');
+    }
   };
 
   return (
