@@ -19,7 +19,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const [row] = hasPosts
     ? await sql`
         UPDATE autopost_queue
-        SET posts = ${JSON.stringify(body.posts)}, status = ${body.status}, scheduled = ${body.scheduled ?? null}
+        SET posts = ${sql.json(body.posts)}, status = ${body.status}, scheduled = ${body.scheduled ?? null}
         WHERE id = ${id} AND user_id = ${userId}
         RETURNING id, posts, status, scheduled, created_at AS "createdAt"
       `
@@ -30,5 +30,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         RETURNING id, posts, status, scheduled, created_at AS "createdAt"
       `;
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
-  res.json(row);
+  const r = row as any;
+  res.json({ ...r, posts: typeof r.posts === 'string' ? JSON.parse(r.posts) : r.posts });
 });
