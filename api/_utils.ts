@@ -140,6 +140,7 @@ export function requireUserId(req: VercelRequest, res: VercelResponse): string |
 
 export function withErrorHandler(handler: Handler): Handler {
   return async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     try {
       await ensureMigrated();
       await handler(req, res);

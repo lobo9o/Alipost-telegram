@@ -11,7 +11,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const rows = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
     const data = rows[0]?.data ?? {};
     const size = JSON.stringify(data).length;
-    console.log('[settings] data size bytes:', size);
+    console.log('[settings] userId:', userId, 'rows:', rows.length, 'size:', size);
     if (size > 10_000) {
       console.warn('[settings] data troppo grande — reset a {}');
       await sql`UPDATE settings SET data = '{}'::jsonb, updated_at = now() WHERE user_id = ${userId}`;
