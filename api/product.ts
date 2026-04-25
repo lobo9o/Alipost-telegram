@@ -78,25 +78,22 @@ async function creatorsGetItem(
     resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
   };
 
-  const apiUrl = 'https://creatorsapi.amazon/getItems';
+  // Marketplace come query parameter (SDK lo passa come argomento separato, non nel body né header)
+  const apiUrl = `https://creatorsapi.amazon/getItems?marketplace=${encodeURIComponent(marketplaceDomain)}`;
 
   const res = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'x-marketplace': marketplaceDomain,
       'Authorization': authHeader,
     },
     body: JSON.stringify(requestBody),
   });
 
   const responseText = await res.text();
-  // Unica riga finale — visibile senza espandere i log Vercel
-  const isCognitoVer = version.startsWith('2');
   console.log('[product] SUMMARY', JSON.stringify({
     asin, tag: partnerTag.slice(0, 30), ver: version, mkt: marketplaceDomain,
-    scope: isCognitoVer ? 'creatorsapi/default' : 'creatorsapi/default',
-    tok: token.slice(0, 30), status: res.status, resp: responseText.slice(0, 200),
+    tok: token.slice(0, 20), status: res.status, resp: responseText.slice(0, 200),
   }));
 
   if (!res.ok) {
@@ -137,7 +134,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const [settingsRow] = await sql`SELECT data FROM settings WHERE id = 1`;
   const rawData = settingsRow?.data ?? {};
   const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
-  console.log('[product] cfg.amazon:', JSON.stringify(cfg.amazon));
+  console.log('[product] cfg.amazon version:', cfg.amazon?.version, 'marketplace:', cfg.amazon?.marketplace);
 
   if (platform === 'amazon') {
     const resolvedAsin = (asin ?? extractAsin(url) ?? '').toUpperCase();
