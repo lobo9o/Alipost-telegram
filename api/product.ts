@@ -78,14 +78,15 @@ async function creatorsGetItem(
     resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
   };
 
-  // Marketplace come query parameter (SDK lo passa come argomento separato, non nel body né header)
-  const apiUrl = `https://creatorsapi.amazon/getItems?marketplace=${encodeURIComponent(marketplaceDomain)}`;
+  const apiUrl = 'https://creatorsapi.amazon/catalog/v1/getItems';
 
   const res = await fetch(apiUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Type': 'application/json',
       'Authorization': authHeader,
+      'x-marketplace': marketplaceDomain,
+      'User-Agent': 'creatorsapi-nodejs-sdk/1.2.0',
     },
     body: JSON.stringify(requestBody),
   });
