@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { withErrorHandler, allowMethods } from './_utils.js';
+import { withErrorHandler, allowMethods, requireUserId } from './_utils.js';
 import sql from '../lib/db.js';
 
 // Token endpoints per versione credenziale
@@ -128,11 +128,13 @@ function pick(obj: unknown, ...keys: string[]): unknown {
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['POST'], req, res)) return;
+  const userId = requireUserId(req, res);
+  if (!userId) return;
 
   const { platform, url, asin } = req.body ?? {};
   if (!platform || !url) { res.status(400).json({ error: 'platform e url sono richiesti' }); return; }
 
-  const [settingsRow] = await sql`SELECT data FROM settings WHERE id = 1`;
+  const [settingsRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
   const rawData = settingsRow?.data ?? {};
   const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
   console.log('[product] cfg.amazon version:', cfg.amazon?.version, 'marketplace:', cfg.amazon?.marketplace);

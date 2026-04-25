@@ -2,10 +2,20 @@ import { AppSettings, Tag, TextLayout, Template, CreatedPost, QueueItem } from '
 
 const BASE = '';
 
+function getTgInitData(): string {
+  if (typeof window === 'undefined') return '';
+  return (window as any).Telegram?.WebApp?.initData ?? '';
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (body) headers['Content-Type'] = 'application/json';
+  const initData = getTgInitData();
+  if (initData) headers['x-tg-init-data'] = initData;
+
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {

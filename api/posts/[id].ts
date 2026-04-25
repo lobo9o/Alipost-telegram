@@ -1,13 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
-import { withErrorHandler, allowMethods } from '../_utils.js';
+import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['PUT', 'DELETE'], req, res)) return;
+  const userId = requireUserId(req, res);
+  if (!userId) return;
   const { id } = req.query as { id: string };
 
   if (req.method === 'DELETE') {
-    await sql`DELETE FROM posts WHERE id = ${id}`;
+    await sql`DELETE FROM posts WHERE id = ${id} AND user_id = ${userId}`;
     res.json({ ok: true });
     return;
   }
@@ -20,7 +22,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       discount_percent = ${p.discountPercent}, custom_text = ${p.customText},
       is_historical_low = ${p.isHistoricalLow}, template_id = ${p.templateId},
       layout_id = ${p.layoutId}, emoji = ${p.emoji}
-    WHERE id = ${id}
+    WHERE id = ${id} AND user_id = ${userId}
     RETURNING
       id, platform, source_url AS "sourceUrl", product_id AS "productId",
       title, image, original_price::float AS "originalPrice",
