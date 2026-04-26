@@ -72,6 +72,7 @@ export const autopostApi = {
   create: (item: QueueItem) => req<QueueItem>('POST', '/api/autopost', item),
   update: (id: string, item: Partial<QueueItem>) => req<QueueItem>('PUT', `/api/autopost/${id}`, item),
   delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/autopost/${id}`),
+  deleteAll: () => req<{ ok: boolean }>('DELETE', '/api/autopost'),
 };
 
 // ── Product fetch (via server — keeps API secrets safe) ───────────────────────

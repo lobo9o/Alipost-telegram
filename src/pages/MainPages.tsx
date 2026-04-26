@@ -546,7 +546,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       const price = Number(post.discountedPrice).toFixed(2);
       setPublished(prev => [...prev, { id: post.id, emoji: post.emoji, title: post.title, price, platform: post.platform, ts: 'ora' }]);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e) || 'Errore sconosciuto';
+      let msg = 'Errore sconosciuto';
+      if (e instanceof Error) {
+        msg = e.message || `Error (no message) — name: ${e.name}`;
+      } else if (e !== null && e !== undefined) {
+        msg = String(e);
+      }
       window.alert('❌ Errore publish:\n' + msg);
       setQueue(q => q.map(x => x.id === id ? { ...x, status: 'error' } : x));
       autopostApi.update(id, { status: 'error' }).catch(() => {});
@@ -566,8 +571,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 
   const firstPost = (item: QueueItem) => item.posts[0];
 
-  const clearAll = () => {
-    queue.forEach(x => autopostApi.delete(x.id).catch(() => {}));
+  const clearAll = async () => {
+    try {
+      await autopostApi.deleteAll();
+    } catch (e) {
+      window.alert('Errore svuota coda: ' + (e instanceof Error ? e.message : String(e)));
+    }
     setQueue([]);
   };
 

@@ -3,9 +3,17 @@ import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
-  if (!allowMethods(['GET', 'POST'], req, res)) return;
+  if (!allowMethods(['GET', 'POST', 'DELETE'], req, res)) return;
   const userId = requireUserId(req, res);
   if (!userId) return;
+
+  // DELETE all — clear entire queue for this user
+  if (req.method === 'DELETE') {
+    const result = await sql`DELETE FROM autopost_queue WHERE user_id = ${userId}`;
+    console.log('[autopost] clearAll userId:', userId, 'deleted:', (result as any).count ?? '?');
+    res.json({ ok: true });
+    return;
+  }
 
   if (req.method === 'GET') {
     const rows = await sql`
