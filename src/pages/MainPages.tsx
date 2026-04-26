@@ -543,9 +543,11 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto });
       setQueue(q => q.filter(x => x.id !== id));
       autopostApi.delete(id).catch(() => {});
-      setPublished(prev => [...prev, { id: post.id, emoji: post.emoji, title: post.title, price: post.discountedPrice.toFixed(2), platform: post.platform, ts: 'ora' }]);
+      const price = Number(post.discountedPrice).toFixed(2);
+      setPublished(prev => [...prev, { id: post.id, emoji: post.emoji, title: post.title, price, platform: post.platform, ts: 'ora' }]);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Errore pubblicazione';
+      const msg = e instanceof Error ? e.message : String(e) || 'Errore sconosciuto';
+      window.alert('❌ Errore publish:\n' + msg);
       setQueue(q => q.map(x => x.id === id ? { ...x, status: 'error' } : x));
       autopostApi.update(id, { status: 'error' }).catch(() => {});
       setPublishErr({ id, msg });
@@ -564,14 +566,26 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 
   const firstPost = (item: QueueItem) => item.posts[0];
 
+  const clearAll = () => {
+    queue.forEach(x => autopostApi.delete(x.id).catch(() => {}));
+    setQueue([]);
+  };
+
   return (
     <div className="pg">
       <PageHeader title="Coda AutoPost" onBack={() => nav('dash')} badge={queue.length}
         right={
-          <button className="btn bgh bsm" onClick={() => setMultiSelect(!multiSelect)}
-            style={{ color: multiSelect ? 'var(--a3)' : 'var(--t2)' }}>
-            {multiSelect ? '✓ Sel.' : '☐ Multi'}
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {queue.length > 0 && (
+              <button className="btn bre bsm" onClick={() => { if (window.confirm('Svuotare tutta la coda?')) clearAll(); }}>
+                🗑️ Svuota
+              </button>
+            )}
+            <button className="btn bgh bsm" onClick={() => setMultiSelect(!multiSelect)}
+              style={{ color: multiSelect ? 'var(--a3)' : 'var(--t2)' }}>
+              {multiSelect ? '✓ Sel.' : '☐ Multi'}
+            </button>
+          </div>
         }
       />
 
