@@ -275,10 +275,7 @@ interface LinkItem { id: string; url: string; platform: Platform; }
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const { createdPosts, setCreatedPosts, setQueue, setPublished, layouts, templates } = useApp();
 
-  // Start in 'posts' phase if there are pending posts
-  const [phase, setPhase] = useState<'input' | 'loading' | 'posts'>(() =>
-    createdPosts.length > 0 ? 'posts' : 'input'
-  );
+  const [phase, setPhase] = useState<'input' | 'loading' | 'posts'>('input');
   const [mode, setMode] = useState<'single' | 'multi'>('single');
   const [linkInput, setLinkInput] = useState('');
   const [links, setLinks] = useState<LinkItem[]>([]);
@@ -520,19 +517,32 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const selCount = queue.filter(x => x.sel).length;
 
   const toggle = (id: string) => setQueue(q => q.map(x => x.id === id ? { ...x, sel: !x.sel } : x));
-  const delSelected = () => setQueue(q => q.filter(x => !x.sel));
+  const delSelected = () => {
+    const toDelete = queue.filter(x => x.sel).map(x => x.id);
+    toDelete.forEach(id => autopostApi.delete(id).catch(() => {}));
+    setQueue(q => q.filter(x => !x.sel));
+  };
   const publish = async (id: string) => {
     const item = queue.find(x => x.id === id);
-    if (!item) return;
-    const post = item.posts[0];
-    if (!post) return;
+    if (!item) { setPublishErr({ id, msg: 'Elemento coda non trovato' }); return; }
+    const rawPost = item.posts[0];
+    if (!rawPost) { setPublishErr({ id, msg: 'Nessun post nella coda (array vuoto)' }); return; }
+    if (typeof rawPost !== 'object' || Array.isArray(rawPost)) {
+      setPublishErr({ id, msg: `Post non valido — tipo: ${typeof rawPost}, valore: ${JSON.stringify(rawPost).slice(0, 60)}` });
+      return;
+    }
+    const post = rawPost as CreatedPost;
+    if (!post.id) {
+      setPublishErr({ id, msg: `Post senza ID — dati: ${JSON.stringify(post).slice(0, 80)}` });
+      return;
+    }
     const layout = layouts.find(l => l.id === post.layoutId);
     setPublishErr(null);
     setQueue(q => q.map(x => x.id === id ? { ...x, status: 'scheduled' } : x));
     try {
       await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto });
-      setQueue(q => q.map(x => x.id === id ? { ...x, status: 'published' } : x));
-      autopostApi.update(id, { status: 'published' }).catch(() => {});
+      setQueue(q => q.filter(x => x.id !== id));
+      autopostApi.delete(id).catch(() => {});
       setPublished(prev => [...prev, { id: post.id, emoji: post.emoji, title: post.title, price: post.discountedPrice.toFixed(2), platform: post.platform, ts: 'ora' }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Errore pubblicazione';
@@ -541,7 +551,10 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       setPublishErr({ id, msg });
     }
   };
-  const del = (id: string) => setQueue(q => q.filter(x => x.id !== id));
+  const del = (id: string) => {
+    autopostApi.delete(id).catch(() => {});
+    setQueue(q => q.filter(x => x.id !== id));
+  };
   const move = (id: string, dir: 'up' | 'down') => setQueue(q => {
     const a = [...q]; const i = a.findIndex(x => x.id === id);
     if (dir === 'up' && i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]];

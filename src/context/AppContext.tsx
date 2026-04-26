@@ -3,7 +3,7 @@ import { AppContextType, QueueItem, PublishedPost, TextLayout, Template, AppSett
 import {
   INITIAL_TAGS, INITIAL_LAYOUTS, INITIAL_TEMPLATES, INITIAL_SETTINGS,
 } from '../data/mock';
-import { tagsApi, layoutsApi, templatesApi, postsApi, settingsApi, autopostApi } from '../lib/api';
+import { tagsApi, layoutsApi, templatesApi, settingsApi, autopostApi } from '../lib/api';
 
 const AppCtx = createContext<AppContextType | null>(null);
 
@@ -57,15 +57,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (IS_DEV) return;
     Promise.all([
-      tryFetch(postsApi.list, []),
       tryFetch(autopostApi.list, []),
       tryFetch(tagsApi.list, INITIAL_TAGS),
       tryFetch(layoutsApi.list, INITIAL_LAYOUTS),
       tryFetch(templatesApi.list, INITIAL_TEMPLATES),
       tryFetch(settingsApi.get, {} as AppSettings),
-    ]).then(([posts, q, t, l, tmpl, s]) => {
-      if (posts.length > 0) setCreatedPosts(posts);
-      setQueue(q as QueueItem[]);
+    ]).then(([q, t, l, tmpl, s]) => {
+      // Only restore draft items — error/scheduled/published are stale and shouldn't reappear
+      setQueue((q as QueueItem[]).filter(x => x.status === 'draft'));
       if (t.length > 0) setTags(t);
       if (l.length > 0) setLayouts(l);
       if (tmpl.length > 0) setTemplates(tmpl);

@@ -113,7 +113,11 @@ export function InfoBanner({ children }: { children: React.ReactNode }) {
   return <div className="infob">{children}</div>;
 }
 export function ErrorBanner({ children }: { children: React.ReactNode }) {
-  return <div className="errb">⚠️ {children}</div>;
+  return (
+    <div className="errb" style={{ color: '#fff', background: '#7f1d1d', border: '1px solid #ef4444', borderRadius: 8, margin: '0 16px 12px', padding: '9px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+      ⚠️ {children}
+    </div>
+  );
 }
 
 // ── Telegram Preview ──────────────────────────────────────
