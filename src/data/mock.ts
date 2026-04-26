@@ -1,4 +1,4 @@
-import { AppSettings, Tag, TextLayout, Template, DEFAULT_PRODUCT_POS, DEFAULT_OVERLAY_POS, DEFAULT_BADGE_POS } from '../types';
+import { AppSettings, Tag, TextLayout, Template, makeDefaultTemplate } from '../types';
 
 export function genId(): string {
   return Math.random().toString(36).slice(2, 8);
@@ -29,11 +29,7 @@ export const INITIAL_LAYOUTS: TextLayout[] = [
   },
 ];
 
-const tplDefaults = { bgColor: '#ffffff', productPos: DEFAULT_PRODUCT_POS, overlayPos: DEFAULT_OVERLAY_POS, badgePos: DEFAULT_BADGE_POS };
-export const INITIAL_TEMPLATES: Template[] = [
-  { id: 'tpl1', nome: 'Standard', tipo: 'normal', overlay: null, badgeIcon: null, badgeEnabled: false, ...tplDefaults },
-  { id: 'tpl2', nome: 'Minimo Storico', tipo: 'historical_low', overlay: null, badgeIcon: null, badgeEnabled: true, ...tplDefaults },
-];
+export const INITIAL_TEMPLATES: Template[] = [makeDefaultTemplate('tpl1')];
 
 export const INITIAL_SETTINGS: AppSettings = {
   oraI: '08:00', oraF: '22:00', interv: 60, attivo: false,

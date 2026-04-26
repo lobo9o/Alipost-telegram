@@ -89,11 +89,7 @@ async function ensureMigrated() {
   await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
-  await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS badge_icon TEXT`;
-  await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS bg_color TEXT NOT NULL DEFAULT '#ffffff'`;
-  await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS product_pos JSONB NOT NULL DEFAULT '{"x":5,"y":5,"size":90}'`;
-  await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS overlay_pos JSONB NOT NULL DEFAULT '{"x":0,"y":0,"size":100}'`;
-  await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS badge_pos JSONB NOT NULL DEFAULT '{"x":3,"y":3,"size":25}'`;
+  await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS config JSONB`;
 
   _migrated = true;
   console.log('[DB] migrazione completata');

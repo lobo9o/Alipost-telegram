@@ -2,7 +2,6 @@ export type Platform = 'amazon' | 'aliexpress';
 export type PostType = 'single' | 'multi';
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'error';
 export type LayoutType = 'normal' | 'historical_low' | 'multi';
-export type TemplateType = 'normal' | 'historical_low';
 export type NavPage = 'dash' | 'search' | 'newpost' | 'queue' | 'published' | 'layout' | 'settings';
 
 export interface Tag {
@@ -45,28 +44,78 @@ export interface TextLayout {
   contenuto: string;
 }
 
+// ── Template elements ─────────────────────────────────────────
+
 export interface ElementLayout {
-  x: number;    // % from left (0–100)
-  y: number;    // % from top  (0–100)
-  size: number; // % of canvas width (1–100)
+  x: number;
+  y: number;
+  size: number;
 }
 
-export const DEFAULT_PRODUCT_POS: ElementLayout = { x: 5, y: 5, size: 90 };
-export const DEFAULT_OVERLAY_POS: ElementLayout = { x: 0, y: 0, size: 100 };
-export const DEFAULT_BADGE_POS:   ElementLayout = { x: 3, y: 3, size: 25 };
+export interface TextEl {
+  enabled: boolean;
+  x: number;
+  y: number;
+  fontSize: number;
+  fontFamily: string;
+  bold: boolean;
+  color: string;
+  strokeEnabled: boolean;
+  strokeColor: string;
+  strokeWidth: number;
+  strikethrough: boolean;
+  text: string;
+}
+
+export interface ImgEl {
+  enabled: boolean;
+  x: number;
+  y: number;
+  size: number;
+  src: string | null;
+}
 
 export interface Template {
   id: string;
-  nome: string;
-  tipo: TemplateType;
-  overlay: string | null;      // base64 data URL
-  badgeIcon: string | null;    // base64 data URL (icona minimo storico)
-  badgeEnabled: boolean;
-  bgColor: string;             // default '#ffffff'
-  productPos: ElementLayout;
-  overlayPos: ElementLayout;
-  badgePos: ElementLayout;
+  bgColor: string;
+  product: ElementLayout;
+  overlay: ImgEl;
+  badge: ImgEl;
+  prezzo: TextEl;
+  prezzoPrecedente: TextEl;
+  sconto: TextEl;
+  testoCustom: TextEl;
+  store: ImgEl;
 }
+
+// Helpers
+const defText = (o: Partial<TextEl> = {}): TextEl => ({
+  enabled: false, x: 5, y: 70, fontSize: 36,
+  fontFamily: 'Impact', bold: false,
+  color: '#ffffff', strokeEnabled: true, strokeColor: '#000000', strokeWidth: 3,
+  strikethrough: false, text: '',
+  ...o,
+});
+const defImg = (o: Partial<ImgEl> = {}): ImgEl => ({
+  enabled: false, x: 0, y: 0, size: 30, src: null, ...o,
+});
+
+export function makeDefaultTemplate(id = 'tpl1'): Template {
+  return {
+    id,
+    bgColor: '#ffffff',
+    product: { x: 5, y: 5, size: 90 },
+    overlay: defImg({ size: 100 }),
+    badge: defImg({ x: 3, y: 3, size: 22 }),
+    prezzo: defText({ enabled: true, x: 5, y: 73, fontSize: 40, color: '#22c55e' }),
+    prezzoPrecedente: defText({ enabled: true, x: 5, y: 82, fontSize: 26, color: '#9ca3af', strikethrough: true }),
+    sconto: defText({ enabled: true, x: 60, y: 73, fontSize: 36, color: '#ef4444' }),
+    testoCustom: defText({ enabled: false, x: 5, y: 90, fontSize: 22 }),
+    store: defImg({ enabled: true, x: 3, y: 3, size: 20 }),
+  };
+}
+
+// ── Other interfaces ──────────────────────────────────────────
 
 export interface QueueItem {
   id: string;
