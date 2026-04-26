@@ -62,7 +62,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // ── POST — publish to Telegram ───────────────────────────────
-  const { post, layoutContenuto } = req.body ?? {};
+  const { post, layoutContenuto, generatedImage } = req.body ?? {};
   if (!post) { res.status(400).json({ error: 'post required' }); return; }
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -97,32 +97,46 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     : undefined;
 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
-  const hasImage = post.image && post.image !== 'placeholder.jpg' && post.image.startsWith('http');
 
   let tgRes: Response;
-  if (hasImage) {
-    tgRes = await fetch(`${tgBase}/sendPhoto`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: channel,
-        photo: post.image,
-        caption: messageText.slice(0, 1024),
-        parse_mode: 'HTML',
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-      }),
-    });
+
+  if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {
+    // Send template-generated image as file upload
+    const base64 = generatedImage.replace(/^data:image\/\w+;base64,/, '');
+    const imgBuffer = Buffer.from(base64, 'base64');
+    const form = new FormData();
+    form.append('chat_id', channel);
+    form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'post.jpg');
+    form.append('caption', messageText.slice(0, 1024));
+    form.append('parse_mode', 'HTML');
+    if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
+    tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
   } else {
-    tgRes = await fetch(`${tgBase}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: channel,
-        text: messageText,
-        parse_mode: 'HTML',
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-      }),
-    });
+    const hasImage = post.image && post.image !== 'placeholder.jpg' && post.image.startsWith('http');
+    if (hasImage) {
+      tgRes = await fetch(`${tgBase}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: channel,
+          photo: post.image,
+          caption: messageText.slice(0, 1024),
+          parse_mode: 'HTML',
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        }),
+      });
+    } else {
+      tgRes = await fetch(`${tgBase}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: channel,
+          text: messageText,
+          parse_mode: 'HTML',
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        }),
+      });
+    }
   }
 
   const tgData = await tgRes.json() as { ok: boolean; description?: string };

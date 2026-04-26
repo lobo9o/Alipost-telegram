@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, TextLayout, LayoutType, Tag, Template, TemplateType } from '../types';
+import { NavPage, TextLayout, LayoutType, Tag, Template, TemplateType, ElementLayout, DEFAULT_PRODUCT_POS, DEFAULT_OVERLAY_POS, DEFAULT_BADGE_POS } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId } from '../data/mock';
 import { tagsApi, layoutsApi, templatesApi, settingsApi } from '../lib/api';
@@ -182,55 +182,53 @@ function TextLayoutSection() {
 }
 
 // ── Template Image Editor ─────────────────────────────────────
-const TPL_TYPE_LABEL: Record<TemplateType, string> = {
-  normal: 'Normale',
-  historical_low: 'Min. Storico',
-};
+const TPL_TYPE_LABEL: Record<TemplateType, string> = { normal: 'Normale', historical_low: 'Min. Storico' };
+
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+function PosSliders({ label, pos, onChange }: { label: string; pos: ElementLayout; onChange: (p: ElementLayout) => void }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div className="lbl" style={{ marginBottom: 6 }}>{label}</div>
+      {(['x', 'y', 'size'] as const).map(k => (
+        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 10, color: 'var(--t3)', width: 28, textAlign: 'right' }}>
+            {k === 'size' ? 'DIM' : k.toUpperCase()}
+          </span>
+          <input type="range" min={k === 'size' ? 5 : 0} max={k === 'size' ? 100 : 90} value={pos[k]}
+            style={{ flex: 1, accentColor: 'var(--a1)' }}
+            onChange={e => onChange({ ...pos, [k]: Number(e.target.value) })} />
+          <span style={{ fontSize: 10, color: 'var(--t2)', width: 26 }}>{pos[k]}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function TemplatePreviewer({ tpl }: { tpl: Template }) {
+  const pp = tpl.productPos || DEFAULT_PRODUCT_POS;
+  const op = tpl.overlayPos || DEFAULT_OVERLAY_POS;
+  const bp = tpl.badgePos   || DEFAULT_BADGE_POS;
   return (
-    <div className="tpl-preview">
-      {/* Product placeholder */}
-      <div className="tpl-product">
-        <span style={{ fontSize: 64, opacity: tpl.overlay ? 0.15 : 0.35 }}>📦</span>
+    <div className="tpl-preview" style={{ background: tpl.bgColor || '#fff' }}>
+      <div style={{ position: 'absolute', left: `${pp.x}%`, top: `${pp.y}%`, width: `${pp.size}%`, height: `${pp.size}%`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: 48, opacity: 0.4 }}>📦</span>
       </div>
-
-      {/* Overlay PNG */}
       {tpl.overlay && (
-        <img src={tpl.overlay} alt="" className="tpl-overlay" />
+        <img src={tpl.overlay} alt="" style={{ position: 'absolute', left: `${op.x}%`, top: `${op.y}%`, width: `${op.size}%`, height: `${op.size}%`, objectFit: 'contain' }} />
       )}
-
-      {/* Logo */}
-      {tpl.logo && (
-        <img src={tpl.logo} alt="" className="tpl-logo" />
+      {tpl.badgeEnabled && tpl.badgeIcon && (
+        <img src={tpl.badgeIcon} alt="" style={{ position: 'absolute', left: `${bp.x}%`, top: `${bp.y}%`, width: `${bp.size}%`, objectFit: 'contain' }} />
       )}
-
-      {/* Historical Low Badge */}
-      {tpl.badgeEnabled && (
-        <div className="tpl-badge">🏆 MIN. STORICO</div>
-      )}
-
-      {/* Platform label placeholder (top-left if no logo) */}
-      {!tpl.logo && (
-        <div className="tpl-platform" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--am2)' }}>
-          🟡 Amazon
-        </div>
-      )}
-
-      {/* Price bar */}
-      <div className="tpl-price-bar">
-        <div className="tpl-price-row">
-          <span className="tpl-price-new">€00.00</span>
-          <span className="tpl-price-old">€00.00</span>
-          <span className="tpl-price-disc">-0%</span>
-        </div>
-      </div>
-
-      {/* Empty state hint */}
-      {!tpl.overlay && !tpl.logo && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', color: 'var(--t3)', fontSize: 11, pointerEvents: 'none', marginTop: -10 }}>
-          Carica overlay o logo
-        </div>
+      {tpl.badgeEnabled && !tpl.badgeIcon && (
+        <div style={{ position: 'absolute', left: `${bp.x}%`, top: `${bp.y}%`, background: '#fbbf24', color: '#000', fontSize: 8, padding: '2px 5px', borderRadius: 4, fontWeight: 700 }}>🏆 MIN</div>
       )}
     </div>
   );
@@ -245,20 +243,21 @@ function TemplateSection() {
     templatesApi.update(id, changes).catch(() => {});
   };
 
-  const handleOverlay = (tplId: string, file: File | null) => {
+  const handleFile = async (tplId: string, file: File | null, field: 'overlay' | 'badgeIcon') => {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    updateTpl(tplId, { overlay: url });
-  };
-
-  const handleLogo = (tplId: string, file: File | null) => {
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    updateTpl(tplId, { logo: url });
+    const b64 = await readAsBase64(file);
+    updateTpl(tplId, { [field]: b64 });
   };
 
   const addTemplate = () => {
-    const tpl: Template = { id: genId(), nome: 'Nuovo Template', tipo: 'normal', overlay: null, logo: null, badgeEnabled: false };
+    const tpl: Template = {
+      id: genId(), nome: 'Nuovo Template', tipo: 'normal',
+      overlay: null, badgeIcon: null, badgeEnabled: false,
+      bgColor: '#ffffff',
+      productPos: DEFAULT_PRODUCT_POS,
+      overlayPos: DEFAULT_OVERLAY_POS,
+      badgePos: DEFAULT_BADGE_POS,
+    };
     setTemplates(ts => [...ts, tpl]);
     templatesApi.create(tpl).catch(() => {});
   };
@@ -290,7 +289,6 @@ function TemplateSection() {
 
           {editId === tpl.id && (
             <div className="tpl-card-body">
-              {/* Preview */}
               <TemplatePreviewer tpl={tpl} />
 
               {/* Tipo */}
@@ -302,48 +300,64 @@ function TemplateSection() {
                 </select>
               </div>
 
+              {/* Sfondo */}
+              <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="lbl" style={{ marginBottom: 0, flex: 1 }}>COLORE SFONDO</div>
+                <input type="color" value={tpl.bgColor || '#ffffff'} style={{ width: 36, height: 28, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+                  onChange={e => updateTpl(tpl.id, { bgColor: e.target.value })} />
+                <span style={{ fontSize: 11, color: 'var(--t3)' }}>{tpl.bgColor || '#ffffff'}</span>
+              </div>
+
+              {/* Foto prodotto — sliders */}
+              <PosSliders label="📦 FOTO PRODOTTO" pos={tpl.productPos || DEFAULT_PRODUCT_POS}
+                onChange={p => updateTpl(tpl.id, { productPos: p })} />
+
               {/* Upload overlay */}
               <div style={{ marginBottom: 8 }}>
                 <div className="lbl">OVERLAY PNG</div>
                 <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center' }}>
                   📁 {tpl.overlay ? '✓ Overlay caricato' : 'Carica overlay PNG'}
                   <input type="file" accept="image/png,image/webp" style={{ display: 'none' }}
-                    onChange={e => handleOverlay(tpl.id, e.target.files?.[0] ?? null)} />
+                    onChange={e => handleFile(tpl.id, e.target.files?.[0] ?? null, 'overlay')} />
                 </label>
                 {tpl.overlay && (
                   <button className="btn bgh bsm" style={{ color: 'var(--re)', marginTop: 5 }}
                     onClick={() => updateTpl(tpl.id, { overlay: null })}>× Rimuovi overlay</button>
                 )}
               </div>
+              {tpl.overlay && (
+                <PosSliders label="🖼️ POSIZIONE OVERLAY" pos={tpl.overlayPos || DEFAULT_OVERLAY_POS}
+                  onChange={p => updateTpl(tpl.id, { overlayPos: p })} />
+              )}
 
-              {/* Upload logo */}
-              <div style={{ marginBottom: 8 }}>
-                <div className="lbl">LOGO</div>
-                <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center' }}>
-                  ✦ {tpl.logo ? '✓ Logo caricato' : 'Carica logo'}
-                  <input type="file" accept="image/*" style={{ display: 'none' }}
-                    onChange={e => handleLogo(tpl.id, e.target.files?.[0] ?? null)} />
-                </label>
-                {tpl.logo && (
-                  <button className="btn bgh bsm" style={{ color: 'var(--re)', marginTop: 5 }}
-                    onClick={() => updateTpl(tpl.id, { logo: null })}>× Rimuovi logo</button>
-                )}
+              {/* Badge minimo storico */}
+              <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
+                <ToggleRow label="Badge Minimo Storico" sub="Mostra solo se il prezzo è minimo storico"
+                  value={tpl.badgeEnabled} onChange={v => updateTpl(tpl.id, { badgeEnabled: v })} />
               </div>
-
-              {/* Badge toggle */}
-              <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden' }}>
-                <ToggleRow
-                  label="Badge Minimo Storico"
-                  sub="Mostra il badge nel template"
-                  value={tpl.badgeEnabled}
-                  onChange={v => updateTpl(tpl.id, { badgeEnabled: v })}
-                />
-              </div>
+              {tpl.badgeEnabled && (
+                <>
+                  <div style={{ marginBottom: 8 }}>
+                    <div className="lbl">ICONA MINIMO STORICO</div>
+                    <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center' }}>
+                      🏆 {tpl.badgeIcon ? '✓ Icona caricata' : 'Carica icona minimo'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }}
+                        onChange={e => handleFile(tpl.id, e.target.files?.[0] ?? null, 'badgeIcon')} />
+                    </label>
+                    {tpl.badgeIcon && (
+                      <button className="btn bgh bsm" style={{ color: 'var(--re)', marginTop: 5 }}
+                        onClick={() => updateTpl(tpl.id, { badgeIcon: null })}>× Rimuovi icona</button>
+                    )}
+                  </div>
+                  <PosSliders label="🏆 POSIZIONE BADGE" pos={tpl.badgePos || DEFAULT_BADGE_POS}
+                    onChange={p => updateTpl(tpl.id, { badgePos: p })} />
+                </>
+              )}
             </div>
           )}
         </div>
       ))}
-      <InfoBanner>Clicca ✏️ per espandere e modificare ogni template. La preview si aggiorna in tempo reale.</InfoBanner>
+      <InfoBanner>Le immagini vengono salvate nel DB e persistono tra le sessioni. La preview si aggiorna in tempo reale.</InfoBanner>
     </>
   );
 }

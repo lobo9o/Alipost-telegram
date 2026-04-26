@@ -45,13 +45,27 @@ export interface TextLayout {
   contenuto: string;
 }
 
+export interface ElementLayout {
+  x: number;    // % from left (0–100)
+  y: number;    // % from top  (0–100)
+  size: number; // % of canvas width (1–100)
+}
+
+export const DEFAULT_PRODUCT_POS: ElementLayout = { x: 5, y: 5, size: 90 };
+export const DEFAULT_OVERLAY_POS: ElementLayout = { x: 0, y: 0, size: 100 };
+export const DEFAULT_BADGE_POS:   ElementLayout = { x: 3, y: 3, size: 25 };
+
 export interface Template {
   id: string;
   nome: string;
   tipo: TemplateType;
-  overlay: string | null;
-  logo: string | null;
+  overlay: string | null;      // base64 data URL
+  badgeIcon: string | null;    // base64 data URL (icona minimo storico)
   badgeEnabled: boolean;
+  bgColor: string;             // default '#ffffff'
+  productPos: ElementLayout;
+  overlayPos: ElementLayout;
+  badgePos: ElementLayout;
 }
 
 export interface QueueItem {

@@ -69,7 +69,7 @@ export const postsApi = {
   create: (post: CreatedPost) => req<CreatedPost>('POST', '/api/posts', post),
   update: (id: string, post: Partial<CreatedPost>) => req<CreatedPost>('PUT', `/api/posts/${id}`, post),
   delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/posts/${id}`),
-  publish: (id: string, payload: { post: CreatedPost; layoutContenuto?: string }) =>
+  publish: (id: string, payload: { post: CreatedPost; layoutContenuto?: string; generatedImage?: string }) =>
     req<{ ok: boolean }>('POST', `/api/posts/${id}`, payload),
 };
 

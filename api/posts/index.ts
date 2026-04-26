@@ -3,6 +3,19 @@ import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
+  // ── Image proxy (no auth needed, used by canvas compositor) ──
+  if (req.method === 'GET' && req.query.img) {
+    const url = req.query.img as string;
+    if (!url.startsWith('http')) { res.status(400).json({ error: 'invalid url' }); return; }
+    const upstream = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(buffer);
+    return;
+  }
+
   if (!allowMethods(['GET', 'POST'], req, res)) return;
   const userId = requireUserId(req, res);
   if (!userId) return;

@@ -14,13 +14,24 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const { nome, tipo, overlay, logo, badgeEnabled } = req.body ?? {};
+  const { nome, tipo, overlay, badgeIcon, badgeEnabled,
+          bgColor, productPos, overlayPos, badgePos } = req.body ?? {};
   const [row] = await sql`
-    UPDATE templates
-    SET nome = ${nome}, tipo = ${tipo}, overlay = ${overlay ?? null},
-        logo = ${logo ?? null}, badge_enabled = ${badgeEnabled}
+    UPDATE templates SET
+      nome = ${nome}, tipo = ${tipo},
+      overlay = ${overlay ?? null},
+      badge_icon = ${badgeIcon ?? null},
+      badge_enabled = ${badgeEnabled},
+      bg_color = ${bgColor ?? '#ffffff'},
+      product_pos = ${sql.json(productPos ?? { x: 5, y: 5, size: 90 })},
+      overlay_pos = ${sql.json(overlayPos ?? { x: 0, y: 0, size: 100 })},
+      badge_pos   = ${sql.json(badgePos ?? { x: 3, y: 3, size: 25 })}
     WHERE id = ${id} AND user_id = ${userId}
-    RETURNING id, nome, tipo, overlay, logo, badge_enabled AS "badgeEnabled"
+    RETURNING id, nome, tipo, overlay,
+              COALESCE(badge_icon, logo) AS "badgeIcon",
+              badge_enabled AS "badgeEnabled",
+              COALESCE(bg_color, '#ffffff') AS "bgColor",
+              product_pos AS "productPos", overlay_pos AS "overlayPos", badge_pos AS "badgePos"
   `;
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(row);

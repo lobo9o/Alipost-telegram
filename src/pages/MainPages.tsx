@@ -6,6 +6,7 @@ import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi } from '../lib/api';
+import { generatePostImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
 function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
@@ -25,9 +26,9 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       {/* Overlay PNG */}
       {template?.overlay && <img src={template.overlay} alt="" className="tpl-overlay" />}
 
-      {/* Logo */}
-      {template?.logo
-        ? <img src={template.logo} alt="" className="tpl-logo" />
+      {/* Badge icon or platform label */}
+      {template?.badgeIcon
+        ? <img src={template.badgeIcon} alt="" className="tpl-logo" />
         : <div className="tpl-platform" style={{ background: post.platform === 'amazon' ? 'rgba(245,158,11,0.15)' : 'rgba(255,107,107,0.15)', color: post.platform === 'amazon' ? '#f59e0b' : '#ff6b6b', backdropFilter: 'blur(6px)' }}>
             {post.platform === 'amazon' ? '🟡 Amazon' : '🔴 AliExpress'}
           </div>
@@ -511,7 +512,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 // QUEUE PAGE
 // ============================================================
 export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
-  const { queue, setQueue, layouts, setPublished } = useApp();
+  const { queue, setQueue, layouts, templates, setPublished } = useApp();
   const [multiSelect, setMultiSelect] = useState(false);
   const [publishErr, setPublishErr] = useState<{ id: string; msg: string } | null>(null);
   const selCount = queue.filter(x => x.sel).length;
@@ -537,10 +538,15 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       return;
     }
     const layout = layouts.find(l => l.id === post.layoutId);
+    const template = templates.find(t => t.id === post.templateId);
     setPublishErr(null);
     setQueue(q => q.map(x => x.id === id ? { ...x, status: 'scheduled' } : x));
     try {
-      await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto });
+      let generatedImage: string | undefined;
+      if (template) {
+        try { generatedImage = await generatePostImage(template, post.image, post.isHistoricalLow); } catch { /* fall back to URL */ }
+      }
+      await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, generatedImage });
       setQueue(q => q.filter(x => x.id !== id));
       autopostApi.delete(id).catch(() => {});
       const price = Number(post.discountedPrice).toFixed(2);
