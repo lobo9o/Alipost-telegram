@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { AppContextType, QueueItem, PublishedPost, TextLayout, Template, AppSettings, Tag, CreatedPost } from '../types';
+import { AppContextType, QueueItem, PublishedPost, TextLayout, Template, AppSettings, Tag, CreatedPost, makeDefaultTemplate } from '../types';
 import {
   INITIAL_TAGS, INITIAL_LAYOUTS, INITIAL_TEMPLATES, INITIAL_SETTINGS,
 } from '../data/mock';
@@ -67,7 +67,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setQueue((q as QueueItem[]).filter(x => x.status === 'draft'));
       if (t.length > 0) setTags(t);
       if (l.length > 0) setLayouts(l);
-      if (tmpl.length > 0) setTemplates(tmpl);
+      if (tmpl.length > 0) {
+        // Merge with defaults to handle old or partial DB data
+        const normalized = (tmpl as Template[]).map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
+        setTemplates(normalized);
+      } else {
+        // First-time: persist default template to DB
+        const def = makeDefaultTemplate('tpl1');
+        templatesApi.create(def).catch(() => {});
+      }
       setSettings(mergeSettings(s));
       setLoaded(true);
     });

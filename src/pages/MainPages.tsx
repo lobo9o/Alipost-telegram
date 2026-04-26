@@ -10,7 +10,7 @@ import { generatePostImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
 function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
-  const showBadge = post.isHistoricalLow || (template?.badgeEnabled ?? false);
+  const showBadge = post.isHistoricalLow && (template?.badge?.enabled ?? false);
   const hasImage = post.image && post.image !== 'placeholder.jpg';
 
   return (
@@ -24,11 +24,11 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       </div>
 
       {/* Overlay PNG */}
-      {template?.overlay && <img src={template.overlay} alt="" className="tpl-overlay" />}
+      {template?.overlay?.src && <img src={template.overlay.src} alt="" className="tpl-overlay" />}
 
       {/* Badge icon or platform label */}
-      {template?.badgeIcon
-        ? <img src={template.badgeIcon} alt="" className="tpl-logo" />
+      {template?.badge?.src
+        ? <img src={template.badge.src} alt="" className="tpl-logo" />
         : <div className="tpl-platform" style={{ background: post.platform === 'amazon' ? 'rgba(245,158,11,0.15)' : 'rgba(255,107,107,0.15)', color: post.platform === 'amazon' ? '#f59e0b' : '#ff6b6b', backdropFilter: 'blur(6px)' }}>
             {post.platform === 'amazon' ? '🟡 Amazon' : '🔴 AliExpress'}
           </div>
@@ -76,13 +76,10 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
   };
 
   const handleHistoricalLow = (v: boolean) => {
-    const tplId = v
-      ? (templates.find(t => t.tipo === 'historical_low')?.id ?? post.templateId)
-      : (templates.find(t => t.tipo === 'normal')?.id ?? post.templateId);
     const layId = v
       ? (layouts.find(l => l.tipo === 'historical_low')?.id ?? post.layoutId)
       : (layouts.find(l => l.tipo === 'normal')?.id ?? post.layoutId);
-    update({ isHistoricalLow: v, templateId: tplId, layoutId: layId });
+    update({ isHistoricalLow: v, layoutId: layId });
   };
 
   return (
@@ -130,12 +127,12 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
             value={post.isHistoricalLow} onChange={handleHistoricalLow} />
         </div>
 
-        {/* Template selector */}
+        {/* Template selector — single template, show as static label */}
         <div style={{ marginBottom: 8 }}>
           <div className="lbl">TEMPLATE IMMAGINE</div>
-          <select className="sel" value={post.templateId} onChange={e => update({ templateId: e.target.value })}>
-            {templates.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-          </select>
+          <div style={{ padding: '8px 12px', background: 'var(--bg3)', borderRadius: 8, fontSize: 13, color: 'var(--t2)' }}>
+            {templates[0] ? `Template (ID: ${templates[0].id})` : 'Nessun template — configura in Layout'}
+          </div>
         </div>
 
         {/* Layout selector */}
@@ -304,7 +301,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
     setPhase('loading');
     setErr('');
     try {
-      const defaultNormalTpl = templates.find(t => t.tipo === 'normal')?.id ?? 'tpl1';
+      const defaultNormalTpl = templates[0]?.id ?? 'tpl1';
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
 
       const newPosts: CreatedPost[] = await Promise.all(links.map(async l => {
@@ -544,7 +541,14 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     try {
       let generatedImage: string | undefined;
       if (template) {
-        try { generatedImage = await generatePostImage(template, post.image, post.isHistoricalLow); } catch { /* fall back to URL */ }
+        try {
+          generatedImage = await generatePostImage(template, post.image, post.isHistoricalLow, post.platform, {
+            prezzo: `€${Number(post.discountedPrice).toFixed(2)}`,
+            prezzoPrecedente: `€${Number(post.originalPrice).toFixed(2)}`,
+            sconto: `-${post.discountPercent}%`,
+            testoCustom: post.customText,
+          });
+        } catch { /* fall back to URL */ }
       }
       await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, generatedImage });
       setQueue(q => q.filter(x => x.id !== id));

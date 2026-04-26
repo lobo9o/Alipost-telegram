@@ -2,10 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 
-function parsePos(v: unknown) {
-  if (v && typeof v === 'object') return v;
-  if (typeof v === 'string') { try { return JSON.parse(v); } catch {} }
-  return null;
+function parseConfig(raw: unknown, id: string) {
+  const cfg = (typeof raw === 'string' ? JSON.parse(raw) : raw) ?? {};
+  return { id, ...cfg };
 }
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
@@ -14,35 +13,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!userId) return;
 
   if (req.method === 'GET') {
-    const rows = await sql`
-      SELECT id, nome, tipo, overlay,
-             COALESCE(badge_icon, logo) AS "badgeIcon",
-             badge_enabled AS "badgeEnabled",
-             COALESCE(bg_color, '#ffffff') AS "bgColor",
-             product_pos AS "productPos",
-             overlay_pos AS "overlayPos",
-             badge_pos   AS "badgePos"
-      FROM templates WHERE user_id = ${userId} ORDER BY created_at ASC
-    `;
-    res.json(rows);
+    const rows = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} ORDER BY created_at ASC`;
+    const result = rows.map((r: any) => parseConfig(r.config, r.id));
+    res.json(result);
     return;
   }
 
-  const { id, nome, tipo, overlay = null, badgeIcon = null, badgeEnabled = false,
-          bgColor = '#ffffff', productPos = null, overlayPos = null, badgePos = null } = req.body ?? {};
-  if (!id || !nome || !tipo) { res.status(400).json({ error: 'id, nome and tipo required' }); return; }
+  // POST — create new template
+  const { id, ...config } = req.body ?? {};
+  if (!id) { res.status(400).json({ error: 'id required' }); return; }
   const [row] = await sql`
-    INSERT INTO templates (id, user_id, nome, tipo, overlay, badge_icon, badge_enabled, bg_color, product_pos, overlay_pos, badge_pos)
-    VALUES (${id}, ${userId}, ${nome}, ${tipo}, ${overlay}, ${badgeIcon},
-            ${badgeEnabled}, ${bgColor},
-            ${sql.json(productPos ?? { x: 5, y: 5, size: 90 })},
-            ${sql.json(overlayPos ?? { x: 0, y: 0, size: 100 })},
-            ${sql.json(badgePos ?? { x: 3, y: 3, size: 25 })})
-    RETURNING id, nome, tipo, overlay,
-              COALESCE(badge_icon, logo) AS "badgeIcon",
-              badge_enabled AS "badgeEnabled",
-              COALESCE(bg_color, '#ffffff') AS "bgColor",
-              product_pos AS "productPos", overlay_pos AS "overlayPos", badge_pos AS "badgePos"
+    INSERT INTO templates (id, user_id, nome, tipo, config)
+    VALUES (${id}, ${userId}, 'Template', 'normal', ${sql.json(config)})
+    RETURNING id, config
   `;
-  res.status(201).json(row);
+  res.status(201).json(parseConfig((row as any).config, (row as any).id));
 });
