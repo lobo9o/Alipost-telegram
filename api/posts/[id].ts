@@ -99,6 +99,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
 
   let tgRes: Response;
+  const hasImage = post.image && post.image !== 'placeholder.jpg' && post.image.startsWith('http');
 
   if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {
     // Send template-generated image as file upload
@@ -112,7 +113,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
     tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
   } else {
-    const hasImage = post.image && post.image !== 'placeholder.jpg' && post.image.startsWith('http');
     if (hasImage) {
       tgRes = await fetch(`${tgBase}/sendPhoto`, {
         method: 'POST',
