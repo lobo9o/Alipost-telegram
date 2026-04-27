@@ -570,19 +570,8 @@ function TemplateSection() {
 
   return (
     <>
-      {/* Live preview — updates in real time as you click the arrows */}
-      <TemplatePreviewer tpl={tpl} />
-
-      {/* Background color */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 16px 14px' }}>
-        <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>COLORE SFONDO</span>
-        <input type="color" value={tpl.bgColor} style={{ width: 40, height: 30, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
-          onChange={e => updateTpl({ bgColor: e.target.value })} />
-        <span style={{ fontSize: 11, color: 'var(--t3)' }}>{tpl.bgColor}</span>
-      </div>
-
-      {/* Component buttons */}
-      <div style={{ display: 'flex', gap: 6, padding: '0 16px 14px', overflowX: 'auto' }}>
+      {/* Bottoni SOPRA l'anteprima — così le frecce nel pannello restano vicine alla preview */}
+      <div style={{ display: 'flex', gap: 6, padding: '10px 16px 8px', overflowX: 'auto' }}>
         {COMP_BUTTONS.map(b => {
           const enabled = getElEnabled(b.id, tpl);
           const isActive = activePanel === b.id;
@@ -601,9 +590,12 @@ function TemplateSection() {
         })}
       </div>
 
-      {/* Active panel — appears right below the buttons, close to the preview above */}
+      {/* Anteprima live */}
+      <TemplatePreviewer tpl={tpl} />
+
+      {/* Pannello attivo — frecce subito sotto l'anteprima */}
       {activePanel && (
-        <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--bd)', paddingTop: 14 }}>
+        <div style={{ padding: '10px 16px 16px', borderTop: '1px solid var(--bd)' }}>
           {activePanel === 'product' && (
             <ProductPanel el={tpl.product} onUpdate={updateProduct} />
           )}
@@ -627,7 +619,7 @@ function TemplateSection() {
       )}
 
       {!activePanel && (
-        <InfoBanner>Seleziona un componente per modificarlo. L'anteprima si aggiorna in tempo reale.</InfoBanner>
+        <InfoBanner>Seleziona un componente sopra per modificarlo. L'anteprima si aggiorna in tempo reale.</InfoBanner>
       )}
     </>
   );
