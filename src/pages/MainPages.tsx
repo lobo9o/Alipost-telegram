@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { NavPage, CreatedPost, QueueItem, Platform, Template } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
@@ -503,38 +503,30 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const { queue, setQueue, layouts, templates, tags, setPublished } = useApp();
-  const [multiSelect, setMultiSelect] = useState(false);
-  const [publishErr, setPublishErr] = useState<{ id: string; msg: string } | null>(null);
+  const [currentIdx, setCurrentIdx] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [publishErr, setPublishErr] = useState<string | null>(null);
+  const touchStartX = useRef(0);
+
+  const safeIdx = Math.min(currentIdx, Math.max(0, queue.length - 1));
+
+  React.useEffect(() => {
+    if (queue.length > 0 && currentIdx >= queue.length) setCurrentIdx(queue.length - 1);
+  }, [queue.length, currentIdx]);
 
   const updateQueuePost = (itemId: string, changes: Partial<CreatedPost>) => {
-    setQueue(q => q.map(x => x.id === itemId
-      ? { ...x, posts: [{ ...x.posts[0], ...changes }] }
-      : x
-    ));
+    setQueue(q => q.map(x => x.id === itemId ? { ...x, posts: [{ ...x.posts[0], ...changes }] } : x));
   };
-  const selCount = queue.filter(x => x.sel).length;
 
-  const toggle = (id: string) => setQueue(q => q.map(x => x.id === id ? { ...x, sel: !x.sel } : x));
-  const delSelected = () => {
-    const toDelete = queue.filter(x => x.sel).map(x => x.id);
-    toDelete.forEach(id => autopostApi.delete(id).catch(() => {}));
-    setQueue(q => q.filter(x => !x.sel));
-  };
   const publish = async (id: string) => {
     const item = queue.find(x => x.id === id);
-    if (!item) { setPublishErr({ id, msg: 'Elemento coda non trovato' }); return; }
+    if (!item) { setPublishErr('Elemento coda non trovato'); return; }
     const rawPost = item.posts[0];
-    if (!rawPost) { setPublishErr({ id, msg: 'Nessun post nella coda (array vuoto)' }); return; }
-    if (typeof rawPost !== 'object' || Array.isArray(rawPost)) {
-      setPublishErr({ id, msg: `Post non valido — tipo: ${typeof rawPost}, valore: ${JSON.stringify(rawPost).slice(0, 60)}` });
-      return;
+    if (!rawPost || typeof rawPost !== 'object' || Array.isArray(rawPost)) {
+      setPublishErr('Post non valido'); return;
     }
     const post = rawPost as CreatedPost;
-    if (!post.id) {
-      setPublishErr({ id, msg: `Post senza ID — dati: ${JSON.stringify(post).slice(0, 80)}` });
-      return;
-    }
+    if (!post.id) { setPublishErr('Post senza ID'); return; }
     const layout = layouts.find(l => l.id === post.layoutId);
     const template = templates.find(t => t.id === post.templateId);
     setPublishErr(null);
@@ -554,19 +546,17 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, generatedImage });
       setQueue(q => q.filter(x => x.id !== id));
       autopostApi.delete(id).catch(() => {});
-      const price = Number(post.discountedPrice).toFixed(2);
-      setPublished(prev => [...prev, { id: post.id, emoji: post.emoji, title: post.title, price, platform: post.platform, ts: 'ora' }]);
+      setPublished(prev => [...prev, { id: post.id, emoji: post.emoji, title: post.title, price: Number(post.discountedPrice).toFixed(2), platform: post.platform, ts: 'ora' }]);
     } catch (e) {
       const msg = e instanceof Error ? (e.message || 'Errore sconosciuto') : String(e) || 'Errore sconosciuto';
       setQueue(q => q.map(x => x.id === id ? { ...x, status: 'error' } : x));
       autopostApi.update(id, { status: 'error' }).catch(() => {});
-      setPublishErr({ id, msg });
+      setPublishErr(msg);
     }
   };
-  const del = (id: string) => {
-    autopostApi.delete(id).catch(() => {});
-    setQueue(q => q.filter(x => x.id !== id));
-  };
+
+  const del = (id: string) => { autopostApi.delete(id).catch(() => {}); setQueue(q => q.filter(x => x.id !== id)); };
+
   const move = (id: string, dir: 'up' | 'down') => setQueue(q => {
     const a = [...q]; const i = a.findIndex(x => x.id === id);
     if (dir === 'up' && i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]];
@@ -574,172 +564,173 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     return a;
   });
 
-  const firstPost = (item: QueueItem) => item.posts[0];
-
   const clearAll = async () => {
-    try {
-      await autopostApi.deleteAll();
-    } catch (e) {
-      window.alert('Errore svuota coda: ' + (e instanceof Error ? e.message : String(e)));
+    try { await autopostApi.deleteAll(); } catch (e) {
+      window.alert('Errore: ' + (e instanceof Error ? e.message : String(e)));
     }
     setQueue([]);
   };
+
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) < 40) return;
+    if (dx < 0 && safeIdx < queue.length - 1) { setCurrentIdx(i => i + 1); setExpandedId(null); }
+    if (dx > 0 && safeIdx > 0) { setCurrentIdx(i => i - 1); setExpandedId(null); }
+  };
+
+  if (!queue.length) {
+    return (
+      <div className="pg">
+        <PageHeader title="Coda AutoPost" onBack={() => nav('dash')} badge={0} />
+        <EmptyState icon="🗓️" text="Nessun post in coda."
+          action={<button className="btn bp" onClick={() => nav('newpost')}>+ Nuovo post</button>} />
+      </div>
+    );
+  }
+
+  const item = queue[safeIdx];
+  const p = item?.posts[0] as CreatedPost | undefined;
+  const template = p ? templates.find(t => t.id === p.templateId) : undefined;
+  const layout = p ? layouts.find(l => l.id === p.layoutId) : undefined;
+  const previewText = (layout && p) ? resolvePostTags(layout.contenuto, p, tags) : '';
+  const isEditing = expandedId === item?.id;
 
   return (
     <div className="pg">
       <PageHeader title="Coda AutoPost" onBack={() => nav('dash')} badge={queue.length}
         right={
-          <div style={{ display: 'flex', gap: 6 }}>
-            {queue.length > 0 && (
-              <button className="btn bre bsm" onClick={() => { if (window.confirm('Svuotare tutta la coda?')) clearAll(); }}>
-                🗑️ Svuota
-              </button>
-            )}
-            <button className="btn bgh bsm" onClick={() => setMultiSelect(!multiSelect)}
-              style={{ color: multiSelect ? 'var(--a3)' : 'var(--t2)' }}>
-              {multiSelect ? '✓ Sel.' : '☐ Multi'}
-            </button>
-          </div>
+          <button className="btn bre bsm" onClick={() => { if (window.confirm('Svuotare tutta la coda?')) clearAll(); }}>
+            🗑️ Svuota
+          </button>
         }
       />
 
-      {multiSelect && selCount > 0 && (
-        <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: 'var(--bg2)', borderBottom: '1px solid var(--bd)' }}>
-          <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1, alignSelf: 'center' }}>{selCount} selezionati</span>
-          <button className="btn bre bsm" onClick={delSelected}>🗑️ Elimina</button>
+      {/* Contatore + navigazione frecce */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 4px', gap: 8 }}>
+        <button className="btn bgh bsm" disabled={safeIdx === 0}
+          onClick={() => { setCurrentIdx(i => i - 1); setExpandedId(null); }}>←</button>
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--a1)' }}>{safeIdx + 1}</span>
+          <span style={{ fontSize: 13, color: 'var(--t3)' }}> / {queue.length}</span>
+          {safeIdx === 0 && (
+            <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 8, fontWeight: 700,
+                           background: '#0a2a0a', padding: '2px 7px', borderRadius: 8, letterSpacing: 0.5 }}>
+              ● PROSSIMO
+            </span>
+          )}
+        </div>
+        <button className="btn bgh bsm" disabled={safeIdx === queue.length - 1}
+          onClick={() => { setCurrentIdx(i => i + 1); setExpandedId(null); }}>→</button>
+      </div>
+
+      {/* Dot indicator */}
+      {queue.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 4, paddingBottom: 6 }}>
+          {queue.map((_, i) => (
+            <div key={i} onClick={() => { setCurrentIdx(i); setExpandedId(null); }}
+              style={{ width: i === safeIdx ? 18 : 6, height: 6, borderRadius: 3,
+                       background: i === safeIdx ? 'var(--a1)' : 'var(--bg4)',
+                       cursor: 'pointer', transition: 'width 0.2s, background 0.2s', flexShrink: 0 }} />
+          ))}
         </div>
       )}
 
-      {!queue.length ? (
-        <EmptyState icon="🗓️" text="Nessun post in coda." action={<button className="btn bp" onClick={() => nav('newpost')}>+ Nuovo post</button>} />
-      ) : (
-        <>
-          <div style={{ height: 10 }} />
-          {queue.map((item, idx) => {
-            const p = firstPost(item) as CreatedPost | undefined;
-            const template = templates.find(t => t.id === p?.templateId);
-            const layout = layouts.find(l => l.id === p?.layoutId);
-            const previewText = (layout && p) ? resolvePostTags(layout.contenuto, p, tags) : '';
-            const isExpanded = expandedId === item.id;
-            return (
-              <div key={item.id} className="qi" style={{ position: 'relative', padding: 0, overflow: 'hidden' }}>
-                {multiSelect && (
-                  <div className={`qsel ${item.sel ? 'on' : ''}`} onClick={() => toggle(item.id)}>
-                    {item.sel && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
-                  </div>
-                )}
+      {publishErr && <ErrorBanner>{publishErr}</ErrorBanner>}
 
-                {/* ── Anteprima immagine + testo (visibile quando NON in modifica) ── */}
-                {!isExpanded && p && (
-                  <>
-                    <TemplateImagePreview post={p} template={template} />
-                    {previewText && (
-                      <div style={{
-                        margin: '0 16px 10px', padding: '10px 12px',
-                        background: 'var(--bg3)', borderRadius: 8,
-                        fontSize: 11, color: 'var(--t2)', lineHeight: 1.5,
-                        maxHeight: 80, overflow: 'hidden',
-                        display: '-webkit-box', WebkitLineClamp: 4,
-                        WebkitBoxOrient: 'vertical' as any,
-                      }}>{previewText}</div>
-                    )}
-                  </>
-                )}
+      {/* Post corrente — area swipeable */}
+      {item && p && (
+        <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
 
-                {/* ── Header ── */}
-                <div className="qi-h" style={{ padding: '8px 14px' }}>
-                  <span className={`qtype ${item.tipo}`}>{item.tipo === 'single' ? 'Singolo' : 'Multi'}</span>
-                  <SourceBadge platform={p?.platform ?? 'amazon'} />
-                  <span style={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', paddingLeft: 4 }}>
-                    {p?.emoji} {p?.title?.slice(0, 26)}{item.posts.length > 1 ? ` +${item.posts.length - 1}` : ''}
-                  </span>
-                  <StatusBadge status={item.status} />
-                </div>
+          {/* Azioni SOPRA l'immagine */}
+          <div style={{ display: 'flex', gap: 5, padding: '2px 16px 8px', overflowX: 'auto', alignItems: 'center' }}>
+            <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060', flexShrink: 0 }}
+              onClick={() => { move(item.id, 'up'); setCurrentIdx(i => Math.max(0, i - 1)); }}
+              disabled={safeIdx === 0}>↑ Su</button>
+            <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060', flexShrink: 0 }}
+              onClick={() => { move(item.id, 'down'); setCurrentIdx(i => Math.min(queue.length - 1, i + 1)); }}
+              disabled={safeIdx === queue.length - 1}>↓ Giù</button>
+            <StatusBadge status={item.status} />
+            <div style={{ flex: 1 }} />
+            <button className="btn bsm bgh" style={{ flexShrink: 0 }}
+              onClick={() => setExpandedId(isEditing ? null : item.id)}>
+              {isEditing ? '✕ Chiudi' : '✏️ Modifica'}
+            </button>
+            <button className="btn bgr bsm" style={{ flexShrink: 0 }} onClick={() => publish(item.id)}>⚡ Pubblica</button>
+            <button className="btn bre bsm" style={{ flexShrink: 0 }} onClick={() => del(item.id)}>🗑️</button>
+          </div>
 
-                {/* ── Metadati ── */}
-                <div className="qmeta">
-                  <span>💰 €{p?.discountedPrice?.toFixed(2)}</span>
-                  <span>🏷️ -{p?.discountPercent}%</span>
-                  {p?.isHistoricalLow && <span>🏆 Min. Storico</span>}
-                </div>
+          {/* Anteprima immagine template */}
+          <TemplateImagePreview post={p} template={template} />
 
-                {publishErr?.id === item.id && <ErrorBanner>{publishErr.msg}</ErrorBanner>}
-
-                {/* ── Azioni ── */}
-                <div className="qacts">
-                  <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060' }} onClick={() => move(item.id, 'up')} disabled={idx === 0}>↑</button>
-                  <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060' }} onClick={() => move(item.id, 'down')} disabled={idx === queue.length - 1}>↓</button>
-                  <button className="btn bsm bgh" onClick={() => setExpandedId(isExpanded ? null : item.id)}>
-                    {isExpanded ? '✕ Chiudi' : '✏️ Modifica'}
-                  </button>
-                  <button className="btn bgr bsm" onClick={() => publish(item.id)}>⚡ Pubblica</button>
-                  <button className="btn bre bsm" onClick={() => del(item.id)}>🗑️</button>
-                </div>
-
-                {/* ── Form di modifica inline ── */}
-                {isExpanded && p && (
-                  <div style={{ borderTop: '1px solid var(--bd)', padding: '12px 16px 16px' }}>
-                    <div style={{ marginBottom: 10 }}>
-                      <div className="lbl">TITOLO</div>
-                      <input className="inp" value={p.title} onChange={e => updateQueuePost(item.id, { title: e.target.value })} />
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                      <div style={{ flex: 1 }}>
-                        <div className="lbl">PREZZO ORIG.</div>
-                        <input className="inp" type="number" step="0.01" value={p.originalPrice}
-                          onChange={e => {
-                            const orig = parseFloat(e.target.value) || 0;
-                            const pct = orig > 0 ? Math.round((1 - p.discountedPrice / orig) * 100) : 0;
-                            updateQueuePost(item.id, { originalPrice: orig, discountPercent: Math.max(0, pct) });
-                          }} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div className="lbl">PREZZO SCONT.</div>
-                        <input className="inp" type="number" step="0.01" value={p.discountedPrice}
-                          onChange={e => {
-                            const disc = parseFloat(e.target.value) || 0;
-                            const pct = p.originalPrice > 0 ? Math.round((1 - disc / p.originalPrice) * 100) : 0;
-                            updateQueuePost(item.id, { discountedPrice: disc, discountPercent: Math.max(0, pct) });
-                          }} />
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '6px 12px', background: '#2a1800', borderRadius: 8 }}>
-                      <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1 }}>Sconto calcolato</span>
-                      <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--am2)' }}>-{p.discountPercent}%</span>
-                    </div>
-                    <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
-                      <ToggleRow label="Minimo Storico" value={p.isHistoricalLow}
-                        onChange={v => {
-                          const layId = v
-                            ? (layouts.find(l => l.tipo === 'historical_low')?.id ?? p.layoutId)
-                            : (layouts.find(l => l.tipo === 'normal')?.id ?? p.layoutId);
-                          updateQueuePost(item.id, { isHistoricalLow: v, layoutId: layId });
-                        }} />
-                    </div>
-                    <div style={{ marginBottom: 10 }}>
-                      <div className="lbl">LAYOUT TESTO</div>
-                      <select className="sel" value={p.layoutId} onChange={e => updateQueuePost(item.id, { layoutId: e.target.value })}>
-                        {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ marginBottom: 10 }}>
-                      <div className="lbl">TESTO PERSONALIZZATO</div>
-                      <textarea className="txta" rows={2} value={p.customText}
-                        onChange={e => updateQueuePost(item.id, { customText: e.target.value })}
-                        placeholder="Testo aggiuntivo..." />
-                    </div>
-                    {previewText && (
-                      <>
-                        <div className="stit">ANTEPRIMA TESTO</div>
-                        <TelegramPreview text={previewText} buttons={[`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]} />
-                      </>
-                    )}
-                  </div>
-                )}
+          {/* Testo completo OPPURE form modifica */}
+          {!isEditing ? (
+            <div style={{ padding: '0 16px 24px' }}>
+              <TelegramPreview
+                text={previewText}
+                buttons={[`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]}
+              />
+            </div>
+          ) : (
+            <div style={{ padding: '12px 16px 28px', borderTop: '1px solid var(--bd)' }}>
+              <div style={{ marginBottom: 10 }}>
+                <div className="lbl">TITOLO</div>
+                <input className="inp" value={p.title} onChange={e => updateQueuePost(item.id, { title: e.target.value })} />
               </div>
-            );
-          })}
-        </>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                <div style={{ flex: 1 }}>
+                  <div className="lbl">PREZZO ORIG.</div>
+                  <input className="inp" type="number" step="0.01" value={p.originalPrice}
+                    onChange={e => {
+                      const orig = parseFloat(e.target.value) || 0;
+                      const pct = orig > 0 ? Math.round((1 - p.discountedPrice / orig) * 100) : 0;
+                      updateQueuePost(item.id, { originalPrice: orig, discountPercent: Math.max(0, pct) });
+                    }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div className="lbl">PREZZO SCONT.</div>
+                  <input className="inp" type="number" step="0.01" value={p.discountedPrice}
+                    onChange={e => {
+                      const disc = parseFloat(e.target.value) || 0;
+                      const pct = p.originalPrice > 0 ? Math.round((1 - disc / p.originalPrice) * 100) : 0;
+                      updateQueuePost(item.id, { discountedPrice: disc, discountPercent: Math.max(0, pct) });
+                    }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '6px 12px', background: '#2a1800', borderRadius: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1 }}>Sconto calcolato</span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--am2)' }}>-{p.discountPercent}%</span>
+              </div>
+              <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+                <ToggleRow label="Minimo Storico" value={p.isHistoricalLow}
+                  onChange={v => {
+                    const layId = v
+                      ? (layouts.find(l => l.tipo === 'historical_low')?.id ?? p.layoutId)
+                      : (layouts.find(l => l.tipo === 'normal')?.id ?? p.layoutId);
+                    updateQueuePost(item.id, { isHistoricalLow: v, layoutId: layId });
+                  }} />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <div className="lbl">LAYOUT TESTO</div>
+                <select className="sel" value={p.layoutId} onChange={e => updateQueuePost(item.id, { layoutId: e.target.value })}>
+                  {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <div className="lbl">TESTO PERSONALIZZATO</div>
+                <textarea className="txta" rows={2} value={p.customText}
+                  onChange={e => updateQueuePost(item.id, { customText: e.target.value })}
+                  placeholder="Testo aggiuntivo..." />
+              </div>
+              {previewText && (
+                <>
+                  <div className="stit">ANTEPRIMA TESTO</div>
+                  <TelegramPreview text={previewText} buttons={[`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]} />
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
