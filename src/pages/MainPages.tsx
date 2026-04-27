@@ -9,42 +9,121 @@ import { productApi, postsApi, autopostApi } from '../lib/api';
 import { generatePostImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
+const TPL_SCALE = 0.32; // preview CSS scale vs canvas 1024
+
 function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
-  const showBadge = post.isHistoricalLow && (template?.badge?.enabled ?? false);
   const hasImage = post.image && post.image !== 'placeholder.jpg';
 
+  if (!template) {
+    return (
+      <div className="tpl-preview">
+        <div className="tpl-product">
+          {hasImage
+            ? <img src={post.image} alt="" style={{ width: '65%', height: '65%', objectFit: 'contain' }} />
+            : <span style={{ fontSize: 88 }}>{post.emoji}</span>
+          }
+        </div>
+        <div className="tpl-price-bar">
+          <div className="tpl-price-row">
+            <span className="tpl-price-new">€{post.discountedPrice.toFixed(2)}</span>
+            <span className="tpl-price-old">€{post.originalPrice.toFixed(2)}</span>
+            <span className="tpl-price-disc">-{post.discountPercent}%</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const pp = template.product;
   return (
-    <div className="tpl-preview">
-      {/* Product image or emoji */}
-      <div className="tpl-product">
+    <div style={{
+      margin: '0 16px 12px', borderRadius: 10, overflow: 'hidden',
+      position: 'relative', aspectRatio: '1/1', background: template.bgColor,
+      boxShadow: '0 2px 16px rgba(0,0,0,0.35)',
+    }}>
+      {/* Product image at template position */}
+      <div style={{
+        position: 'absolute', left: `${pp.x}%`, top: `${pp.y}%`,
+        width: `${pp.size}%`, height: `${pp.size}%`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
         {hasImage
-          ? <img src={post.image} alt="" style={{ width: '65%', height: '65%', objectFit: 'contain' }} />
-          : <span style={{ fontSize: 88, filter: 'drop-shadow(0 4px 24px rgba(0,0,0,0.6))' }}>{post.emoji}</span>
+          ? <img src={post.image} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          : <span style={{ fontSize: `${pp.size * 0.55}px` }}>{post.emoji}</span>
         }
       </div>
 
-      {/* Overlay PNG */}
-      {template?.overlay?.src && <img src={template.overlay.src} alt="" className="tpl-overlay" />}
+      {/* Overlay */}
+      {template.overlay.enabled && template.overlay.src && (
+        <img src={template.overlay.src} alt="" style={{
+          position: 'absolute', left: `${template.overlay.x}%`, top: `${template.overlay.y}%`,
+          width: `${template.overlay.size}%`, height: `${template.overlay.size}%`,
+          objectFit: 'contain', pointerEvents: 'none',
+        }} />
+      )}
 
-      {/* Badge icon or platform label */}
-      {template?.badge?.src
-        ? <img src={template.badge.src} alt="" className="tpl-logo" />
-        : <div className="tpl-platform" style={{ background: post.platform === 'amazon' ? 'rgba(245,158,11,0.15)' : 'rgba(255,107,107,0.15)', color: post.platform === 'amazon' ? '#f59e0b' : '#ff6b6b', backdropFilter: 'blur(6px)' }}>
-            {post.platform === 'amazon' ? '🟡 Amazon' : '🔴 AliExpress'}
-          </div>
-      }
+      {/* Badge — solo se minimo storico */}
+      {template.badge.enabled && post.isHistoricalLow && template.badge.src && (
+        <img src={template.badge.src} alt="" style={{
+          position: 'absolute', left: `${template.badge.x}%`, top: `${template.badge.y}%`,
+          width: `${template.badge.size}%`, objectFit: 'contain', pointerEvents: 'none',
+        }} />
+      )}
 
-      {/* Historical Low Badge */}
-      {showBadge && <div className="tpl-badge">🏆 MIN. STORICO</div>}
-
-      {/* Price bar */}
-      <div className="tpl-price-bar">
-        <div className="tpl-price-row">
-          <span className="tpl-price-new">€{post.discountedPrice.toFixed(2)}</span>
-          <span className="tpl-price-old">€{post.originalPrice.toFixed(2)}</span>
-          <span className="tpl-price-disc">-{post.discountPercent}%</span>
+      {/* Store */}
+      {template.store.enabled && (
+        <div style={{
+          position: 'absolute', left: `${template.store.x}%`, top: `${template.store.y}%`,
+          width: `${template.store.size}%`, aspectRatio: '1/1',
+          background: post.platform === 'amazon' ? '#FF9900' : '#E43226',
+          borderRadius: '20%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: `${template.store.size * 0.4}px`, pointerEvents: 'none',
+        }}>
+          {post.platform === 'amazon' ? '🟡' : '🔴'}
         </div>
-      </div>
+      )}
+
+      {/* Text elements with actual values */}
+      {template.prezzo.enabled && (
+        <div style={{
+          position: 'absolute', left: `${template.prezzo.x}%`, top: `${template.prezzo.y}%`,
+          fontSize: `${template.prezzo.fontSize * TPL_SCALE}px`,
+          fontFamily: template.prezzo.fontFamily, fontWeight: template.prezzo.bold ? 700 : 400,
+          color: template.prezzo.color, whiteSpace: 'nowrap', pointerEvents: 'none',
+          WebkitTextStroke: template.prezzo.strokeEnabled ? `${template.prezzo.strokeWidth * TPL_SCALE}px ${template.prezzo.strokeColor}` : undefined,
+        }}>€{post.discountedPrice.toFixed(2)}</div>
+      )}
+      {template.prezzoPrecedente.enabled && (
+        <div style={{
+          position: 'absolute', left: `${template.prezzoPrecedente.x}%`, top: `${template.prezzoPrecedente.y}%`,
+          fontSize: `${template.prezzoPrecedente.fontSize * TPL_SCALE}px`,
+          fontFamily: template.prezzoPrecedente.fontFamily, fontWeight: template.prezzoPrecedente.bold ? 700 : 400,
+          color: template.prezzoPrecedente.color,
+          textDecoration: template.prezzoPrecedente.strikethrough ? 'line-through' : 'none',
+          whiteSpace: 'nowrap', pointerEvents: 'none',
+          WebkitTextStroke: template.prezzoPrecedente.strokeEnabled ? `${template.prezzoPrecedente.strokeWidth * TPL_SCALE}px ${template.prezzoPrecedente.strokeColor}` : undefined,
+        }}>€{post.originalPrice.toFixed(2)}</div>
+      )}
+      {template.sconto.enabled && (
+        <div style={{
+          position: 'absolute', left: `${template.sconto.x}%`, top: `${template.sconto.y}%`,
+          fontSize: `${template.sconto.fontSize * TPL_SCALE}px`,
+          fontFamily: template.sconto.fontFamily, fontWeight: template.sconto.bold ? 700 : 400,
+          color: template.sconto.color, whiteSpace: 'nowrap', pointerEvents: 'none',
+          WebkitTextStroke: template.sconto.strokeEnabled ? `${template.sconto.strokeWidth * TPL_SCALE}px ${template.sconto.strokeColor}` : undefined,
+        }}>-{post.discountPercent}%</div>
+      )}
+      {template.testoCustom.enabled && post.customText && (
+        <div style={{
+          position: 'absolute', left: `${template.testoCustom.x}%`, top: `${template.testoCustom.y}%`,
+          fontSize: `${template.testoCustom.fontSize * TPL_SCALE}px`,
+          fontFamily: template.testoCustom.fontFamily, fontWeight: template.testoCustom.bold ? 700 : 400,
+          color: template.testoCustom.color,
+          textDecoration: template.testoCustom.strikethrough ? 'line-through' : 'none',
+          whiteSpace: 'nowrap', pointerEvents: 'none',
+          WebkitTextStroke: template.testoCustom.strokeEnabled ? `${template.testoCustom.strokeWidth * TPL_SCALE}px ${template.testoCustom.strokeColor}` : undefined,
+        }}>{post.customText}</div>
+      )}
     </div>
   );
 }

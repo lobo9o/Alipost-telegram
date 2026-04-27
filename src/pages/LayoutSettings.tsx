@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
@@ -83,7 +83,6 @@ function TagsSection() {
           )}
         </div>
       ))}
-
       <div className="stit">AGGIUNGI TAG</div>
       <div style={{ padding: '0 16px 8px' }}>
         <input className="inp" value={newName} onChange={e => setNewName(e.target.value)}
@@ -192,61 +191,55 @@ function readAsBase64(file: File): Promise<string> {
   });
 }
 
-// Joystick 2D position pad
-const Joystick = React.memo(function Joystick({ x, y, onChange, label }: {
+// Arrow-based position control — replaces drag joystick
+function PositionArrows({ x, y, onChange }: {
   x: number; y: number;
   onChange: (x: number, y: number) => void;
-  label?: string;
 }) {
-  const padRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
-  const cbRef = useRef(onChange);
-  useEffect(() => { cbRef.current = onChange; });
+  const [step, setStep] = useState(3);
 
-  const toPos = (clientX: number, clientY: number) => {
-    const rect = padRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const nx = Math.round(Math.min(90, Math.max(0, ((clientX - rect.left) / rect.width) * 100)));
-    const ny = Math.round(Math.min(90, Math.max(0, ((clientY - rect.top) / rect.height) * 100)));
-    cbRef.current(nx, ny);
+  const move = (dx: number, dy: number) => {
+    onChange(
+      Math.min(95, Math.max(0, Math.round(x + dx * step))),
+      Math.min(95, Math.max(0, Math.round(y + dy * step))),
+    );
   };
 
-  useEffect(() => {
-    const el = padRef.current;
-    if (!el) return;
-    const onTS = (e: TouchEvent) => { e.preventDefault(); if (e.touches[0]) toPos(e.touches[0].clientX, e.touches[0].clientY); };
-    const onTM = (e: TouchEvent) => { e.preventDefault(); if (e.touches[0]) toPos(e.touches[0].clientX, e.touches[0].clientY); };
-    el.addEventListener('touchstart', onTS, { passive: false });
-    el.addEventListener('touchmove', onTM, { passive: false });
-    return () => { el.removeEventListener('touchstart', onTS); el.removeEventListener('touchmove', onTM); };
-  }, []); // stable via cbRef
+  const arrowBtn: React.CSSProperties = {
+    width: 48, height: 48, padding: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+  };
 
   return (
-    <div style={{ marginBottom: 12 }}>
-      {label && <div className="lbl" style={{ marginBottom: 4 }}>{label}</div>}
-      <div
-        ref={padRef}
-        style={{ width: '100%', height: 100, background: 'var(--bg3)', borderRadius: 8, position: 'relative', cursor: 'crosshair', userSelect: 'none', border: '1px solid var(--bd)' }}
-        onMouseDown={e => { dragging.current = true; toPos(e.clientX, e.clientY); }}
-        onMouseMove={e => { if (dragging.current) toPos(e.clientX, e.clientY); }}
-        onMouseUp={() => { dragging.current = false; }}
-        onMouseLeave={() => { dragging.current = false; }}
-      >
-        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.08)' }} />
-        <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-        <div style={{
-          position: 'absolute', left: `${x}%`, top: `${y}%`,
-          width: 20, height: 20, background: 'var(--a1)', borderRadius: '50%',
-          transform: 'translate(-50%, -50%)', border: '2px solid #fff',
-          boxShadow: '0 0 0 2px var(--a1)', pointerEvents: 'none', zIndex: 1,
-        }} />
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+        <span className="lbl" style={{ marginBottom: 0 }}>POSIZIONE</span>
+        <span style={{ fontSize: 10, color: 'var(--t3)', marginLeft: 'auto' }}>X:{x}% · Y:{y}%</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--t3)', marginTop: 3 }}>
-        <span>X: {x}%</span><span>Y: {y}%</span>
+      {/* Step selector */}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0 }}>Passo:</span>
+        {[1, 3, 5, 10].map(s => (
+          <button key={s} className={`btn bsm ${step === s ? 'bp' : 'bgh'}`}
+            style={{ fontSize: 10, padding: '2px 10px' }}
+            onClick={() => setStep(s)}>{s}%</button>
+        ))}
+      </div>
+      {/* Arrow pad */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 48px)', gap: 4, justifyContent: 'center' }}>
+        <div />
+        <button className="btn bgh" style={arrowBtn} onClick={() => move(0, -1)}>↑</button>
+        <div />
+        <button className="btn bgh" style={arrowBtn} onClick={() => move(-1, 0)}>←</button>
+        <div style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg3)', borderRadius: 8, fontSize: 20, color: 'var(--t3)' }}>✛</div>
+        <button className="btn bgh" style={arrowBtn} onClick={() => move(1, 0)}>→</button>
+        <div />
+        <button className="btn bgh" style={arrowBtn} onClick={() => move(0, 1)}>↓</button>
+        <div />
       </div>
     </div>
   );
-});
+}
 
 function SizeSlider({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE' }: {
   value: number; onChange: (v: number) => void; min?: number; max?: number; label?: string;
@@ -262,10 +255,10 @@ function SizeSlider({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE' 
   );
 }
 
-// Live CSS preview of the template
+// Live CSS preview
 const PREVIEW_SCALE = 0.3;
 
-function TemplatePreviewer({ tpl }: { tpl: Template }) {
+export function TemplatePreviewer({ tpl }: { tpl: Template }) {
   const pp = tpl.product;
   return (
     <div style={{
@@ -273,14 +266,15 @@ function TemplatePreviewer({ tpl }: { tpl: Template }) {
       position: 'relative', aspectRatio: '1/1', background: tpl.bgColor,
       boxShadow: '0 2px 16px rgba(0,0,0,0.4)',
     }}>
-      {/* Product placeholder */}
+      {/* Product placeholder box */}
       <div style={{
         position: 'absolute', left: `${pp.x}%`, top: `${pp.y}%`,
         width: `${pp.size}%`, height: `${pp.size}%`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(128,128,128,0.08)',
+        border: '1px dashed rgba(128,128,128,0.3)',
+        background: 'rgba(128,128,128,0.06)',
       }}>
-        <span style={{ fontSize: `${pp.size * 0.4}px`, opacity: 0.5 }}>📦</span>
+        <span style={{ fontSize: `${pp.size * 0.4}px`, opacity: 0.45 }}>📦</span>
       </div>
 
       {/* Overlay */}
@@ -302,12 +296,12 @@ function TemplatePreviewer({ tpl }: { tpl: Template }) {
       {tpl.badge.enabled && !tpl.badge.src && (
         <div style={{
           position: 'absolute', left: `${tpl.badge.x}%`, top: `${tpl.badge.y}%`,
-          background: '#fbbf24', color: '#000', fontSize: 8, padding: '2px 4px',
+          background: '#fbbf24', color: '#000', fontSize: 7, padding: '2px 4px',
           borderRadius: 3, fontWeight: 700, pointerEvents: 'none',
         }}>🏆 MIN</div>
       )}
 
-      {/* Store placeholder */}
+      {/* Store icon */}
       {tpl.store.enabled && (
         <div style={{
           position: 'absolute', left: `${tpl.store.x}%`, top: `${tpl.store.y}%`,
@@ -323,7 +317,7 @@ function TemplatePreviewer({ tpl }: { tpl: Template }) {
         { el: tpl.prezzo as TextEl, text: '€24,99' },
         { el: tpl.prezzoPrecedente as TextEl, text: '€49,99' },
         { el: tpl.sconto as TextEl, text: '-50%' },
-        { el: tpl.testoCustom as TextEl, text: tpl.testoCustom.text || 'Testo custom' },
+        { el: tpl.testoCustom as TextEl, text: tpl.testoCustom.text || 'Testo' },
       ]).map(({ el, text }, i) =>
         el.enabled ? (
           <div key={i} style={{
@@ -334,9 +328,7 @@ function TemplatePreviewer({ tpl }: { tpl: Template }) {
             textDecoration: el.strikethrough ? 'line-through' : 'none',
             WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * PREVIEW_SCALE}px ${el.strokeColor}` : undefined,
             whiteSpace: 'nowrap', pointerEvents: 'none',
-          }}>
-            {text}
-          </div>
+          }}>{text}</div>
         ) : null
       )}
     </div>
@@ -345,6 +337,19 @@ function TemplatePreviewer({ tpl }: { tpl: Template }) {
 
 // ── Component panels ──────────────────────────────────────────
 
+function ProductPanel({ el, onUpdate }: {
+  el: { x: number; y: number; size: number };
+  onUpdate: (ch: Partial<{ x: number; y: number; size: number }>) => void;
+}) {
+  return (
+    <>
+      <InfoBanner>📦 Riquadro dove verrà inserita l'immagine Amazon/AliExpress. Spostalo e ridimensionalo secondo le tue preferenze.</InfoBanner>
+      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
+      <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={20} max={100} label="DIMENSIONE RIQUADRO" />
+    </>
+  );
+}
+
 function OverlayImgPanel({ el, onUpdate, onFile }: {
   el: ImgEl;
   onUpdate: (ch: Partial<ImgEl>) => void;
@@ -352,20 +357,20 @@ function OverlayImgPanel({ el, onUpdate, onFile }: {
 }) {
   return (
     <>
-      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 10 }}>
+      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 12 }}>
         <ToggleRow label="Mostra overlay" value={el.enabled} onChange={v => onUpdate({ enabled: v })} />
       </div>
+      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
+      <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={10} max={100} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
         🖼️ {el.src ? '✓ Overlay caricato — cambia' : 'Carica overlay PNG'}
         <input type="file" accept="image/png,image/webp" style={{ display: 'none' }}
           onChange={e => onFile(e.target.files?.[0] ?? null)} />
       </label>
       {el.src && (
-        <button className="btn bgh bsm" style={{ color: 'var(--re)', width: '100%', marginBottom: 8 }}
+        <button className="btn bgh bsm" style={{ color: 'var(--re)', width: '100%' }}
           onClick={() => onUpdate({ src: null })}>× Rimuovi overlay</button>
       )}
-      <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={10} max={100} />
-      <Joystick x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} label="POSIZIONE (trascina)" />
     </>
   );
 }
@@ -377,20 +382,20 @@ function BadgeImgPanel({ el, onUpdate, onFile }: {
 }) {
   return (
     <>
-      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 10 }}>
+      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 12 }}>
         <ToggleRow label="Badge minimo storico" sub="Visibile solo se il prodotto è al minimo storico" value={el.enabled} onChange={v => onUpdate({ enabled: v })} />
       </div>
+      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
+      <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={50} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
         🏆 {el.src ? '✓ Icona caricata — cambia' : 'Carica icona badge'}
         <input type="file" accept="image/*" style={{ display: 'none' }}
           onChange={e => onFile(e.target.files?.[0] ?? null)} />
       </label>
       {el.src && (
-        <button className="btn bgh bsm" style={{ color: 'var(--re)', width: '100%', marginBottom: 8 }}
+        <button className="btn bgh bsm" style={{ color: 'var(--re)', width: '100%' }}
           onClick={() => onUpdate({ src: null })}>× Rimuovi icona</button>
       )}
-      <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={50} />
-      <Joystick x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} label="POSIZIONE (trascina)" />
     </>
   );
 }
@@ -401,12 +406,12 @@ function StorePanel({ el, onUpdate }: {
 }) {
   return (
     <>
-      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 10 }}>
+      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 12 }}>
         <ToggleRow label="Logo store" sub="Amazon o AliExpress — automatico in base al link" value={el.enabled} onChange={v => onUpdate({ enabled: v })} />
       </div>
-      <InfoBanner>🟡 Amazon · 🔴 AliExpress — il logo si adatta automaticamente al tipo di prodotto</InfoBanner>
+      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
       <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={40} />
-      <Joystick x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} label="POSIZIONE (trascina)" />
+      <InfoBanner>🟡 Amazon · 🔴 AliExpress — il logo si adatta automaticamente al tipo di prodotto</InfoBanner>
     </>
   );
 }
@@ -420,16 +425,19 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
 }) {
   return (
     <>
-      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 10 }}>
+      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 12 }}>
         <ToggleRow label="Attivo" value={el.enabled} onChange={v => onUpdate({ enabled: v })} />
       </div>
 
       {showTextInput && (
-        <div style={{ marginBottom: 10 }}>
+        <div style={{ marginBottom: 12 }}>
           <div className="lbl">TESTO</div>
           <input className="inp" value={el.text} onChange={e => onUpdate({ text: e.target.value })} placeholder="Testo personalizzato..." />
         </div>
       )}
+
+      {/* Position arrows first — near the preview */}
+      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>DIMENSIONE FONT</span>
@@ -439,7 +447,7 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
         <span style={{ fontSize: 11, color: 'var(--t2)', width: 32, textAlign: 'right' }}>{el.fontSize}px</span>
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div style={{ marginBottom: 12 }}>
         <div className="lbl">FONT</div>
         <select className="sel" value={el.fontFamily} onChange={e => onUpdate({ fontFamily: e.target.value })}>
           {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
@@ -479,17 +487,16 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
           </div>
         </>
       )}
-
-      <Joystick x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} label="POSIZIONE (trascina)" />
     </>
   );
 }
 
 // ── Template Section ──────────────────────────────────────────
 
-type ComponentKey = 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store';
+type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store';
 
 const COMP_BUTTONS: { id: ComponentKey; icon: string; label: string }[] = [
+  { id: 'product',          icon: '📦', label: 'Foto' },
   { id: 'overlay',          icon: '🖼️', label: 'Overlay' },
   { id: 'badge',            icon: '🏆', label: 'Badge' },
   { id: 'prezzo',           icon: '💰', label: 'Prezzo' },
@@ -500,6 +507,7 @@ const COMP_BUTTONS: { id: ComponentKey; icon: string; label: string }[] = [
 ];
 
 function getElEnabled(id: ComponentKey, tpl: Template): boolean {
+  if (id === 'product') return true;
   if (id === 'overlay' || id === 'badge' || id === 'store') return (tpl[id] as ImgEl).enabled;
   return (tpl[id] as TextEl).enabled;
 }
@@ -542,6 +550,15 @@ function TemplateSection() {
     });
   };
 
+  const updateProduct = (changes: Partial<{ x: number; y: number; size: number }>) => {
+    setTemplates(ts => {
+      const base = ts[0] ?? makeDefaultTemplate('tpl1');
+      const updated = { ...base, product: { ...base.product, ...changes } };
+      saveTpl(updated);
+      return [updated];
+    });
+  };
+
   const handleFile = async (key: 'overlay' | 'badge', file: File | null) => {
     if (!file) return;
     const b64 = await readAsBase64(file);
@@ -553,7 +570,7 @@ function TemplateSection() {
 
   return (
     <>
-      {/* Live preview */}
+      {/* Live preview — updates in real time as you click the arrows */}
       <TemplatePreviewer tpl={tpl} />
 
       {/* Background color */}
@@ -564,27 +581,32 @@ function TemplateSection() {
         <span style={{ fontSize: 11, color: 'var(--t3)' }}>{tpl.bgColor}</span>
       </div>
 
-      {/* Component buttons — scrollable row */}
+      {/* Component buttons */}
       <div style={{ display: 'flex', gap: 6, padding: '0 16px 14px', overflowX: 'auto' }}>
         {COMP_BUTTONS.map(b => {
           const enabled = getElEnabled(b.id, tpl);
           const isActive = activePanel === b.id;
           return (
             <button key={b.id}
-              className={`btn bsm ${isActive ? 'bp' : enabled ? 'bs' : 'bgh'}`}
+              className={`btn bsm ${isActive ? 'bp' : enabled && b.id !== 'product' ? 'bs' : 'bgh'}`}
               style={{ flexShrink: 0, fontSize: 11 }}
               onClick={() => setActivePanel(isActive ? null : b.id)}
             >
               {b.icon} {b.label}
-              {enabled && !isActive && <span style={{ marginLeft: 3, fontSize: 7, color: 'var(--a3)' }}>●</span>}
+              {enabled && !isActive && b.id !== 'product' && (
+                <span style={{ marginLeft: 3, fontSize: 7, color: 'var(--a3)' }}>●</span>
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* Active panel */}
+      {/* Active panel — appears right below the buttons, close to the preview above */}
       {activePanel && (
         <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--bd)', paddingTop: 14 }}>
+          {activePanel === 'product' && (
+            <ProductPanel el={tpl.product} onUpdate={updateProduct} />
+          )}
           {activePanel === 'overlay' && (
             <OverlayImgPanel el={tpl.overlay} onUpdate={ch => updateImg('overlay', ch)} onFile={f => handleFile('overlay', f)} />
           )}
@@ -605,7 +627,7 @@ function TemplateSection() {
       )}
 
       {!activePanel && (
-        <InfoBanner>Seleziona un componente per modificarlo. Le modifiche vengono salvate automaticamente.</InfoBanner>
+        <InfoBanner>Seleziona un componente per modificarlo. L'anteprima si aggiorna in tempo reale.</InfoBanner>
       )}
     </>
   );
@@ -646,7 +668,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
     <div className="pg">
       <PageHeader title="Impostazioni" onBack={() => nav('dash')} />
 
-      {/* ── Amazon ── */}
       <div className="stit">AMAZON CREATORS API</div>
       <div className="api-card">
         <div className="api-top">
@@ -660,7 +681,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         <div className="fld">
           <label className="lbl">Partner Tag / Application ID</label>
           <input className="inp" value={s.amazon.affiliateTag} onChange={e => setAmazon('affiliateTag', e.target.value)} placeholder="cavalieridelr-21.alipost2" />
-          <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>Inserisci l'Application ID dalla dashboard Creators API (formato: tag-21.nomeapp)</div>
         </div>
         <div className="fld">
           <label className="lbl">Versione credenziale</label>
@@ -695,10 +715,9 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           <input className="inp" type="password" value={s.amazon.credentialSecret} onChange={e => setAmazon('credentialSecret', e.target.value)} placeholder="amzn1.oa2-cs.v1...." />
           {s.amazon.credentialSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialSecret.length} caratteri)</div>}
         </div>
-        <InfoBanner>🔒 Credential ID e Secret non vengono mai esposti nel frontend. Creali su Associates → Strumenti → CreatorsAPI.</InfoBanner>
+        <InfoBanner>🔒 Credential ID e Secret non vengono mai esposti nel frontend.</InfoBanner>
       </div>
 
-      {/* ── AliExpress ── */}
       <div className="stit">ALIEXPRESS SETTINGS</div>
       <div className="api-card">
         <div className="api-top">
@@ -719,7 +738,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
       </div>
 
-      {/* ── Telegram ── */}
       <div className="stit">CANALI TELEGRAM</div>
       <div className="api-card">
         <div className="api-top">
@@ -730,20 +748,19 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           </div>
         </div>
         <InfoBanner>
-          1. Aggiungi il bot come <b>amministratore</b> del tuo canale Telegram.<br />
-          2. Inserisci lo <b>username del canale</b> (es. <b>@miocanale</b>) o l'<b>ID numerico</b> (es. <b>-1001234567890</b>).<br />
-          3. Il primo canale della lista è quello usato per la pubblicazione.
+          1. Aggiungi il bot come <b>amministratore</b> del canale.<br />
+          2. Inserisci <b>@username</b> o <b>ID numerico</b> (es. -1001234567890).<br />
+          3. Il primo canale è quello usato per la pubblicazione.
         </InfoBanner>
         {settings.channels.filter(Boolean).length > 0 && (
           <div style={{ fontSize: 11, color: '#4ade80', marginBottom: 8, padding: '6px 10px', background: '#0a2a0a', borderRadius: 6 }}>
-            ✓ Salvato in DB: {settings.channels.filter(Boolean).join(', ')}
+            ✓ Salvato: {settings.channels.filter(Boolean).join(', ')}
           </div>
         )}
         {s.channels.map((ch, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
-            <input className="inp" value={ch}
-              placeholder="@username oppure -1001234567890"
+            <input className="inp" value={ch} placeholder="@username oppure -1001234567890"
               onChange={e => { const v = e.target.value; setS(prev => ({ ...prev, channels: prev.channels.map((c, j) => j === i ? v : c) })); }} />
             <button className="btn bre bic" onClick={() => setS(prev => ({ ...prev, channels: prev.channels.filter((_, j) => j !== i) }))}>×</button>
           </div>
@@ -752,7 +769,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           onClick={() => setS(prev => ({ ...prev, channels: [...prev.channels, ''] }))}>+ Aggiungi canale</button>
       </div>
 
-      {/* ── AutoPost ── */}
       <div className="stit">AUTOPOST</div>
       <ToggleRow label="AutoPost attivo" sub="Pubblicazione automatica programmata" value={s.attivo} onChange={v => setS({ ...s, attivo: v })} />
       <div style={{ height: 12 }} />
