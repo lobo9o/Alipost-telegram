@@ -64,6 +64,8 @@ export interface TextEl {
   strokeColor: string;
   strokeWidth: number;
   strikethrough: boolean;
+  strikethroughColor: string;
+  textAnchor: 'left' | 'right';
   text: string;
 }
 
@@ -93,7 +95,8 @@ const defText = (o: Partial<TextEl> = {}): TextEl => ({
   enabled: false, x: 5, y: 70, fontSize: 36,
   fontFamily: 'Impact', bold: false,
   color: '#ffffff', strokeEnabled: true, strokeColor: '#000000', strokeWidth: 3,
-  strikethrough: false, text: '',
+  strikethrough: false, strikethroughColor: '#ffffff',
+  textAnchor: 'left', text: '',
   ...o,
 });
 const defImg = (o: Partial<ImgEl> = {}): ImgEl => ({

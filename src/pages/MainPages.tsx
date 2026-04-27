@@ -78,7 +78,9 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       {/* Text elements with actual values */}
       {template.prezzo.enabled && (
         <div style={{
-          position: 'absolute', left: `${template.prezzo.x}%`, top: `${template.prezzo.y}%`,
+          position: 'absolute',
+          ...(template.prezzo.textAnchor === 'right' ? { right: `${100 - template.prezzo.x}%` } : { left: `${template.prezzo.x}%` }),
+          top: `${template.prezzo.y}%`,
           fontSize: `${template.prezzo.fontSize * TPL_SCALE}px`,
           fontFamily: template.prezzo.fontFamily, fontWeight: template.prezzo.bold ? 700 : 400,
           color: template.prezzo.color, whiteSpace: 'nowrap', pointerEvents: 'none',
@@ -87,18 +89,22 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       )}
       {template.prezzoPrecedente.enabled && (
         <div style={{
-          position: 'absolute', left: `${template.prezzoPrecedente.x}%`, top: `${template.prezzoPrecedente.y}%`,
+          position: 'absolute',
+          ...(template.prezzoPrecedente.textAnchor === 'right' ? { right: `${100 - template.prezzoPrecedente.x}%` } : { left: `${template.prezzoPrecedente.x}%` }),
+          top: `${template.prezzoPrecedente.y}%`,
           fontSize: `${template.prezzoPrecedente.fontSize * TPL_SCALE}px`,
           fontFamily: template.prezzoPrecedente.fontFamily, fontWeight: template.prezzoPrecedente.bold ? 700 : 400,
           color: template.prezzoPrecedente.color,
-          textDecoration: template.prezzoPrecedente.strikethrough ? 'line-through' : 'none',
+          textDecoration: template.prezzoPrecedente.strikethrough ? `line-through ${template.prezzoPrecedente.strikethroughColor || template.prezzoPrecedente.color}` : 'none',
           whiteSpace: 'nowrap', pointerEvents: 'none',
           WebkitTextStroke: template.prezzoPrecedente.strokeEnabled ? `${template.prezzoPrecedente.strokeWidth * TPL_SCALE}px ${template.prezzoPrecedente.strokeColor}` : undefined,
         }}>€{post.originalPrice.toFixed(2)}</div>
       )}
       {template.sconto.enabled && (
         <div style={{
-          position: 'absolute', left: `${template.sconto.x}%`, top: `${template.sconto.y}%`,
+          position: 'absolute',
+          ...(template.sconto.textAnchor === 'right' ? { right: `${100 - template.sconto.x}%` } : { left: `${template.sconto.x}%` }),
+          top: `${template.sconto.y}%`,
           fontSize: `${template.sconto.fontSize * TPL_SCALE}px`,
           fontFamily: template.sconto.fontFamily, fontWeight: template.sconto.bold ? 700 : 400,
           color: template.sconto.color, whiteSpace: 'nowrap', pointerEvents: 'none',
@@ -107,11 +113,13 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       )}
       {template.testoCustom.enabled && post.customText && (
         <div style={{
-          position: 'absolute', left: `${template.testoCustom.x}%`, top: `${template.testoCustom.y}%`,
+          position: 'absolute',
+          ...(template.testoCustom.textAnchor === 'right' ? { right: `${100 - template.testoCustom.x}%` } : { left: `${template.testoCustom.x}%` }),
+          top: `${template.testoCustom.y}%`,
           fontSize: `${template.testoCustom.fontSize * TPL_SCALE}px`,
           fontFamily: template.testoCustom.fontFamily, fontWeight: template.testoCustom.bold ? 700 : 400,
           color: template.testoCustom.color,
-          textDecoration: template.testoCustom.strikethrough ? 'line-through' : 'none',
+          textDecoration: template.testoCustom.strikethrough ? `line-through ${template.testoCustom.strikethroughColor || template.testoCustom.color}` : 'none',
           whiteSpace: 'nowrap', pointerEvents: 'none',
           WebkitTextStroke: template.testoCustom.strokeEnabled ? `${template.testoCustom.strokeWidth * TPL_SCALE}px ${template.testoCustom.strokeColor}` : undefined,
         }}>{post.customText}</div>

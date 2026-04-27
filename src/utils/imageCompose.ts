@@ -33,6 +33,7 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string) {
   const fs = el.fontSize * 2; // template px → 1024 canvas
 
   ctx.save();
+  ctx.textAlign = el.textAnchor === 'right' ? 'right' : 'left';
   ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}`;
   ctx.textBaseline = 'top';
 
@@ -49,11 +50,12 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string) {
   if (el.strikethrough) {
     const metrics = ctx.measureText(text);
     const strikeY = y + fs * 0.55;
-    ctx.strokeStyle = el.color;
+    const startX = el.textAnchor === 'right' ? x - metrics.width : x;
+    ctx.strokeStyle = el.strikethroughColor || el.color;
     ctx.lineWidth = Math.max(1, fs * 0.06);
     ctx.beginPath();
-    ctx.moveTo(x, strikeY);
-    ctx.lineTo(x + metrics.width, strikeY);
+    ctx.moveTo(startX, strikeY);
+    ctx.lineTo(startX + metrics.width, strikeY);
     ctx.stroke();
   }
 

@@ -306,11 +306,14 @@ export function TemplatePreviewer({ tpl }: { tpl: Template }) {
       ]).map(({ el, text }, i) =>
         el.enabled ? (
           <div key={i} style={{
-            position: 'absolute', left: `${el.x}%`, top: `${el.y}%`,
+            position: 'absolute',
+            ...(el.textAnchor === 'right'
+              ? { right: `${100 - el.x}%`, top: `${el.y}%` }
+              : { left: `${el.x}%`, top: `${el.y}%` }),
             fontSize: `${el.fontSize * PREVIEW_SCALE}px`,
             fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
             color: el.color,
-            textDecoration: el.strikethrough ? 'line-through' : 'none',
+            textDecoration: el.strikethrough ? `line-through ${el.strikethroughColor || el.color}` : 'none',
             WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * PREVIEW_SCALE}px ${el.strokeColor}` : undefined,
             whiteSpace: 'nowrap', pointerEvents: 'none',
           }}>{text}</div>
@@ -357,9 +360,6 @@ function OverlayImgPanel({ el, onUpdate, onFile }: {
 }) {
   return (
     <>
-      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 12 }}>
-        <ToggleRow label="Mostra overlay" value={el.enabled} onChange={v => onUpdate({ enabled: v })} />
-      </div>
       <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
       <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={10} max={100} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
@@ -382,9 +382,6 @@ function BadgeImgPanel({ el, onUpdate, onFile }: {
 }) {
   return (
     <>
-      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 12 }}>
-        <ToggleRow label="Badge minimo storico" sub="Visibile solo se il prodotto è al minimo storico" value={el.enabled} onChange={v => onUpdate({ enabled: v })} />
-      </div>
       <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
       <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={50} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
@@ -406,17 +403,18 @@ function StorePanel({ el, onUpdate }: {
 }) {
   return (
     <>
-      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 12 }}>
-        <ToggleRow label="Logo store" sub="Amazon o AliExpress — automatico in base al link" value={el.enabled} onChange={v => onUpdate({ enabled: v })} />
-      </div>
       <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
       <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={40} />
-      <InfoBanner>🟡 Amazon · 🔴 AliExpress — il logo si adatta automaticamente al tipo di prodotto</InfoBanner>
     </>
   );
 }
 
-const FONTS = ['Impact', 'Arial', 'Arial Black', 'Georgia', 'Verdana', 'Courier New'];
+const FONTS = [
+  'Impact', 'Arial', 'Arial Black', 'Arial Narrow',
+  'Georgia', 'Verdana', 'Trebuchet MS', 'Times New Roman',
+  'Courier New', 'Comic Sans MS', 'Palatino Linotype',
+  'Gill Sans', 'Century Gothic', 'Tahoma', 'Futura',
+];
 
 function TextElPanel({ el, onUpdate, showTextInput = false }: {
   el: TextEl;
@@ -425,10 +423,6 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
 }) {
   return (
     <>
-      <div style={{ background: 'var(--bg3)', borderRadius: 8, marginBottom: 12 }}>
-        <ToggleRow label="Attivo" value={el.enabled} onChange={v => onUpdate({ enabled: v })} />
-      </div>
-
       {showTextInput && (
         <div style={{ marginBottom: 12 }}>
           <div className="lbl">TESTO</div>
@@ -436,8 +430,18 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
         </div>
       )}
 
-      {/* Position arrows first — near the preview */}
       <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
+
+      {/* Direzione crescita testo */}
+      <div style={{ marginBottom: 12 }}>
+        <div className="lbl">ANCORA TESTO</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className={`btn bsm ${(el.textAnchor ?? 'left') === 'left' ? 'bp' : 'bgh'}`}
+            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'left' })}>← da sinistra</button>
+          <button className={`btn bsm ${el.textAnchor === 'right' ? 'bp' : 'bgh'}`}
+            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'right' })}>da destra →</button>
+        </div>
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>DIMENSIONE FONT</span>
@@ -454,12 +458,21 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
         </select>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <button className={`btn bsm ${el.bold ? 'bp' : 'bgh'}`} style={{ flex: 1, fontWeight: 700 }}
           onClick={() => onUpdate({ bold: !el.bold })}>B Grassetto</button>
         <button className={`btn bsm ${el.strikethrough ? 'bp' : 'bgh'}`} style={{ flex: 1, textDecoration: 'line-through' }}
           onClick={() => onUpdate({ strikethrough: !el.strikethrough })}>S Barrato</button>
       </div>
+
+      {el.strikethrough && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>COLORE BARRA BARRATO</span>
+          <input type="color" value={el.strikethroughColor || el.color}
+            style={{ width: 40, height: 30, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+            onChange={e => onUpdate({ strikethroughColor: e.target.value })} />
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>COLORE TESTO</span>
@@ -495,6 +508,17 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
 
 type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store';
 
+const COMP_INFO: Record<ComponentKey, string> = {
+  product:          '📦 Riquadro dove apparirà la foto del prodotto. Spostalo con le frecce e ridimensionalo con lo slider.',
+  overlay:          '🖼️ Immagine sovrapposta (cornice, sfondo decorativo). Carica un PNG con trasparenza. Spostalo e ridimensionalo.',
+  badge:            '🏆 Icona visibile solo sui prodotti al minimo storico. Viene disegnata sopra tutti gli altri layer. Carica un PNG e posizionalo.',
+  prezzo:           '💰 Prezzo scontato — inserito automaticamente dal post. Spostalo, scegli font e colore. Con "ancora destra" il testo cresce verso sinistra dal punto impostato.',
+  prezzoPrecedente: '📉 Prezzo precedente (barrato) — inserito automaticamente. Puoi cambiare il colore della barra barrata separatamente dal colore del testo.',
+  sconto:           '🏷️ Percentuale di sconto — calcolata automaticamente (es. -50%). Impostane font, colore e posizione.',
+  testoCustom:      '📝 Testo libero personalizzabile. Corrisponde al campo "Testo custom" del post. Puoi scrivere un testo fisso o lasciarlo vuoto.',
+  store:            '🏪 Logo negozio automatico: arancio Amazon, rosso AliExpress. Si adatta in base al tipo di prodotto del post.',
+};
+
 const COMP_BUTTONS: { id: ComponentKey; icon: string; label: string }[] = [
   { id: 'product',          icon: '📦', label: 'Foto' },
   { id: 'overlay',          icon: '🖼️', label: 'Overlay' },
@@ -515,6 +539,7 @@ function getElEnabled(id: ComponentKey, tpl: Template): boolean {
 function TemplateSection() {
   const { templates, setTemplates } = useApp();
   const [activePanel, setActivePanel] = useState<ComponentKey | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
 
   const tpl = templates[0] ?? makeDefaultTemplate('tpl1');
 
@@ -580,36 +605,65 @@ function TemplateSection() {
 
   return (
     <>
-      {/* Bottoni + toggle ON/OFF SOPRA l'anteprima */}
-      <div style={{ display: 'flex', gap: 6, padding: '10px 16px 8px', overflowX: 'auto' }}>
-        {COMP_BUTTONS.map(b => {
-          const enabled = getElEnabled(b.id, tpl);
-          const isActive = activePanel === b.id;
-          const canToggle = b.id !== 'product';
-          return (
-            <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-              <button
-                className={`btn bsm ${isActive ? 'bp' : 'bgh'}`}
-                style={{ fontSize: 11, opacity: canToggle && !enabled ? 0.45 : 1 }}
-                onClick={() => setActivePanel(isActive ? null : b.id)}
-              >
-                {b.icon} {b.label}
-              </button>
-              {canToggle && (
+      {/* Bottoni + toggle ON/OFF + ℹ️ SOPRA l'anteprima */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, padding: '10px 16px 8px' }}>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1 }}>
+          {COMP_BUTTONS.map(b => {
+            const enabled = getElEnabled(b.id, tpl);
+            const isActive = activePanel === b.id;
+            const canToggle = b.id !== 'product';
+            return (
+              <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                 <button
-                  onClick={() => toggleEnabled(b.id)}
-                  style={{
-                    fontSize: 9, padding: '1px 8px', borderRadius: 8, cursor: 'pointer',
-                    background: enabled ? 'var(--a1)' : 'var(--bg3)',
-                    color: enabled ? '#fff' : 'var(--t3)',
-                    border: 'none', lineHeight: 1.6,
-                  }}
-                >{enabled ? 'ON' : 'OFF'}</button>
-              )}
-            </div>
-          );
-        })}
+                  className={`btn bsm ${isActive ? 'bp' : 'bgh'}`}
+                  style={{ fontSize: 11, opacity: canToggle && !enabled ? 0.45 : 1 }}
+                  onClick={() => setActivePanel(isActive ? null : b.id)}
+                >
+                  {b.icon} {b.label}
+                </button>
+                {canToggle && (
+                  <button
+                    onClick={() => toggleEnabled(b.id)}
+                    style={{
+                      fontSize: 9, padding: '1px 8px', borderRadius: 8, cursor: 'pointer',
+                      background: enabled ? 'var(--a1)' : 'var(--bg3)',
+                      color: enabled ? '#fff' : 'var(--t3)',
+                      border: 'none', lineHeight: 1.6,
+                    }}
+                  >{enabled ? 'ON' : 'OFF'}</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {/* Bottone info contestuale */}
+        <button
+          className={`btn bsm ${showInfo ? 'bp' : 'bgh'}`}
+          style={{ flexShrink: 0, marginLeft: 6, fontSize: 14, padding: '4px 10px' }}
+          onClick={() => setShowInfo(v => !v)}
+          title="Info componente"
+        >ℹ️</button>
       </div>
+
+      {/* Box info contestuale */}
+      {showInfo && activePanel && (
+        <div style={{
+          margin: '0 16px 6px', padding: '10px 12px',
+          background: 'var(--bg3)', borderRadius: 8, borderLeft: '3px solid var(--a1)',
+          fontSize: 12, color: 'var(--t2)', lineHeight: 1.5,
+        }}>
+          {COMP_INFO[activePanel]}
+        </div>
+      )}
+      {showInfo && !activePanel && (
+        <div style={{
+          margin: '0 16px 6px', padding: '10px 12px',
+          background: 'var(--bg3)', borderRadius: 8,
+          fontSize: 12, color: 'var(--t3)', fontStyle: 'italic',
+        }}>
+          Seleziona un componente per vedere le informazioni relative.
+        </div>
+      )}
 
       {/* Anteprima live */}
       <TemplatePreviewer tpl={tpl} />
