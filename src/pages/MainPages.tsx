@@ -39,7 +39,7 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
     <div style={{
       margin: '0 16px 12px', borderRadius: 10, overflow: 'hidden',
       position: 'relative', aspectRatio: '1/1', background: template.bgColor,
-      boxShadow: '0 2px 16px rgba(0,0,0,0.35)',
+      boxShadow: '0 2px 16px rgba(0,0,0,0.35)', isolation: 'isolate',
     }}>
       {/* Product image at template position */}
       <div style={{
@@ -121,7 +121,7 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       {template.badge.enabled && post.isHistoricalLow && template.badge.src && (
         <img src={template.badge.src} alt="" style={{
           position: 'absolute', left: `${template.badge.x}%`, top: `${template.badge.y}%`,
-          width: `${template.badge.size}%`, objectFit: 'contain', pointerEvents: 'none', zIndex: 99,
+          width: `${template.badge.size}%`, objectFit: 'contain', pointerEvents: 'none', zIndex: 5,
         }} />
       )}
     </div>

@@ -264,7 +264,7 @@ export function TemplatePreviewer({ tpl }: { tpl: Template }) {
     <div style={{
       margin: '12px 16px', borderRadius: 10, overflow: 'hidden',
       position: 'relative', aspectRatio: '1/1', background: tpl.bgColor,
-      boxShadow: '0 2px 16px rgba(0,0,0,0.4)',
+      boxShadow: '0 2px 16px rgba(0,0,0,0.4)', isolation: 'isolate',
     }}>
       {/* Product placeholder box */}
       <div style={{
@@ -317,18 +317,18 @@ export function TemplatePreviewer({ tpl }: { tpl: Template }) {
         ) : null
       )}
 
-      {/* Badge — sopra tutto, incluso il testo */}
+      {/* Badge — sopra tutto, incluso il testo (z-index contenuto dentro isolation:isolate) */}
       {tpl.badge.enabled && tpl.badge.src && (
         <img src={tpl.badge.src} alt="" style={{
           position: 'absolute', left: `${tpl.badge.x}%`, top: `${tpl.badge.y}%`,
-          width: `${tpl.badge.size}%`, objectFit: 'contain', pointerEvents: 'none', zIndex: 99,
+          width: `${tpl.badge.size}%`, objectFit: 'contain', pointerEvents: 'none', zIndex: 5,
         }} />
       )}
       {tpl.badge.enabled && !tpl.badge.src && (
         <div style={{
           position: 'absolute', left: `${tpl.badge.x}%`, top: `${tpl.badge.y}%`,
           background: '#fbbf24', color: '#000', fontSize: 7, padding: '2px 4px',
-          borderRadius: 3, fontWeight: 700, pointerEvents: 'none', zIndex: 99,
+          borderRadius: 3, fontWeight: 700, pointerEvents: 'none', zIndex: 5,
         }}>🏆 MIN</div>
       )}
     </div>
@@ -568,24 +568,45 @@ function TemplateSection() {
   const isTextKey = (k: ComponentKey): k is 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' =>
     ['prezzo', 'prezzoPrecedente', 'sconto', 'testoCustom'].includes(k);
 
+  const toggleEnabled = (id: ComponentKey) => {
+    if (id === 'product') return;
+    const cur = getElEnabled(id, tpl);
+    if (id === 'overlay' || id === 'badge' || id === 'store') {
+      updateImg(id as 'overlay' | 'badge' | 'store', { enabled: !cur });
+    } else {
+      updateText(id as 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom', { enabled: !cur });
+    }
+  };
+
   return (
     <>
-      {/* Bottoni SOPRA l'anteprima — così le frecce nel pannello restano vicine alla preview */}
+      {/* Bottoni + toggle ON/OFF SOPRA l'anteprima */}
       <div style={{ display: 'flex', gap: 6, padding: '10px 16px 8px', overflowX: 'auto' }}>
         {COMP_BUTTONS.map(b => {
           const enabled = getElEnabled(b.id, tpl);
           const isActive = activePanel === b.id;
+          const canToggle = b.id !== 'product';
           return (
-            <button key={b.id}
-              className={`btn bsm ${isActive ? 'bp' : enabled && b.id !== 'product' ? 'bs' : 'bgh'}`}
-              style={{ flexShrink: 0, fontSize: 11 }}
-              onClick={() => setActivePanel(isActive ? null : b.id)}
-            >
-              {b.icon} {b.label}
-              {enabled && !isActive && b.id !== 'product' && (
-                <span style={{ marginLeft: 3, fontSize: 7, color: 'var(--a3)' }}>●</span>
+            <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+              <button
+                className={`btn bsm ${isActive ? 'bp' : 'bgh'}`}
+                style={{ fontSize: 11, opacity: canToggle && !enabled ? 0.45 : 1 }}
+                onClick={() => setActivePanel(isActive ? null : b.id)}
+              >
+                {b.icon} {b.label}
+              </button>
+              {canToggle && (
+                <button
+                  onClick={() => toggleEnabled(b.id)}
+                  style={{
+                    fontSize: 9, padding: '1px 8px', borderRadius: 8, cursor: 'pointer',
+                    background: enabled ? 'var(--a1)' : 'var(--bg3)',
+                    color: enabled ? '#fff' : 'var(--t3)',
+                    border: 'none', lineHeight: 1.6,
+                  }}
+                >{enabled ? 'ON' : 'OFF'}</button>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
