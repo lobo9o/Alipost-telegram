@@ -9,7 +9,7 @@ import { productApi, postsApi, autopostApi } from '../lib/api';
 import { generatePostImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
-const TPL_SCALE = 0.32; // preview CSS scale vs canvas 1024
+const TPL_SCALE = 0.65; // allineato a canvas: fontSize*2 / preview ~340px
 
 function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
   const hasImage = post.image && post.image !== 'placeholder.jpg';
@@ -59,14 +59,6 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
           position: 'absolute', left: `${template.overlay.x}%`, top: `${template.overlay.y}%`,
           width: `${template.overlay.size}%`, height: `${template.overlay.size}%`,
           objectFit: 'contain', pointerEvents: 'none',
-        }} />
-      )}
-
-      {/* Badge — solo se minimo storico */}
-      {template.badge.enabled && post.isHistoricalLow && template.badge.src && (
-        <img src={template.badge.src} alt="" style={{
-          position: 'absolute', left: `${template.badge.x}%`, top: `${template.badge.y}%`,
-          width: `${template.badge.size}%`, objectFit: 'contain', pointerEvents: 'none',
         }} />
       )}
 
@@ -123,6 +115,14 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
           whiteSpace: 'nowrap', pointerEvents: 'none',
           WebkitTextStroke: template.testoCustom.strokeEnabled ? `${template.testoCustom.strokeWidth * TPL_SCALE}px ${template.testoCustom.strokeColor}` : undefined,
         }}>{post.customText}</div>
+      )}
+
+      {/* Badge — sopra tutto, incluso il testo, solo se minimo storico */}
+      {template.badge.enabled && post.isHistoricalLow && template.badge.src && (
+        <img src={template.badge.src} alt="" style={{
+          position: 'absolute', left: `${template.badge.x}%`, top: `${template.badge.y}%`,
+          width: `${template.badge.size}%`, objectFit: 'contain', pointerEvents: 'none', zIndex: 99,
+        }} />
       )}
     </div>
   );

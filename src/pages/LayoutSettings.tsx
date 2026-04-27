@@ -255,8 +255,8 @@ function SizeSlider({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE' 
   );
 }
 
-// Live CSS preview
-const PREVIEW_SCALE = 0.3;
+// Scale che allinea la preview CSS al canvas 1024px (fontSize * 2 / preview ~340px)
+const PREVIEW_SCALE = 0.65;
 
 export function TemplatePreviewer({ tpl }: { tpl: Template }) {
   const pp = tpl.product;
@@ -284,21 +284,6 @@ export function TemplatePreviewer({ tpl }: { tpl: Template }) {
           width: `${tpl.overlay.size}%`, height: `${tpl.overlay.size}%`,
           objectFit: 'contain', pointerEvents: 'none',
         }} />
-      )}
-
-      {/* Badge */}
-      {tpl.badge.enabled && tpl.badge.src && (
-        <img src={tpl.badge.src} alt="" style={{
-          position: 'absolute', left: `${tpl.badge.x}%`, top: `${tpl.badge.y}%`,
-          width: `${tpl.badge.size}%`, objectFit: 'contain', pointerEvents: 'none',
-        }} />
-      )}
-      {tpl.badge.enabled && !tpl.badge.src && (
-        <div style={{
-          position: 'absolute', left: `${tpl.badge.x}%`, top: `${tpl.badge.y}%`,
-          background: '#fbbf24', color: '#000', fontSize: 7, padding: '2px 4px',
-          borderRadius: 3, fontWeight: 700, pointerEvents: 'none',
-        }}>🏆 MIN</div>
       )}
 
       {/* Store icon */}
@@ -330,6 +315,21 @@ export function TemplatePreviewer({ tpl }: { tpl: Template }) {
             whiteSpace: 'nowrap', pointerEvents: 'none',
           }}>{text}</div>
         ) : null
+      )}
+
+      {/* Badge — sopra tutto, incluso il testo */}
+      {tpl.badge.enabled && tpl.badge.src && (
+        <img src={tpl.badge.src} alt="" style={{
+          position: 'absolute', left: `${tpl.badge.x}%`, top: `${tpl.badge.y}%`,
+          width: `${tpl.badge.size}%`, objectFit: 'contain', pointerEvents: 'none', zIndex: 99,
+        }} />
+      )}
+      {tpl.badge.enabled && !tpl.badge.src && (
+        <div style={{
+          position: 'absolute', left: `${tpl.badge.x}%`, top: `${tpl.badge.y}%`,
+          background: '#fbbf24', color: '#000', fontSize: 7, padding: '2px 4px',
+          borderRadius: 3, fontWeight: 700, pointerEvents: 'none', zIndex: 99,
+        }}>🏆 MIN</div>
       )}
     </div>
   );

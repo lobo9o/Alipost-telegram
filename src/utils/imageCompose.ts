@@ -105,17 +105,6 @@ export async function generatePostImage(
     } catch { /* skip */ }
   }
 
-  // Badge (only when isHistoricalLow)
-  if (template.badge.enabled && isHistoricalLow && template.badge.src) {
-    try {
-      const img = await loadImage(template.badge.src);
-      const el = template.badge;
-      const w = (el.size / 100) * CANVAS_SIZE;
-      const h = (img.naturalHeight / img.naturalWidth) * w;
-      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, w, h);
-    } catch { /* skip */ }
-  }
-
   // Store logo (Amazon / AliExpress auto icon)
   if (template.store.enabled) {
     try {
@@ -131,6 +120,17 @@ export async function generatePostImage(
   drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text);
   drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text);
   drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text);
+
+  // Badge — ULTIMO livello, sopra tutto incluso il testo
+  if (template.badge.enabled && isHistoricalLow && template.badge.src) {
+    try {
+      const img = await loadImage(template.badge.src);
+      const el = template.badge;
+      const w = (el.size / 100) * CANVAS_SIZE;
+      const h = (img.naturalHeight / img.naturalWidth) * w;
+      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, w, h);
+    } catch { /* skip */ }
+  }
 
   return canvas.toDataURL('image/jpeg', 0.88);
 }
