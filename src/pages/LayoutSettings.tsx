@@ -410,10 +410,28 @@ function StorePanel({ el, onUpdate }: {
 }
 
 const FONTS = [
-  'Impact', 'Arial', 'Arial Black', 'Arial Narrow',
-  'Georgia', 'Verdana', 'Trebuchet MS', 'Times New Roman',
-  'Courier New', 'Comic Sans MS', 'Palatino Linotype',
-  'Gill Sans', 'Century Gothic', 'Tahoma', 'Futura',
+  'Arial',
+  'Bangers',
+  'Comix Heavy',
+  'Edwardian Script ITC',
+  'Exo 2',
+  'Gobold Italic',
+  'Impact',
+  'Gotham Rounded',
+  'Lemon Milk Bold',
+  'Lemon Milk Bold Italic',
+  'Lemon Milk Light',
+  'Lemon Milk Light Italic',
+  'Lobster',
+  'Milano',
+  'Montserrat',
+  'Montserrat Bold',
+  'Montserrat Bold Italic',
+  'Open Sans',
+  'Open Sans Bold',
+  'Open Sans Bold Italic',
+  'Open Sans Italic',
+  'The Blacklist',
 ];
 
 function TextElPanel({ el, onUpdate, showTextInput = false }: {

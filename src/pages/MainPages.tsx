@@ -358,17 +358,14 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 interface LinkItem { id: string; url: string; platform: Platform; }
 
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { createdPosts, setCreatedPosts, setQueue, setPublished, layouts, templates } = useApp();
+  const { createdPosts, setQueue, layouts, templates } = useApp();
 
-  const [phase, setPhase] = useState<'input' | 'loading' | 'posts'>('input');
+  const [phase, setPhase] = useState<'input' | 'loading'>('input');
   const [mode, setMode] = useState<'single' | 'multi'>('single');
   const [linkInput, setLinkInput] = useState('');
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [err, setErr] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [currentIdx, setCurrentIdx] = useState(0);
-
-  const safeIdx = Math.min(currentIdx, Math.max(0, createdPosts.length - 1));
 
   const showFeedback = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(''), 2500); };
 
@@ -384,7 +381,6 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 
   const creaPost = async () => {
     if (!links.length) return;
-    const prevLen = createdPosts.length;
     setPhase('loading');
     setErr('');
     try {
@@ -402,59 +398,26 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         }
       }));
 
-      // Optimistic local update first, then persist in background
-      setCreatedPosts(prev => [...prev, ...newPosts]);
-      setCurrentIdx(prevLen);
-      setLinks([]);
-      setPhase('posts');
-      showFeedback(`✅ ${newPosts.length} post creati con successo`);
+      // Aggiungi direttamente alla coda e naviga
+      const queueItems: QueueItem[] = newPosts.map(p => ({
+        id: genId(), tipo: 'single' as const, posts: [p], sched: 'Auto', status: 'draft' as const, sel: false,
+      }));
+      setQueue(prev => [...prev, ...queueItems]);
       newPosts.forEach(p => postsApi.create(p).catch(() => {}));
+      queueItems.forEach(item => autopostApi.create(item).catch(() => {}));
+      setLinks([]);
+      nav('queue');
     } catch (err) {
       setErr(err instanceof Error ? err.message : 'Errore durante l\'analisi dei link. Riprova.');
       setPhase('input');
     }
   };
 
-  const deletePost = (id: string) => {
-    setCreatedPosts(prev => prev.filter(p => p.id !== id));
-    setCurrentIdx(i => Math.max(0, i - 1));
-    postsApi.delete(id).catch(() => {});
-  };
-
-  const addToQueue = (post: CreatedPost) => {
-    const item: QueueItem = { id: genId(), tipo: 'single', posts: [post], sched: 'Auto', status: 'draft', sel: false };
-    setQueue(prev => [...prev, item]);
-    autopostApi.create(item).catch(() => {});
-    deletePost(post.id);
-    showFeedback('📬 Post aggiunto alla coda');
-  };
-
-  const publishPost = async (post: CreatedPost) => {
-    const currentLayout = layouts.find(l => l.id === post.layoutId);
-    setErr('');
-    setPhase('loading');
-    try {
-      await postsApi.publish(post.id, {
-        post,
-        layoutContenuto: currentLayout?.contenuto,
-      });
-      setPublished(prev => [...prev, { id: genId(), emoji: post.emoji, title: post.title, price: post.discountedPrice.toFixed(2), platform: post.platform, ts: 'ora' }]);
-      deletePost(post.id);
-      nav('published');
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Errore durante la pubblicazione');
-      setPhase('posts');
-    }
-  };
 
   return (
     <div className="pg">
       <PageHeader title="Nuovo Post" onBack={() => nav('dash')}
         badge={createdPosts.length > 0 ? createdPosts.length : undefined} badgeVariant="purple"
-        right={phase === 'posts' && createdPosts.length > 0
-          ? <button className="btn bgh bsm" style={{ fontSize: 11 }} onClick={() => setPhase('input')}>+ Link</button>
-          : undefined
-        }
       />
 
       {/* ── INPUT PHASE ── */}
@@ -509,8 +472,8 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 
           {createdPosts.length > 0 && (
             <div style={{ padding: links.length > 0 ? '0 16px 16px' : '8px 16px 16px' }}>
-              <button className="btn bs bfull" onClick={() => setPhase('posts')}>
-                📋 Visualizza bozze ({createdPosts.length})
+              <button className="btn bs bfull" onClick={() => nav('queue')}>
+                📋 Vai alla coda ({createdPosts.length})
               </button>
             </div>
           )}
@@ -531,63 +494,6 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
       )}
 
-      {/* ── POSTS PHASE ── */}
-      {phase === 'posts' && (
-        <>
-          {createdPosts.length === 0 ? (
-            <EmptyState icon="✅" text="Tutti i post aggiunti alla coda!"
-              action={<button className="btn bp" onClick={() => setPhase('input')}>+ Crea nuovi post</button>}
-            />
-          ) : (
-            <>
-              {feedback && <div className="feedback-ok" style={{ margin: '8px 16px 0' }}>{feedback}</div>}
-
-              {/* Carousel navigation */}
-              <div className="carousel-ctrl">
-                <button className="btn bgh bsm" disabled={safeIdx === 0} onClick={() => setCurrentIdx(i => i - 1)}>←</button>
-                <span style={{ flex: 1, textAlign: 'center', fontSize: 12, color: 'var(--t2)', fontWeight: 600 }}>
-                  Post {safeIdx + 1} / {createdPosts.length}
-                </span>
-                <button className="btn bgh bsm" disabled={safeIdx === createdPosts.length - 1} onClick={() => setCurrentIdx(i => i + 1)}>→</button>
-              </div>
-
-              {/* Dot navigator */}
-              <div className="dots-row">
-                {createdPosts.map((_, i) => (
-                  <div key={i} className={`dot ${i === safeIdx ? 'on' : ''}`}
-                    style={{ width: i === safeIdx ? 18 : 6 }} onClick={() => setCurrentIdx(i)} />
-                ))}
-              </div>
-
-              {/* Current post card */}
-              <PostCard
-                postId={createdPosts[safeIdx].id}
-                onDelete={() => deletePost(createdPosts[safeIdx].id)}
-                onQueue={() => addToQueue(createdPosts[safeIdx])}
-                onPublish={() => publishPost(createdPosts[safeIdx])}
-              />
-
-              {/* POST CREATI list overview */}
-              {createdPosts.length > 0 && (
-                <>
-                  <div className="stit">POST CREATI ({createdPosts.length})</div>
-                  {createdPosts.map((p, i) => (
-                    <PostListItem
-                      key={p.id}
-                      post={p}
-                      isActive={i === safeIdx}
-                      onEdit={() => setCurrentIdx(i)}
-                      onDelete={() => deletePost(p.id)}
-                      onQueue={() => addToQueue(p)}
-                      onPublish={() => publishPost(p)}
-                    />
-                  ))}
-                </>
-              )}
-            </>
-          )}
-        </>
-      )}
     </div>
   );
 }
@@ -596,9 +502,17 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 // QUEUE PAGE
 // ============================================================
 export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
-  const { queue, setQueue, layouts, templates, setPublished } = useApp();
+  const { queue, setQueue, layouts, templates, tags, setPublished } = useApp();
   const [multiSelect, setMultiSelect] = useState(false);
   const [publishErr, setPublishErr] = useState<{ id: string; msg: string } | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const updateQueuePost = (itemId: string, changes: Partial<CreatedPost>) => {
+    setQueue(q => q.map(x => x.id === itemId
+      ? { ...x, posts: [{ ...x.posts[0], ...changes }] }
+      : x
+    ));
+  };
   const selCount = queue.filter(x => x.sel).length;
 
   const toggle = (id: string) => setQueue(q => q.map(x => x.id === id ? { ...x, sel: !x.sel } : x));
@@ -696,43 +610,132 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
       )}
 
-      {publishErr && <ErrorBanner>{publishErr.msg}</ErrorBanner>}
-
       {!queue.length ? (
         <EmptyState icon="🗓️" text="Nessun post in coda." action={<button className="btn bp" onClick={() => nav('newpost')}>+ Nuovo post</button>} />
       ) : (
         <>
           <div style={{ height: 10 }} />
           {queue.map((item, idx) => {
-            const p = firstPost(item);
+            const p = firstPost(item) as CreatedPost | undefined;
+            const template = templates.find(t => t.id === p?.templateId);
+            const layout = layouts.find(l => l.id === p?.layoutId);
+            const previewText = (layout && p) ? resolvePostTags(layout.contenuto, p, tags) : '';
+            const isExpanded = expandedId === item.id;
             return (
-              <div key={item.id} className="qi" style={{ position: 'relative' }}>
+              <div key={item.id} className="qi" style={{ position: 'relative', padding: 0, overflow: 'hidden' }}>
                 {multiSelect && (
                   <div className={`qsel ${item.sel ? 'on' : ''}`} onClick={() => toggle(item.id)}>
                     {item.sel && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
                   </div>
                 )}
-                <div className="qi-h">
+
+                {/* ── Anteprima immagine + testo (visibile quando NON in modifica) ── */}
+                {!isExpanded && p && (
+                  <>
+                    <TemplateImagePreview post={p} template={template} />
+                    {previewText && (
+                      <div style={{
+                        margin: '0 16px 10px', padding: '10px 12px',
+                        background: 'var(--bg3)', borderRadius: 8,
+                        fontSize: 11, color: 'var(--t2)', lineHeight: 1.5,
+                        maxHeight: 80, overflow: 'hidden',
+                        display: '-webkit-box', WebkitLineClamp: 4,
+                        WebkitBoxOrient: 'vertical' as any,
+                      }}>{previewText}</div>
+                    )}
+                  </>
+                )}
+
+                {/* ── Header ── */}
+                <div className="qi-h" style={{ padding: '8px 14px' }}>
                   <span className={`qtype ${item.tipo}`}>{item.tipo === 'single' ? 'Singolo' : 'Multi'}</span>
                   <SourceBadge platform={p?.platform ?? 'amazon'} />
                   <span style={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', paddingLeft: 4 }}>
-                    {p?.emoji} {p?.title?.slice(0, 22)}
-                    {item.posts.length > 1 && ` +${item.posts.length - 1}`}
+                    {p?.emoji} {p?.title?.slice(0, 26)}{item.posts.length > 1 ? ` +${item.posts.length - 1}` : ''}
                   </span>
                   <StatusBadge status={item.status} />
                 </div>
+
+                {/* ── Metadati ── */}
                 <div className="qmeta">
-                  <span>🕐 {item.sched}</span>
                   <span>💰 €{p?.discountedPrice?.toFixed(2)}</span>
-                  <span>📦 {item.posts.length} prod.</span>
+                  <span>🏷️ -{p?.discountPercent}%</span>
                   {p?.isHistoricalLow && <span>🏆 Min. Storico</span>}
                 </div>
+
+                {publishErr?.id === item.id && <ErrorBanner>{publishErr.msg}</ErrorBanner>}
+
+                {/* ── Azioni ── */}
                 <div className="qacts">
                   <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060' }} onClick={() => move(item.id, 'up')} disabled={idx === 0}>↑</button>
                   <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060' }} onClick={() => move(item.id, 'down')} disabled={idx === queue.length - 1}>↓</button>
+                  <button className="btn bsm bgh" onClick={() => setExpandedId(isExpanded ? null : item.id)}>
+                    {isExpanded ? '✕ Chiudi' : '✏️ Modifica'}
+                  </button>
                   <button className="btn bgr bsm" onClick={() => publish(item.id)}>⚡ Pubblica</button>
                   <button className="btn bre bsm" onClick={() => del(item.id)}>🗑️</button>
                 </div>
+
+                {/* ── Form di modifica inline ── */}
+                {isExpanded && p && (
+                  <div style={{ borderTop: '1px solid var(--bd)', padding: '12px 16px 16px' }}>
+                    <div style={{ marginBottom: 10 }}>
+                      <div className="lbl">TITOLO</div>
+                      <input className="inp" value={p.title} onChange={e => updateQueuePost(item.id, { title: e.target.value })} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                      <div style={{ flex: 1 }}>
+                        <div className="lbl">PREZZO ORIG.</div>
+                        <input className="inp" type="number" step="0.01" value={p.originalPrice}
+                          onChange={e => {
+                            const orig = parseFloat(e.target.value) || 0;
+                            const pct = orig > 0 ? Math.round((1 - p.discountedPrice / orig) * 100) : 0;
+                            updateQueuePost(item.id, { originalPrice: orig, discountPercent: Math.max(0, pct) });
+                          }} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div className="lbl">PREZZO SCONT.</div>
+                        <input className="inp" type="number" step="0.01" value={p.discountedPrice}
+                          onChange={e => {
+                            const disc = parseFloat(e.target.value) || 0;
+                            const pct = p.originalPrice > 0 ? Math.round((1 - disc / p.originalPrice) * 100) : 0;
+                            updateQueuePost(item.id, { discountedPrice: disc, discountPercent: Math.max(0, pct) });
+                          }} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '6px 12px', background: '#2a1800', borderRadius: 8 }}>
+                      <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1 }}>Sconto calcolato</span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--am2)' }}>-{p.discountPercent}%</span>
+                    </div>
+                    <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+                      <ToggleRow label="Minimo Storico" value={p.isHistoricalLow}
+                        onChange={v => {
+                          const layId = v
+                            ? (layouts.find(l => l.tipo === 'historical_low')?.id ?? p.layoutId)
+                            : (layouts.find(l => l.tipo === 'normal')?.id ?? p.layoutId);
+                          updateQueuePost(item.id, { isHistoricalLow: v, layoutId: layId });
+                        }} />
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div className="lbl">LAYOUT TESTO</div>
+                      <select className="sel" value={p.layoutId} onChange={e => updateQueuePost(item.id, { layoutId: e.target.value })}>
+                        {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div className="lbl">TESTO PERSONALIZZATO</div>
+                      <textarea className="txta" rows={2} value={p.customText}
+                        onChange={e => updateQueuePost(item.id, { customText: e.target.value })}
+                        placeholder="Testo aggiuntivo..." />
+                    </div>
+                    {previewText && (
+                      <>
+                        <div className="stit">ANTEPRIMA TESTO</div>
+                        <TelegramPreview text={previewText} buttons={[`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]} />
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
