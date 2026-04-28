@@ -540,7 +540,10 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       if (!ok) return;
     }
 
-    // Rimuovi immediatamente dalla coda per evitare double-publish
+    // Marca subito come 'published' nel DB — così non riappare al reload anche se l'app viene chiusa
+    try { await autopostApi.update(id, { status: 'published' }); } catch { /* best effort */ }
+
+    // Rimuovi immediatamente dalla UI per evitare double-publish
     setQueue(q => q.filter(x => x.id !== id));
     setCurrentIdx(i => Math.max(0, Math.min(i, queue.length - 2)));
     try {
@@ -556,7 +559,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         } catch { /* fall back to URL */ }
       }
       const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, generatedImage }) as { ok: boolean; messageId?: number; chatId?: string };
-      autopostApi.delete(id).catch(() => {});
+      autopostApi.delete(id).catch(() => {}); // cleanup finale, fire-and-forget OK (status già aggiornato)
       const now = new Date().toISOString();
       const pubRecord = {
         id: post.id, emoji: post.emoji, title: post.title,
@@ -573,9 +576,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       publishedApi.save(pubRecord).catch(() => {});
     } catch (e) {
       const msg = e instanceof Error ? (e.message || 'Errore sconosciuto') : String(e) || 'Errore sconosciuto';
-      // In caso di errore, ri-aggiungi l'item in testa alla coda
+      // Ripristina a 'draft' nel DB e ri-aggiungi in UI
+      autopostApi.update(id, { status: 'draft' }).catch(() => {});
       setQueue(q => [item, ...q]);
-      autopostApi.update(id, { status: 'error' }).catch(() => {});
       setPublishErr(msg);
     }
   };
