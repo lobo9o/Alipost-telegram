@@ -143,11 +143,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const resolvedAsin = (asin ?? extractAsin(url) ?? '').toUpperCase();
     if (!resolvedAsin) { res.status(400).json({ error: 'Impossibile estrarre ASIN dal link' }); return; }
 
-    const credentialId     = cfg.amazon?.credentialId     ?? process.env.AMAZON_CREDENTIAL_ID     ?? '';
-    const credentialSecret = cfg.amazon?.credentialSecret ?? process.env.AMAZON_CREDENTIAL_SECRET ?? '';
-    const partnerTag       = cfg.amazon?.affiliateTag     ?? process.env.AMAZON_AFFILIATE_TAG     ?? '';
-    const version          = cfg.amazon?.version          ?? process.env.AMAZON_VERSION           ?? '2.2';
-    const marketplaceCode  = (cfg.amazon?.marketplace     ?? process.env.AMAZON_MARKETPLACE       ?? 'IT').toUpperCase();
+    const credentialId     = cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '';
+    const credentialSecret = cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '';
+    const partnerTag       = cfg.amazon?.affiliateTag     || process.env.AMAZON_AFFILIATE_TAG     || '';
+    const version          = cfg.amazon?.version          || process.env.AMAZON_VERSION           || '2.2';
+    const marketplaceCode  = (cfg.amazon?.marketplace     || process.env.AMAZON_MARKETPLACE       || 'IT').toUpperCase();
     const marketplaceDomain = MARKETPLACE_DOMAINS[marketplaceCode] ?? 'www.amazon.it';
 
     if (!credentialId || !credentialSecret || !partnerTag) {
@@ -190,7 +190,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const productId = extractAliId(url);
     if (!productId) { res.status(400).json({ error: 'Impossibile estrarre product ID dal link AliExpress' }); return; }
 
-    const trackingId = cfg.aliexpress?.trackingId ?? process.env.ALIEXPRESS_TRACKING_ID ?? '';
+    const trackingId = cfg.aliexpress?.trackingId || process.env.ALIEXPRESS_TRACKING_ID || '';
 
     res.json({
       productId,
