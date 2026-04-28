@@ -80,7 +80,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ]).then(([q, t, l, tmpl, s, pub]) => {
       setQueue((q as QueueItem[]).filter(x => x.status === 'draft'));
       if (t.length > 0) setTags(t);
-      if (l.length > 0) setLayouts(l);
+      // Merge DB layouts with defaults: DB ha la precedenza per ID corrispondenti,
+      // i default riempiono i gap (così layout mai modificati rimangono visibili)
+      {
+        const dbById = new Map((l as TextLayout[]).map((x: TextLayout) => [x.id, x]));
+        const merged = INITIAL_LAYOUTS.map(d => dbById.get(d.id) ?? d);
+        const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => d.id === x.id));
+        setLayouts([...merged, ...extra]);
+      }
       if (tmpl.length > 0) {
         const normalized = (tmpl as Template[]).map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
         setTemplates(normalized);
