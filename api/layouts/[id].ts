@@ -15,11 +15,22 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   const { nome, tipo, contenuto, active } = req.body ?? {};
+  // Try UPDATE first; if the layout was never persisted (e.g. a default/mock layout),
+  // INSERT it so edits to pre-seeded layouts are always saved.
   const [row] = await sql`
     UPDATE layouts SET nome = ${nome}, tipo = ${tipo}, body = ${contenuto}, active = ${active}
     WHERE id = ${id} AND user_id = ${userId}
     RETURNING id, nome, tipo, body AS contenuto, active
   `;
-  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
-  res.json(row);
+  if (row) { res.json(row); return; }
+
+  const [inserted] = await sql`
+    INSERT INTO layouts (id, user_id, nome, tipo, body, active)
+    VALUES (${id}, ${userId}, ${nome}, ${tipo}, ${contenuto ?? ''}, ${active ?? false})
+    ON CONFLICT (id) DO UPDATE SET
+      nome = EXCLUDED.nome, tipo = EXCLUDED.tipo,
+      body = EXCLUDED.body, active = EXCLUDED.active
+    RETURNING id, nome, tipo, body AS contenuto, active
+  `;
+  res.json(inserted);
 });

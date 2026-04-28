@@ -47,14 +47,17 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
+    '{boxcoupon}':       post.coupon || '',
+    '{checkout}':        '',
   };
+
+  const knownTagNames = new Set(Object.keys(tags));
 
   function applyConditionals(text: string): string {
     let prev = '';
     let cur = text;
     while (prev !== cur) {
       prev = cur;
-      // Match innermost {_ ... _} blocks (no nested {_ inside)
       cur = cur.replace(/\{_((?:(?!\{_)[\s\S])*?)_\}/g, (_, inner) => {
         let hasEmpty = false;
         let resolved = inner;
@@ -63,6 +66,11 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
             if (!val || val.trim() === '') hasEmpty = true;
             resolved = resolved.split(tag).join(val);
           }
+        }
+        // Tag sconosciuti dentro {_ _} = vuoti → nascondi il blocco
+        const found = inner.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) ?? [];
+        for (const t of found) {
+          if (!knownTagNames.has(t)) { hasEmpty = true; break; }
         }
         return hasEmpty ? '' : resolved;
       });

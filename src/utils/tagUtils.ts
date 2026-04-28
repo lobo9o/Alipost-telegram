@@ -11,6 +11,7 @@ export const SYSTEM_TAGS = new Set([
   '{store}', '{storeup}', '{countryflag}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
+  '{coupon}', '{boxcoupon}', '{checkout}',
 ]);
 
 function pad(n: number): string { return n < 10 ? `0${n}` : String(n); }
@@ -48,6 +49,8 @@ function computedTags(post: CreatedPost): Record<string, string> {
     '{cat}':             post.cat || '',
     '{author}':          post.author || '',
     '{coupon}':          post.coupon || '',
+    '{boxcoupon}':       post.coupon || '',
+    '{checkout}':        '',
   };
 }
 
@@ -81,6 +84,12 @@ export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]
         if (!builtIn[tag.name] && inner.includes(tag.name) && (!tag.value || tag.value.trim() === '')) {
           hasEmpty = true;
         }
+      }
+      // Tag sconosciuti (non built-in né custom) = vuoti → nascondi il blocco
+      const knownTags = new Set([...Object.keys(builtIn), ...tags.map(t => t.name)]);
+      const found = inner.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) ?? [];
+      for (const t of found) {
+        if (!knownTags.has(t)) { hasEmpty = true; break; }
       }
       return hasEmpty ? '' : applyTags(inner, builtIn, tags);
     });
