@@ -84,7 +84,7 @@ async function creatorsGetItem(
       'customerReviews.count',
       'itemInfo.byLineInfo',
       'browseNodeInfo.browseNodes',
-      'offersV2.listings.promotions',
+      'offersV2.listings.dealDetails',
     ],
   };
 
@@ -221,15 +221,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const browseNodes = (pick(pick(item, 'browseNodeInfo', 'BrowseNodeInfo'), 'browseNodes', 'BrowseNodes') as any[]) ?? [];
     const cat = browseNodes?.[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
 
-    const promotions = (pick(listings, 'promotions', 'Promotions') as any[]) ?? [];
+    const dealDetails = pick(listings, 'dealDetails', 'DealDetails') as any;
     let coupon = '';
-    for (const promo of promotions) {
-      const type = String(pick(promo, 'type', 'Type', 'promotionType', 'PromotionType') ?? '').toLowerCase();
-      const display = String(pick(promo, 'displayAmount', 'DisplayAmount', 'amount', 'Amount') ?? '');
-      if (type.includes('coupon') || type.includes('clip') || display) {
-        coupon = display || type;
-        break;
+    if (dealDetails) {
+      const dealType = String(pick(dealDetails, 'dealType', 'DealType') ?? '').toLowerCase();
+      const displayAmount = String(pick(dealDetails, 'displayAmount', 'DisplayAmount', 'amount', 'Amount') ?? '');
+      const displayPerc = String(pick(dealDetails, 'displayPercentage', 'DisplayPercentage', 'percentage', 'Percentage') ?? '');
+      if (dealType.includes('coupon') || dealType.includes('clip')) {
+        coupon = displayAmount || displayPerc || 'coupon';
+      } else if (displayAmount || displayPerc) {
+        coupon = displayAmount || displayPerc;
       }
+      console.log('[product] dealDetails:', JSON.stringify(dealDetails).slice(0, 200));
     }
 
     res.json({
