@@ -76,7 +76,15 @@ async function creatorsGetItem(
     itemIds: [asin],
     partnerTag: partnerTag,
     partnerType: 'associates',
-    resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'],
+    resources: [
+      'itemInfo.title',
+      'images.primary.large',
+      'offersV2.listings.price',
+      'customerReviews.starRating',
+      'customerReviews.count',
+      'itemInfo.byLineInfo',
+      'browseNodeInfo.browseNodes',
+    ],
   };
 
   const apiUrl = 'https://creatorsapi.amazon/catalog/v1/getItems';
@@ -200,6 +208,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       : originalPrice > discountedPrice
         ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
 
+    // Dati extra (resiliente: non fallisce se non presenti)
+    const reviews = pick(data, 'customerReviews', 'CustomerReviews') as any;
+    const stelle = reviews ? String(pick(reviews, 'starRating', 'StarRating') ?? '') : '';
+    const recensioni = reviews ? String(pick(reviews, 'count', 'Count') ?? '') : '';
+
+    const byLine = pick(pick(item, 'itemInfo', 'ItemInfo'), 'byLineInfo', 'ByLineInfo') as any;
+    const contributors = pick(byLine, 'contributors', 'Contributors') as any[] ?? [];
+    const author = contributors?.[0] ? String(pick(contributors[0], 'name', 'Name') ?? '') : '';
+
+    const browseNodes = (pick(pick(item, 'browseNodeInfo', 'BrowseNodeInfo'), 'browseNodes', 'BrowseNodes') as any[]) ?? [];
+    const cat = browseNodes?.[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
+
     res.json({
       asin: resolvedAsin,
       title: titleObj ?? '',
@@ -208,6 +228,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       discountedPrice,
       discountPercent,
       affiliateUrl: `https://${marketplaceDomain}/dp/${resolvedAsin}?tag=${affiliateTag}`,
+      stelle: stelle || undefined,
+      recensioni: recensioni || undefined,
+      author: author || undefined,
+      cat: cat || undefined,
     });
 
   } else if (platform === 'aliexpress') {

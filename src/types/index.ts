@@ -25,6 +25,11 @@ export interface CreatedPost {
   templateId: string;
   layoutId: string;
   emoji: string;
+  // Dati extra da API (opzionali)
+  stelle?: string;
+  recensioni?: string;
+  cat?: string;
+  author?: string;
 }
 
 export interface CatalogProduct {

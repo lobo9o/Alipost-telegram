@@ -99,6 +99,10 @@ export interface AmazonProductResult {
   discountedPrice: number;
   discountPercent: number;
   affiliateUrl: string;
+  stelle?: string;
+  recensioni?: string;
+  author?: string;
+  cat?: string;
 }
 export interface AliExpressProductResult {
   productId: string;

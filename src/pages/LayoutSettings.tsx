@@ -4,6 +4,7 @@ import { NavPage, TextLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefa
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId } from '../data/mock';
 import { tagsApi, layoutsApi, templatesApi, settingsApi } from '../lib/api';
+import { SYSTEM_TAGS } from '../utils/tagUtils';
 
 // ============================================================
 // LAYOUT PAGE (Tags / Text / Template)
@@ -53,36 +54,56 @@ function TagsSection() {
     setEditId(null);
   };
 
+  const systemTags = tags.filter(t => SYSTEM_TAGS.has(t.name));
+  const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name));
+
+  const renderTag = (t: Tag, isSystem: boolean) => (
+    <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
+      {editId === t.id ? (
+        <>
+          <input className="inp" value={editName} onChange={e => setEditName(e.target.value)}
+            placeholder="{nome_tag}" style={{ marginBottom: 7 }} />
+          <div className="irow">
+            <input className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
+              placeholder="Valore / descrizione"
+              onKeyDown={e => e.key === 'Enter' && saveEdit()} />
+            <button className="btn bp bsm" onClick={saveEdit} style={{ flexShrink: 0 }}>✓</button>
+            <button className="btn bs bsm" onClick={() => setEditId(null)} style={{ flexShrink: 0 }}>×</button>
+          </div>
+        </>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="tag-pill" style={{ flexShrink: 0 }}>{t.name}</span>
+          <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {t.value || <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>vuoto</span>}
+          </span>
+          {isSystem
+            ? <span style={{ fontSize: 10, color: 'var(--a1)', padding: '2px 7px', border: '1px solid var(--a1)', borderRadius: 20, flexShrink: 0, opacity: .7 }}>SISTEMA</span>
+            : <>
+                <button className="btn bgh bsm" style={{ padding: '3px 8px' }} onClick={() => startEdit(t)}>✏️</button>
+                <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }}
+                  onClick={() => { setTags(ts => ts.filter(x => x.id !== t.id)); tagsApi.delete(t.id).catch(() => {}); }}>×</button>
+              </>
+          }
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
-      <div className="stit">TAG DISPONIBILI ({tags.length})</div>
-      {tags.map(t => (
-        <div key={t.id} className="card" style={{ margin: '0 16px 8px', padding: '10px 12px' }}>
-          {editId === t.id ? (
-            <>
-              <input className="inp" value={editName} onChange={e => setEditName(e.target.value)}
-                placeholder="{nome_tag}" style={{ marginBottom: 7 }} />
-              <div className="irow">
-                <input className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
-                  placeholder="Valore sostituito nel post"
-                  onKeyDown={e => e.key === 'Enter' && saveEdit()} />
-                <button className="btn bp bsm" onClick={saveEdit} style={{ flexShrink: 0 }}>✓</button>
-                <button className="btn bs bsm" onClick={() => setEditId(null)} style={{ flexShrink: 0 }}>×</button>
-              </div>
-            </>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="tag-pill" style={{ flexShrink: 0 }}>{t.name}</span>
-              <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {t.value || <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>nessun valore</span>}
-              </span>
-              <button className="btn bgh bsm" style={{ padding: '3px 8px' }} onClick={() => startEdit(t)}>✏️</button>
-              <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }}
-                onClick={() => { setTags(ts => ts.filter(x => x.id !== t.id)); tagsApi.delete(t.id).catch(() => {}); }}>×</button>
-            </div>
-          )}
-        </div>
-      ))}
+      <div className="stit">TAG DI SISTEMA ({systemTags.length})</div>
+      <div style={{ margin: '0 16px 6px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
+        Compilati automaticamente dall'API. Non modificabili.
+      </div>
+      {systemTags.map(t => renderTag(t, true))}
+
+      <div className="stit" style={{ marginTop: 8 }}>TAG PERSONALIZZATI ({customTags.length})</div>
+      {customTags.length === 0 && (
+        <div style={{ padding: '4px 16px 8px', fontSize: 12, color: 'var(--t3)' }}>Nessun tag personalizzato.</div>
+      )}
+      {customTags.map(t => renderTag(t, false))}
+
       <div className="stit">AGGIUNGI TAG</div>
       <div style={{ padding: '0 16px 8px' }}>
         <input className="inp" value={newName} onChange={e => setNewName(e.target.value)}
@@ -90,12 +111,12 @@ function TagsSection() {
           onKeyDown={e => e.key === 'Enter' && addTag()} />
         <div className="irow">
           <input className="inp" value={newValue} onChange={e => setNewValue(e.target.value)}
-            placeholder="Valore / descrizione"
+            placeholder="Valore mostrato nel post"
             onKeyDown={e => e.key === 'Enter' && addTag()} />
           <button className="btn bp" onClick={addTag} style={{ padding: '0 16px', flexShrink: 0 }}>+ Aggiungi</button>
         </div>
       </div>
-      <InfoBanner>Il <b>nome</b> è il placeholder nei layout (es. {'{titolo}'}). Il <b>valore</b> viene sostituito durante la pubblicazione.</InfoBanner>
+      <InfoBanner>Usa <b>{'{_ testo {tag} _}'}</b> per nascondere automaticamente un blocco se il tag al suo interno è vuoto.</InfoBanner>
     </>
   );
 }

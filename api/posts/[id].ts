@@ -13,14 +13,57 @@ function esc(s: string): string {
 }
 
 function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string): string {
-  let t = contenuto;
-  t = t.replace(/\{titolo\}/g, esc(post.title));
-  t = t.replace(/\{prezzo\}/g, `${Number(post.originalPrice).toFixed(2)}€`);
-  t = t.replace(/\{prezzo_scontato\}/g, `<b>${Number(post.discountedPrice).toFixed(2)}€</b>`);
-  t = t.replace(/\{sconto\}/g, `<b>${post.discountPercent}%</b>`);
-  t = t.replace(/\{custom\}/g, esc(post.customText));
-  t = t.replace(/\{link_affiliato\}/g, `<a href="${affiliateUrl}">acquista qui</a>`);
-  t = t.replace(/\{minimo_storico\}/g, post.isHistoricalLow ? '🏆 MINIMO STORICO!' : '');
+  const now = new Date();
+  const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+  const pad = (n: number) => n < 10 ? `0${n}` : String(n);
+  const valuta = post.platform === 'aliexpress' ? '$' : '€';
+  const discPrice = Number(post.discountedPrice).toFixed(2);
+  const origPrice = Number(post.originalPrice).toFixed(2);
+  const disc = Number(post.discountPercent);
+  const titleShort = (post.title || '').length > 60 ? (post.title || '').slice(0, 57) + '...' : (post.title || '');
+
+  const tags: Record<string, string> = {
+    '{titolo}':          esc(post.title),
+    '{titoloup}':        esc((post.title || '').toUpperCase()),
+    '{titoloshort}':     esc(titleShort),
+    '{prezzo}':          `<b>${discPrice}${valuta}</b>`,
+    '{prezzo_scontato}': `<b>${discPrice}${valuta}</b>`,
+    '{oldprezzo}':       `${origPrice}${valuta}`,
+    '{sconto}':          String(disc),
+    '{perc}':            `-${disc}%`,
+    '{valuta}':          valuta,
+    '{link_affiliato}':  affiliateUrl,
+    '{link}':            affiliateUrl,
+    '{minimo_storico}':  post.isHistoricalLow ? '🏆 MINIMO STORICO!' : '',
+    '{custom}':          esc(post.customText || ''),
+    '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
+    '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
+    '{countryflag}':     post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹',
+    '{giorno}':          giorni[now.getDay()],
+    '{ora}':             `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+    '{data}':            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,
+    '{stelle}':          post.stelle || '',
+    '{recensioni}':      post.recensioni || '',
+    '{cat}':             post.cat || '',
+    '{author}':          esc(post.author || ''),
+  };
+
+  // Blocchi condizionali {_ ... _}
+  let t = contenuto.replace(/\{_([\s\S]*?)_\}/g, (_, inner) => {
+    let hasEmpty = false;
+    let resolved = inner;
+    for (const [tag, val] of Object.entries(tags)) {
+      if (inner.includes(tag)) {
+        if (!val || val.trim() === '') hasEmpty = true;
+        resolved = resolved.split(tag).join(val);
+      }
+    }
+    return hasEmpty ? '' : resolved;
+  });
+
+  for (const [tag, val] of Object.entries(tags)) {
+    t = t.split(tag).join(val);
+  }
   t = t.replace(/~~([^~]+)~~/g, '<s>$1</s>');
   return t;
 }
