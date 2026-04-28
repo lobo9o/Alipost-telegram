@@ -41,15 +41,17 @@ async function getToken(credentialId: string, credentialSecret: string, version:
       body: 'grant_type=client_credentials&scope=creatorsapi%2Fdefault',
     });
   } else {
+    // LWA (v3.x) — OAuth2 standard: form-encoded, non JSON
+    const params = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: credentialId,
+      client_secret: credentialSecret,
+      scope: 'creatorsapi/default',
+    });
     res = await fetch(tokenUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'client_credentials',
-        client_id: credentialId,
-        client_secret: credentialSecret,
-        scope: 'creatorsapi::default',
-      }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
     });
   }
 

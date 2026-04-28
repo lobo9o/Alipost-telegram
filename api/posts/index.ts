@@ -50,10 +50,17 @@ async function getAmazonToken(credId: string, credSecret: string, version: strin
         body: 'grant_type=client_credentials&scope=creatorsapi%2Fdefault',
       });
     } else {
+      // LWA (v3.x) — OAuth2 standard: form-encoded
+      const params = new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: credId,
+        client_secret: credSecret,
+        scope: 'creatorsapi/default',
+      });
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grant_type: 'client_credentials', client_id: credId, client_secret: credSecret, scope: 'creatorsapi::default' }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
       });
     }
     if (!res.ok) return null;
