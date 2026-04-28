@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
@@ -255,17 +255,23 @@ function SizeSlider({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE' 
   );
 }
 
-// Scale che allinea la preview CSS al canvas 1024px (fontSize * 2 / preview ~340px)
+// PREVIEW_SCALE: fontSize nel canvas è fontSize*2 su 1024px; nella preview CSS
+// usiamo ref per misurare la larghezza reale e scalare esattamente come fa il canvas.
 const PREVIEW_SCALE = 0.65;
 
-export function TemplatePreviewer({ tpl }: { tpl: Template }) {
+export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata?: TerminataConfig }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerW, setContainerW] = useState(340);
+  useEffect(() => {
+    if (containerRef.current) setContainerW(containerRef.current.clientWidth);
+  }, []);
+
   const pp = tpl.product;
-  return (
-    <div style={{
-      margin: '12px 16px', borderRadius: 10, overflow: 'hidden',
-      position: 'relative', aspectRatio: '1/1', background: tpl.bgColor,
-      boxShadow: '0 2px 16px rgba(0,0,0,0.4)', isolation: 'isolate',
-    }}>
+  // fontSize per il testo terminata: uguale al canvas (overlayTextSize% di containerW)
+  const terminataFontPx = terminata ? (terminata.overlayTextSize / 100) * containerW : 0;
+
+  const innerContent = (
+    <>
       {/* Product placeholder box */}
       <div style={{
         position: 'absolute', left: `${pp.x}%`, top: `${pp.y}%`,
@@ -333,6 +339,41 @@ export function TemplatePreviewer({ tpl }: { tpl: Template }) {
           background: '#fbbf24', color: '#000', fontSize: 7, padding: '2px 4px',
           borderRadius: 3, fontWeight: 700, pointerEvents: 'none', zIndex: 5,
         }}>🏆 MIN</div>
+      )}
+    </>
+  );
+
+  return (
+    <div ref={containerRef} style={{
+      margin: '12px 16px', borderRadius: 10, overflow: 'hidden',
+      position: 'relative', aspectRatio: '1/1', background: tpl.bgColor,
+      boxShadow: '0 2px 16px rgba(0,0,0,0.4)', isolation: 'isolate',
+    }}>
+      {/* Contenuto template — con eventuale grayscale terminata */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        filter: terminata?.grayscale ? 'grayscale(1)' : undefined,
+      }}>
+        {innerContent}
+      </div>
+
+      {/* Overlay testo TERMINATA — fuori dal grayscale, dimensione identica al canvas */}
+      {terminata && terminata.overlayText && (
+        <div style={{
+          position: 'absolute',
+          left: `${terminata.overlayTextX}%`,
+          top: `${terminata.overlayTextY}%`,
+          transform: 'translate(-50%, -50%)',
+          fontSize: `${terminataFontPx}px`,
+          fontWeight: 900, fontFamily: 'Impact, Arial Black',
+          color: terminata.overlayTextColor,
+          textShadow: `0 0 ${terminataFontPx * 0.08}px #000, 0 0 ${terminataFontPx * 0.04}px #000`,
+          whiteSpace: 'nowrap', pointerEvents: 'none',
+          textAlign: 'center', zIndex: 10,
+          maxWidth: '95%', overflow: 'hidden',
+        }}>
+          {terminata.overlayText}
+        </div>
       )}
     </div>
   );
@@ -729,7 +770,7 @@ const DEFAULT_TERMINATA: TerminataConfig = {
 };
 
 function TerminataPanel() {
-  const { settings, setSettings, layouts } = useApp();
+  const { settings, setSettings, layouts, templates } = useApp();
   const [cfg, setCfg] = useState<TerminataConfig>(settings.terminata ?? DEFAULT_TERMINATA);
   const [saved, setSaved] = useState(false);
 
@@ -744,8 +785,7 @@ function TerminataPanel() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  // Anteprima CSS del testo overlay
-  const previewSize = `${cfg.overlayTextSize * 3.4}px`;
+  const activeTpl = templates[0];
 
   return (
     <>
@@ -768,24 +808,9 @@ function TerminataPanel() {
         </div>
       </div>
 
-      {/* Anteprima posizione testo */}
-      <div className="lbl" style={{ marginBottom: 6 }}>ANTEPRIMA POSIZIONE</div>
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', background: cfg.grayscale ? '#555' : '#1a1a2e', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
-        {/* griglia guida */}
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px)', backgroundSize: '10% 10%' }} />
-        <div style={{
-          position: 'absolute',
-          left: `${cfg.overlayTextX}%`, top: `${cfg.overlayTextY}%`,
-          transform: 'translate(-50%,-50%)',
-          fontSize: previewSize, fontWeight: 900, fontFamily: 'Impact, Arial Black',
-          color: cfg.overlayTextColor,
-          textShadow: '0 0 6px #000, 0 0 2px #000',
-          whiteSpace: 'nowrap', pointerEvents: 'none',
-          maxWidth: '95%', textAlign: 'center',
-        }}>
-          {cfg.overlayText || '❌ TERMINATA'}
-        </div>
-      </div>
+      {/* Anteprima reale del template con overlay terminata */}
+      <div className="lbl" style={{ marginBottom: 4 }}>ANTEPRIMA</div>
+      {activeTpl && <TemplatePreviewer tpl={activeTpl} terminata={cfg} />}
 
       {/* Frecce posizione */}
       <PositionArrows
