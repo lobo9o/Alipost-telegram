@@ -502,7 +502,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 // QUEUE PAGE
 // ============================================================
 export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
-  const { queue, setQueue, layouts, templates, tags, setPublished } = useApp();
+  const { queue, setQueue, layouts, templates, tags, setPublished, published } = useApp();
   const [currentIdx, setCurrentIdx] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
@@ -530,6 +530,16 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     const layout = layouts.find(l => l.id === post.layoutId);
     const template = templates.find(t => t.id === post.templateId);
     setPublishErr(null);
+
+    // Avviso se già pubblicato oggi
+    const dupPub = published.find(p => p.productId === post.productId);
+    if (dupPub) {
+      const ok = window.confirm(
+        `⚠️ Questo prodotto è già stato pubblicato oggi alle ${dupPub.ts}.\n\nVuoi pubblicarlo di nuovo?`
+      );
+      if (!ok) return;
+    }
+
     // Rimuovi immediatamente dalla coda per evitare double-publish
     setQueue(q => q.filter(x => x.id !== id));
     setCurrentIdx(i => Math.max(0, Math.min(i, queue.length - 2)));
