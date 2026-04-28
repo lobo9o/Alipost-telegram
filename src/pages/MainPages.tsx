@@ -6,7 +6,7 @@ import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi, publishedApi } from '../lib/api';
-import { generatePostImage } from '../utils/imageCompose';
+import { generatePostImage, generateTerminataImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
 const TPL_SCALE = 0.65; // allineato a canvas: fontSize*2 / preview ~340px
@@ -530,7 +530,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     const layout = layouts.find(l => l.id === post.layoutId);
     const template = templates.find(t => t.id === post.templateId);
     setPublishErr(null);
-    setQueue(q => q.map(x => x.id === id ? { ...x, status: 'scheduled' } : x));
+    // Rimuovi immediatamente dalla coda per evitare double-publish
+    setQueue(q => q.filter(x => x.id !== id));
+    setCurrentIdx(i => Math.max(0, Math.min(i, queue.length - 2)));
     try {
       let generatedImage: string | undefined;
       if (template) {
@@ -544,7 +546,6 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         } catch { /* fall back to URL */ }
       }
       const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, generatedImage }) as { ok: boolean; messageId?: number; chatId?: string };
-      setQueue(q => q.filter(x => x.id !== id));
       autopostApi.delete(id).catch(() => {});
       const now = new Date().toISOString();
       const pubRecord = {
@@ -562,7 +563,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       publishedApi.save(pubRecord).catch(() => {});
     } catch (e) {
       const msg = e instanceof Error ? (e.message || 'Errore sconosciuto') : String(e) || 'Errore sconosciuto';
-      setQueue(q => q.map(x => x.id === id ? { ...x, status: 'error' } : x));
+      // In caso di errore, ri-aggiungi l'item in testa alla coda
+      setQueue(q => [item, ...q]);
       autopostApi.update(id, { status: 'error' }).catch(() => {});
       setPublishErr(msg);
     }
@@ -752,7 +754,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 // PUBLISHED PAGE
 // ============================================================
 export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { published, setPublished, setQueue, layouts, tags } = useApp();
+  const { published, setPublished, setQueue, layouts, tags, settings, templates } = useApp();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [editErr, setEditErr] = useState('');
@@ -808,10 +810,32 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
 
   const markTerminata = async (p: typeof published[0]) => {
     if (!p.chatId || !p.messageId) { alert('message_id non disponibile'); return; }
-    if (!window.confirm(`Segnare "${p.title.slice(0, 30)}..." come TERMINATA su Telegram?`)) return;
+    if (!window.confirm(`Segnare "${p.title.slice(0, 30)}..." come TERMINATA?`)) return;
+
+    const terminataCfg = settings.terminata;
+    const tmpl = templates.find(t => t.id === terminataCfg.templateId) ?? templates[0];
+    const terminataLayout = layouts.find(l => l.id === terminataCfg.layoutId);
+
+    let newImage: string | undefined;
+    if (tmpl && p.image && p.image.startsWith('http')) {
+      try {
+        newImage = await generateTerminataImage(tmpl, p.image, p.platform, terminataCfg, {
+          prezzo: `€${Number(p.price).toFixed(2)}`,
+          prezzoPrecedente: `€${p.originalPrice.toFixed(2)}`,
+          sconto: `-${p.discountPercent}%`,
+          testoCustom: p.customText,
+        });
+      } catch { /* fallback: solo testo */ }
+    }
+
     try {
-      await publishedApi.editTelegram(p.id, { chatId: p.chatId, messageId: p.messageId, terminata: true } as any);
-      setPublished(prev => prev.map(x => x.id === p.id ? { ...x, isHistoricalLow: false } : x));
+      await publishedApi.editTelegram(p.id, {
+        chatId: p.chatId, messageId: p.messageId,
+        terminata: true,
+        newCaption: terminataLayout?.contenuto,
+        newImage,
+      } as any);
+      setPublished(prev => prev.map(x => x.id === p.id ? { ...x, terminata: true } : x));
     } catch (e) {
       alert('Errore: ' + (e instanceof Error ? e.message : String(e)));
     }
@@ -837,11 +861,12 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
               <SourceBadge platform={p.platform} />
               <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts}</span>
               {p.isHistoricalLow && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700 }}>🏆 MIN</span>}
+              {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
               {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--gr2)' }}>€{p.price}</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: p.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: p.terminata ? 'line-through' : 'none' }}>€{p.price}</span>
               <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{p.discountPercent}%</span>
             </div>
 
@@ -860,9 +885,9 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
               </>
             ) : (
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                <button className="btn bsm bgh" onClick={() => startEdit(p)}>✏️ Modifica</button>
-                <button className="btn bsm bgh" style={{ color: '#ef4444' }} onClick={() => markTerminata(p)}>❌ Terminata</button>
-                <button className="btn bsm bbl" onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
+                <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEdit(p)}>✏️ Modifica</button>
+                <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={p.terminata} onClick={() => markTerminata(p)}>❌ Terminata</button>
+                <button className="btn bsm bbl" disabled={p.terminata} onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
               </div>
             )}
           </div>

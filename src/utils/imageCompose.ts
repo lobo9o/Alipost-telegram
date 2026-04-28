@@ -1,4 +1,4 @@
-import { Template, TextEl } from '../types';
+import { Template, TextEl, TerminataConfig } from '../types';
 
 const CANVAS_SIZE = 1024;
 
@@ -132,6 +132,78 @@ export async function generatePostImage(
       const h = (img.naturalHeight / img.naturalWidth) * w;
       ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, w, h);
     } catch { /* skip */ }
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
+export async function generateTerminataImage(
+  template: Template,
+  productImageUrl: string,
+  platform: 'amazon' | 'aliexpress',
+  config: TerminataConfig,
+  values: { prezzo?: string; prezzoPrecedente?: string; sconto?: string; testoCustom?: string } = {},
+): Promise<string> {
+  const canvas = document.createElement('canvas');
+  canvas.width = CANVAS_SIZE;
+  canvas.height = CANVAS_SIZE;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = template.bgColor || '#ffffff';
+  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+  if (productImageUrl && productImageUrl.startsWith('http')) {
+    try {
+      const img = await loadImage(`/api/posts?img=${encodeURIComponent(productImageUrl)}`);
+      drawContained(ctx, img, template.product);
+    } catch { /* skip */ }
+  }
+
+  if (config.grayscale) {
+    const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    const d = imageData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      d[i] = d[i + 1] = d[i + 2] = g;
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  if (template.overlay.enabled && template.overlay.src) {
+    try {
+      const img = await loadImage(template.overlay.src);
+      const el = template.overlay;
+      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, (el.size / 100) * CANVAS_SIZE, (el.size / 100) * CANVAS_SIZE);
+    } catch { /* skip */ }
+  }
+
+  if (template.store.enabled) {
+    try {
+      const img = await loadImage(makeStoreSvg(platform));
+      const el = template.store;
+      const s = (el.size / 100) * CANVAS_SIZE;
+      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, s, s);
+    } catch { /* skip */ }
+  }
+
+  if (config.showPrezzo) drawTextEl(ctx, template.prezzo, values.prezzo ?? template.prezzo.text);
+  if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text);
+  if (config.showSconto) drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text);
+  drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text);
+
+  if (config.overlayText) {
+    const fs = (config.overlayTextSize / 100) * CANVAS_SIZE;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${fs}px Impact, Arial Black`;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = fs * 0.08;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(config.overlayText, CANVAS_SIZE / 2, CANVAS_SIZE / 2);
+    ctx.fillStyle = config.overlayTextColor;
+    ctx.fillText(config.overlayText, CANVAS_SIZE / 2, CANVAS_SIZE / 2);
+    ctx.restore();
   }
 
   return canvas.toDataURL('image/jpeg', 0.88);

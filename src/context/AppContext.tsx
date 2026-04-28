@@ -22,6 +22,7 @@ function mergeSettings(fetched: unknown): AppSettings {
   const r = (fetched ?? {}) as Record<string, any>;
   const am = (r.amazon ?? {}) as Record<string, any>;
   const al = (r.aliexpress ?? {}) as Record<string, any>;
+  const tm = (r.terminata ?? {}) as Record<string, any>;
   return {
     oraI: typeof r.oraI === 'string' ? r.oraI : INITIAL_SETTINGS.oraI,
     oraF: typeof r.oraF === 'string' ? r.oraF : INITIAL_SETTINGS.oraF,
@@ -40,6 +41,17 @@ function mergeSettings(fetched: unknown): AppSettings {
       enabled: typeof al.enabled === 'boolean' ? al.enabled : INITIAL_SETTINGS.aliexpress.enabled,
       affiliateId: typeof al.affiliateId === 'string' ? al.affiliateId : '',
       trackingId: typeof al.trackingId === 'string' ? al.trackingId : '',
+    },
+    terminata: {
+      grayscale: typeof tm.grayscale === 'boolean' ? tm.grayscale : true,
+      overlayText: typeof tm.overlayText === 'string' ? tm.overlayText : '❌ OFFERTA TERMINATA',
+      overlayTextColor: typeof tm.overlayTextColor === 'string' ? tm.overlayTextColor : '#ff0000',
+      overlayTextSize: typeof tm.overlayTextSize === 'number' ? tm.overlayTextSize : 7,
+      showPrezzo: typeof tm.showPrezzo === 'boolean' ? tm.showPrezzo : true,
+      showPrezzoPrecedente: typeof tm.showPrezzoPrecedente === 'boolean' ? tm.showPrezzoPrecedente : false,
+      showSconto: typeof tm.showSconto === 'boolean' ? tm.showSconto : false,
+      layoutId: typeof tm.layoutId === 'string' ? tm.layoutId : '',
+      templateId: typeof tm.templateId === 'string' ? tm.templateId : '',
     },
   };
 }

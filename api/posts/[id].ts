@@ -63,7 +63,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   // ── PATCH — edit already-published Telegram message ─────────
   if (req.method === 'PATCH') {
-    const { chatId, messageId, newCaption, terminata } = req.body ?? {};
+    const { chatId, messageId, newCaption, terminata, newImage } = req.body ?? {};
     if (!chatId || !messageId) { res.status(400).json({ error: 'chatId and messageId required' }); return; }
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) { res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN non configurato' }); return; }
@@ -71,19 +71,42 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const caption = terminata
       ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim()
       : (newCaption ?? '');
-    // Try editMessageCaption first (photo), fall back to editMessageText
-    let tgRes = await fetch(`${tgBase}/editMessageCaption`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption: caption.slice(0, 1024), parse_mode: 'HTML' }),
-    });
-    let tgData = await tgRes.json() as { ok: boolean; description?: string };
-    if (!tgData.ok && tgData.description?.includes('there is no caption')) {
-      tgRes = await fetch(`${tgBase}/editMessageText`, {
+
+    let tgRes: Response;
+    let tgData: { ok: boolean; description?: string };
+
+    if (newImage && typeof newImage === 'string' && newImage.startsWith('data:')) {
+      // Invia nuova immagine con editMessageMedia
+      const base64 = newImage.replace(/^data:image\/\w+;base64,/, '');
+      const imgBuffer = Buffer.from(base64, 'base64');
+      const form = new FormData();
+      form.append('chat_id', chatId);
+      form.append('message_id', String(messageId));
+      form.append('media', JSON.stringify({
+        type: 'photo',
+        media: 'attach://photo',
+        caption: caption.slice(0, 1024),
+        parse_mode: 'HTML',
+      }));
+      form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'photo');
+      tgRes = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form });
+      tgData = await tgRes.json() as { ok: boolean; description?: string };
+    } else {
+      // Try editMessageCaption first (photo), fall back to editMessageText
+      tgRes = await fetch(`${tgBase}/editMessageCaption`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: caption.slice(0, 4096), parse_mode: 'HTML' }),
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption: caption.slice(0, 1024), parse_mode: 'HTML' }),
       });
       tgData = await tgRes.json() as { ok: boolean; description?: string };
+      if (!tgData.ok && tgData.description?.includes('there is no caption')) {
+        tgRes = await fetch(`${tgBase}/editMessageText`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: caption.slice(0, 4096), parse_mode: 'HTML' }),
+        });
+        tgData = await tgRes.json() as { ok: boolean; description?: string };
+      }
     }
+
     if (!tgData.ok) { res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore'}` }); return; }
     // Update terminata flag in DB
     if (terminata) {

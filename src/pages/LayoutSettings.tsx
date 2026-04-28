@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, TextLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate } from '../types';
+import { NavPage, TextLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId } from '../data/mock';
 import { tagsApi, layoutsApi, templatesApi, settingsApi } from '../lib/api';
@@ -14,12 +14,13 @@ export function LayoutPage({ nav }: { nav: (p: NavPage) => void }) {
     <div className="pg">
       <PageHeader title="Layout" onBack={() => nav('dash')} />
       <SwitchTabs
-        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['template', '🖼️ Template']]}
+        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['template', '🖼️ Template'], ['terminata', '🚫 Terminata']]}
         value={tab} onChange={setTab}
       />
       {tab === 'tags' && <TagsSection />}
       {tab === 'testo' && <TextLayoutSection />}
       {tab === 'template' && <TemplateSection />}
+      {tab === 'terminata' && <TerminataSection />}
     </div>
   );
 }
@@ -715,6 +716,75 @@ function TemplateSection() {
         <InfoBanner>Seleziona un componente sopra per modificarlo. L'anteprima si aggiorna in tempo reale.</InfoBanner>
       )}
     </>
+  );
+}
+
+// ── Terminata Section ─────────────────────────────────────────
+function TerminataSection() {
+  const { settings, setSettings, layouts, templates } = useApp();
+  const [cfg, setCfg] = useState<TerminataConfig>(settings.terminata);
+  const [saved, setSaved] = useState(false);
+
+  const update = <K extends keyof TerminataConfig>(k: K, v: TerminataConfig[K]) =>
+    setCfg(prev => ({ ...prev, [k]: v }));
+
+  const save = async () => {
+    const newSettings = { ...settings, terminata: cfg };
+    await settingsApi.save(newSettings);
+    setSettings(newSettings);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div style={{ padding: '12px 16px' }}>
+      <InfoBanner>
+        Configura come appare il post quando un'offerta termina. L'immagine e il testo del post Telegram vengono aggiornati automaticamente.
+      </InfoBanner>
+
+      <div className="stit" style={{ marginTop: 12 }}>IMMAGINE</div>
+      <ToggleRow label="Bianco e nero" sub="Desatura l'immagine del prodotto" value={cfg.grayscale} onChange={v => update('grayscale', v)} />
+
+      <div className="stit" style={{ marginTop: 8 }}>TESTO SULL'IMMAGINE</div>
+      <div className="fld">
+        <label className="lbl">Testo overlay</label>
+        <input className="inp" value={cfg.overlayText} onChange={e => update('overlayText', e.target.value)} placeholder="❌ OFFERTA TERMINATA" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '0 0 12px' }}>
+        <div className="fld" style={{ margin: 0 }}>
+          <label className="lbl">Colore testo</label>
+          <input type="color" className="inp" value={cfg.overlayTextColor} onChange={e => update('overlayTextColor', e.target.value)} style={{ height: 40, padding: 4, cursor: 'pointer' }} />
+        </div>
+        <div className="fld" style={{ margin: 0 }}>
+          <label className="lbl">Dimensione ({cfg.overlayTextSize}%)</label>
+          <input type="range" min={3} max={15} value={cfg.overlayTextSize} onChange={e => update('overlayTextSize', Number(e.target.value))} style={{ width: '100%', marginTop: 10 }} />
+        </div>
+      </div>
+
+      <div className="stit">ELEMENTI VISIBILI</div>
+      <ToggleRow label="Mostra prezzo attuale" value={cfg.showPrezzo} onChange={v => update('showPrezzo', v)} />
+      <ToggleRow label="Mostra prezzo precedente" value={cfg.showPrezzoPrecedente} onChange={v => update('showPrezzoPrecedente', v)} />
+      <ToggleRow label="Mostra percentuale sconto" value={cfg.showSconto} onChange={v => update('showSconto', v)} />
+
+      <div className="stit" style={{ marginTop: 8 }}>TEMPLATE E TESTO TELEGRAM</div>
+      <div className="fld">
+        <label className="lbl">Template immagine base</label>
+        <select className="sel" value={cfg.templateId} onChange={e => update('templateId', e.target.value)}>
+          <option value="">— Primo disponibile —</option>
+          {templates.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+        </select>
+      </div>
+      <div className="fld">
+        <label className="lbl">Layout testo Telegram</label>
+        <select className="sel" value={cfg.layoutId} onChange={e => update('layoutId', e.target.value)}>
+          <option value="">— Nessun cambio (solo ❌ TERMINATA) —</option>
+          {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+        </select>
+      </div>
+
+      <button className="btn bp bfull" style={{ marginTop: 8 }} onClick={save}>✅ Salva configurazione TERMINATA</button>
+      {saved && <div style={{ marginTop: 8, color: '#4ade80', fontSize: 13, textAlign: 'center' }}>✓ Salvato</div>}
+    </div>
   );
 }
 

@@ -36,4 +36,15 @@ export const INITIAL_SETTINGS: AppSettings = {
   channels: [],
   amazon: { enabled: false, affiliateTag: '', credentialId: '', credentialSecret: '', version: '2.2', marketplace: 'IT' },
   aliexpress: { enabled: false, affiliateId: '', trackingId: '' },
+  terminata: {
+    grayscale: true,
+    overlayText: '❌ OFFERTA TERMINATA',
+    overlayTextColor: '#ff0000',
+    overlayTextSize: 7,
+    showPrezzo: true,
+    showPrezzoPrecedente: false,
+    showSconto: false,
+    layoutId: '',
+    templateId: '',
+  },
 };
