@@ -193,4 +193,5 @@ export interface AppContextType extends AppState {
   setTemplates: React.Dispatch<React.SetStateAction<Template[]>>;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   stats: { inCoda: number; sched: number; pub: number };
+  publishedCount: number;
 }

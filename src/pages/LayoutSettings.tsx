@@ -723,11 +723,20 @@ function TemplateSection() {
 // ============================================================
 const MARKETPLACES = ['IT', 'US', 'DE', 'FR', 'ES', 'UK', 'JP'];
 
+const Chevron = ({ open }: { open: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width={16} height={16}
+    style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', flexShrink: 0 }}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { settings, setSettings } = useApp();
+  const { settings, setSettings, publishedCount } = useApp();
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState('');
+  const [openAmz, setOpenAmz] = useState(true);
+  const [openAli, setOpenAli] = useState(false);
 
   React.useEffect(() => { setS(settings); }, [settings]);
 
@@ -749,81 +758,142 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const setAli = (field: keyof typeof s.aliexpress, value: string | boolean) =>
     setS(prev => ({ ...prev, aliexpress: { ...prev.aliexpress, [field]: value } }));
 
+  const canEditCredentials = publishedCount >= 3;
+  const postsUntilUnlock = Math.max(0, 3 - publishedCount);
+
   return (
     <div className="pg">
       <PageHeader title="Impostazioni" onBack={() => nav('dash')} />
 
-      <div className="stit">AMAZON CREATORS API</div>
-      <div className="api-card">
-        <div className="api-top">
-          <div className="api-ico" style={{ background: '#1a1000' }}>🟡</div>
-          <div className="api-name">Amazon Associates</div>
-          <div className={`api-st ${s.amazon.enabled ? 'api-ok' : 'api-no'}`}>
-            {s.amazon.enabled ? '✓ Attivo' : 'Disattivato'}
+      {/* ── AMAZON ── */}
+      <div style={{ margin: '8px 16px 0' }}>
+        <button
+          onClick={() => setOpenAmz(o => !o)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+            background: 'var(--card)', border: '1px solid var(--bdr)',
+            borderRadius: openAmz ? '10px 10px 0 0' : 10, padding: '12px 14px',
+            cursor: 'pointer', color: 'var(--t1)',
+          }}>
+          <span style={{ fontSize: 18 }}>🟡</span>
+          <span style={{ fontWeight: 700, fontSize: 14, flex: 1, textAlign: 'left' }}>Amazon Associates</span>
+          <span className={`api-st ${s.amazon.enabled ? 'api-ok' : 'api-no'}`} style={{ marginRight: 6 }}>
+            {s.amazon.enabled ? '✓ Attivo' : 'Off'}
+          </span>
+          <Chevron open={openAmz} />
+        </button>
+
+        {openAmz && (
+          <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 14px 8px' }}>
+            <ToggleRow label="Attiva Amazon" value={s.amazon.enabled} onChange={v => setAmazon('enabled', v)} />
+
+            <div className="fld">
+              <label className="lbl">Partner Tag (affiliate)</label>
+              <input className="inp" value={s.amazon.affiliateTag}
+                onChange={e => setAmazon('affiliateTag', e.target.value)}
+                placeholder="tuotag-21" />
+              {s.amazon.affiliateTag && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ {s.amazon.affiliateTag}</div>}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="fld" style={{ margin: 0 }}>
+                <label className="lbl">Marketplace</label>
+                <select className="sel" value={s.amazon.marketplace} onChange={e => setAmazon('marketplace', e.target.value)}>
+                  {MARKETPLACES.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div className="fld" style={{ margin: 0 }}>
+                <label className="lbl">Versione API</label>
+                <select className="sel" value={s.amazon.version} onChange={e => setAmazon('version', e.target.value)}>
+                  <option value="2.1">2.1 – Nord Am.</option>
+                  <option value="2.2">2.2 – Europa</option>
+                  <option value="2.3">2.3 – Far East</option>
+                  <option value="3.1">3.1 – LWA Nord Am.</option>
+                  <option value="3.2">3.2 – LWA Europa</option>
+                  <option value="3.3">3.3 – LWA Far East</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ height: 12 }} />
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: 1, marginBottom: 8 }}>CREDENZIALI API</div>
+
+            {canEditCredentials ? (
+              <>
+                <div className="fld">
+                  <label className="lbl">Credential ID</label>
+                  <input className="inp" type="password" value={s.amazon.credentialId}
+                    onChange={e => setAmazon('credentialId', e.target.value)}
+                    placeholder="amzn1.application-oa2-client...." />
+                  {s.amazon.credentialId && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialId.length} car.)</div>}
+                </div>
+                <div className="fld">
+                  <label className="lbl">Credential Secret</label>
+                  <input className="inp" type="password" value={s.amazon.credentialSecret}
+                    onChange={e => setAmazon('credentialSecret', e.target.value)}
+                    placeholder="amzn1.oa2-cs.v1...." />
+                  {s.amazon.credentialSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialSecret.length} car.)</div>}
+                </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--bdr)' }}>
+                <span style={{ fontSize: 20 }}>🔒</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t2)' }}>Credenziali personali bloccate</div>
+                  <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>
+                    {postsUntilUnlock === 0
+                      ? 'Sblocco in corso…'
+                      : `Pubblica ancora ${postsUntilUnlock} post per sbloccare`}
+                  </div>
+                  <div style={{ marginTop: 6, height: 4, borderRadius: 2, background: 'var(--bdr)' }}>
+                    <div style={{ height: '100%', borderRadius: 2, background: 'var(--bl)', width: `${Math.round((publishedCount / 3) * 100)}%`, transition: 'width .4s' }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 3 }}>{publishedCount} / 3 post</div>
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: 8 }}><InfoBanner>Le credenziali non inserite usano quelle di sistema.</InfoBanner></div>
           </div>
-        </div>
-        <ToggleRow label="Attiva Amazon" value={s.amazon.enabled} onChange={v => setAmazon('enabled', v)} />
-        <div className="fld">
-          <label className="lbl">Partner Tag / Application ID</label>
-          <input className="inp" value={s.amazon.affiliateTag} onChange={e => setAmazon('affiliateTag', e.target.value)} placeholder="cavalieridelr-21.alipost2" />
-        </div>
-        <div className="fld">
-          <label className="lbl">Versione credenziale</label>
-          <select className="sel" value={s.amazon.version} onChange={e => setAmazon('version', e.target.value)}>
-            <option value="2.1">2.1 — Nord America</option>
-            <option value="2.2">2.2 — Europa</option>
-            <option value="2.3">2.3 — Far East</option>
-            <option value="3.1">3.1 — Nord America (LWA)</option>
-            <option value="3.2">3.2 — Europa (LWA)</option>
-            <option value="3.3">3.3 — Far East (LWA)</option>
-          </select>
-        </div>
-        <div className="fld">
-          <label className="lbl">Marketplace</label>
-          <select className="sel" value={s.amazon.marketplace} onChange={e => setAmazon('marketplace', e.target.value)}>
-            {MARKETPLACES.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-        <div className="fld">
-          <label className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            Credential ID
-            <span style={{ fontSize: 10, background: '#2a1800', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SOLO BACKEND</span>
-          </label>
-          <input className="inp" type="password" value={s.amazon.credentialId} onChange={e => setAmazon('credentialId', e.target.value)} placeholder="amzn1.application-oa2-client...." />
-          {s.amazon.credentialId && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialId.length} caratteri)</div>}
-        </div>
-        <div className="fld">
-          <label className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            Credential Secret
-            <span style={{ fontSize: 10, background: '#2a1800', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SOLO BACKEND</span>
-          </label>
-          <input className="inp" type="password" value={s.amazon.credentialSecret} onChange={e => setAmazon('credentialSecret', e.target.value)} placeholder="amzn1.oa2-cs.v1...." />
-          {s.amazon.credentialSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialSecret.length} caratteri)</div>}
-        </div>
-        <InfoBanner>🔒 Credential ID e Secret non vengono mai esposti nel frontend.</InfoBanner>
+        )}
       </div>
 
-      <div className="stit">ALIEXPRESS SETTINGS</div>
-      <div className="api-card">
-        <div className="api-top">
-          <div className="api-ico" style={{ background: '#1a0808' }}>🔴</div>
-          <div className="api-name">AliExpress Affiliate</div>
-          <div className={`api-st ${s.aliexpress.enabled ? 'api-ok' : 'api-no'}`}>
-            {s.aliexpress.enabled ? '✓ Attivo' : 'Disattivato'}
+      {/* ── ALIEXPRESS ── */}
+      <div style={{ margin: '10px 16px 0' }}>
+        <button
+          onClick={() => setOpenAli(o => !o)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+            background: 'var(--card)', border: '1px solid var(--bdr)',
+            borderRadius: openAli ? '10px 10px 0 0' : 10, padding: '12px 14px',
+            cursor: 'pointer', color: 'var(--t1)',
+          }}>
+          <span style={{ fontSize: 18 }}>🔴</span>
+          <span style={{ fontWeight: 700, fontSize: 14, flex: 1, textAlign: 'left' }}>AliExpress Affiliate</span>
+          <span className={`api-st ${s.aliexpress.enabled ? 'api-ok' : 'api-no'}`} style={{ marginRight: 6 }}>
+            {s.aliexpress.enabled ? '✓ Attivo' : 'Off'}
+          </span>
+          <Chevron open={openAli} />
+        </button>
+
+        {openAli && (
+          <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 14px 8px' }}>
+            <ToggleRow label="Attiva AliExpress" value={s.aliexpress.enabled} onChange={v => setAli('enabled', v)} />
+            <div className="fld">
+              <label className="lbl">Affiliate ID</label>
+              <input className="inp" value={s.aliexpress.affiliateId}
+                onChange={e => setAli('affiliateId', e.target.value)} placeholder="12345678" />
+            </div>
+            <div className="fld">
+              <label className="lbl">Tracking ID</label>
+              <input className="inp" value={s.aliexpress.trackingId}
+                onChange={e => setAli('trackingId', e.target.value)} placeholder="affiliate_tracking_id" />
+            </div>
           </div>
-        </div>
-        <ToggleRow label="Attiva AliExpress" value={s.aliexpress.enabled} onChange={v => setAli('enabled', v)} />
-        <div className="fld">
-          <label className="lbl">Affiliate ID</label>
-          <input className="inp" value={s.aliexpress.affiliateId} onChange={e => setAli('affiliateId', e.target.value)} placeholder="12345678" />
-        </div>
-        <div className="fld">
-          <label className="lbl">Tracking ID</label>
-          <input className="inp" value={s.aliexpress.trackingId} onChange={e => setAli('trackingId', e.target.value)} placeholder="affiliate_tracking_id" />
-        </div>
+        )}
       </div>
 
-      <div className="stit">CANALI TELEGRAM</div>
+      {/* ── CANALI TELEGRAM ── */}
+      <div className="stit" style={{ marginTop: 16 }}>CANALI TELEGRAM</div>
       <div className="api-card">
         <div className="api-top">
           <div className="api-ico" style={{ background: '#0a1a2a' }}>✈️</div>
@@ -854,11 +924,14 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           onClick={() => setS(prev => ({ ...prev, channels: [...prev.channels, ''] }))}>+ Aggiungi canale</button>
       </div>
 
+      {/* ── AUTOPOST ── */}
       <div className="stit">AUTOPOST</div>
       <ToggleRow label="AutoPost attivo" sub="Pubblicazione automatica programmata" value={s.attivo} onChange={v => setS({ ...s, attivo: v })} />
       <div style={{ height: 12 }} />
-      <div className="fld"><label className="lbl">Ora inizio</label><input type="time" className="inp" value={s.oraI} onChange={e => setS({ ...s, oraI: e.target.value })} /></div>
-      <div className="fld"><label className="lbl">Ora fine</label><input type="time" className="inp" value={s.oraF} onChange={e => setS({ ...s, oraF: e.target.value })} /></div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '0 16px' }}>
+        <div className="fld" style={{ margin: 0 }}><label className="lbl">Ora inizio</label><input type="time" className="inp" value={s.oraI} onChange={e => setS({ ...s, oraI: e.target.value })} /></div>
+        <div className="fld" style={{ margin: 0 }}><label className="lbl">Ora fine</label><input type="time" className="inp" value={s.oraF} onChange={e => setS({ ...s, oraF: e.target.value })} /></div>
+      </div>
       <div className="fld">
         <label className="lbl">Intervallo (minuti)</label>
         <input type="number" className="inp" value={s.interv} min={15} max={1440} onChange={e => setS({ ...s, interv: parseInt(e.target.value) || 60 })} />

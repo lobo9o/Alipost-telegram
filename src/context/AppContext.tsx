@@ -52,6 +52,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [layouts, setLayouts] = useState<TextLayout[]>(INITIAL_LAYOUTS);
   const [templates, setTemplates] = useState<Template[]>(INITIAL_TEMPLATES);
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
+  const [publishedCount, setPublishedCount] = useState(0);
   const [loaded, setLoaded] = useState(IS_DEV);
 
   useEffect(() => {
@@ -74,7 +75,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const def = makeDefaultTemplate('tpl1');
         templatesApi.create(def).catch(() => {});
       }
-      setSettings(mergeSettings(s));
+      const rawS = s as AppSettings & { _publishedCount?: number };
+      setPublishedCount(rawS._publishedCount ?? 0);
+      setSettings(mergeSettings(rawS));
       if (pub.length > 0) setPublished(pub as PublishedPost[]);
       setLoaded(true);
     });
@@ -110,6 +113,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       templates, setTemplates,
       settings, setSettings,
       stats,
+      publishedCount,
     }}>
       {children}
     </AppCtx.Provider>

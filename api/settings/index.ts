@@ -17,10 +17,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     if (size > 10_000) {
       console.warn('[settings] data troppo grande — reset a {}');
       await sql`UPDATE settings SET data = ${sql.json({})}, updated_at = now() WHERE user_id = ${userId}`;
-      res.json({});
+      res.json({ _publishedCount: 0 });
       return;
     }
-    res.json(data);
+    const [countRow] = await sql`
+      SELECT COUNT(*)::int AS cnt FROM published_posts WHERE user_id = ${userId}
+    `.catch(() => [{ cnt: 0 }]);
+    res.json({ ...data, _publishedCount: countRow?.cnt ?? 0 });
     return;
   }
 
