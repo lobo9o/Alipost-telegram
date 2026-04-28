@@ -154,12 +154,13 @@ export interface TerminataConfig {
   grayscale: boolean;
   overlayText: string;
   overlayTextColor: string;
-  overlayTextSize: number;       // % del canvas, es 7
+  overlayTextSize: number;
+  overlayTextX: number;
+  overlayTextY: number;
   showPrezzo: boolean;
   showPrezzoPrecedente: boolean;
   showSconto: boolean;
-  layoutId: string;              // id del TextLayout da usare per il testo Telegram
-  templateId: string;            // id del Template da usare come base per l'immagine
+  layoutId: string;
 }
 
 export interface AmazonSettings {

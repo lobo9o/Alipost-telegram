@@ -159,16 +159,6 @@ export async function generateTerminataImage(
     } catch { /* skip */ }
   }
 
-  if (config.grayscale) {
-    const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    const d = imageData.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      d[i] = d[i + 1] = d[i + 2] = g;
-    }
-    ctx.putImageData(imageData, 0, 0);
-  }
-
   if (template.overlay.enabled && template.overlay.src) {
     try {
       const img = await loadImage(template.overlay.src);
@@ -186,6 +176,17 @@ export async function generateTerminataImage(
     } catch { /* skip */ }
   }
 
+  // Grayscale sull'intera immagine (prodotto + overlay + store)
+  if (config.grayscale) {
+    const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    const d = imageData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      d[i] = d[i + 1] = d[i + 2] = g;
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   if (config.showPrezzo) drawTextEl(ctx, template.prezzo, values.prezzo ?? template.prezzo.text);
   if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text);
   if (config.showSconto) drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text);
@@ -193,6 +194,8 @@ export async function generateTerminataImage(
 
   if (config.overlayText) {
     const fs = (config.overlayTextSize / 100) * CANVAS_SIZE;
+    const tx = (config.overlayTextX / 100) * CANVAS_SIZE;
+    const ty = (config.overlayTextY / 100) * CANVAS_SIZE;
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -200,9 +203,9 @@ export async function generateTerminataImage(
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = fs * 0.08;
     ctx.lineJoin = 'round';
-    ctx.strokeText(config.overlayText, CANVAS_SIZE / 2, CANVAS_SIZE / 2);
+    ctx.strokeText(config.overlayText, tx, ty);
     ctx.fillStyle = config.overlayTextColor;
-    ctx.fillText(config.overlayText, CANVAS_SIZE / 2, CANVAS_SIZE / 2);
+    ctx.fillText(config.overlayText, tx, ty);
     ctx.restore();
   }
 

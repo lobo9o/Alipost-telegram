@@ -813,7 +813,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     if (!window.confirm(`Segnare "${p.title.slice(0, 30)}..." come TERMINATA?`)) return;
 
     const terminataCfg = settings.terminata;
-    const tmpl = templates.find(t => t.id === terminataCfg.templateId) ?? templates[0];
+    const tmpl = templates[0];
     const terminataLayout = layouts.find(l => l.id === terminataCfg.layoutId);
 
     let newImage: string | undefined;

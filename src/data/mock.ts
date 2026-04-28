@@ -41,10 +41,11 @@ export const INITIAL_SETTINGS: AppSettings = {
     overlayText: '❌ OFFERTA TERMINATA',
     overlayTextColor: '#ff0000',
     overlayTextSize: 7,
+    overlayTextX: 50,
+    overlayTextY: 50,
     showPrezzo: true,
     showPrezzoPrecedente: false,
     showSconto: false,
     layoutId: '',
-    templateId: '',
   },
 };

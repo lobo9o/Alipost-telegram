@@ -724,12 +724,12 @@ function TemplateSection() {
 // ── Terminata Panel ───────────────────────────────────────────
 const DEFAULT_TERMINATA: TerminataConfig = {
   grayscale: true, overlayText: '❌ OFFERTA TERMINATA', overlayTextColor: '#ff0000',
-  overlayTextSize: 7, showPrezzo: true, showPrezzoPrecedente: false,
-  showSconto: false, layoutId: '', templateId: '',
+  overlayTextSize: 7, overlayTextX: 50, overlayTextY: 50,
+  showPrezzo: true, showPrezzoPrecedente: false, showSconto: false, layoutId: '',
 };
 
 function TerminataPanel() {
-  const { settings, setSettings, layouts, templates } = useApp();
+  const { settings, setSettings, layouts } = useApp();
   const [cfg, setCfg] = useState<TerminataConfig>(settings.terminata ?? DEFAULT_TERMINATA);
   const [saved, setSaved] = useState(false);
 
@@ -744,10 +744,13 @@ function TerminataPanel() {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  // Anteprima CSS del testo overlay
+  const previewSize = `${cfg.overlayTextSize * 3.4}px`;
+
   return (
     <>
       <div className="stit">IMMAGINE</div>
-      <ToggleRow label="Bianco e nero" sub="Desatura l'immagine del prodotto" value={cfg.grayscale} onChange={v => update('grayscale', v)} />
+      <ToggleRow label="Bianco e nero" sub="Desatura prodotto + overlay" value={cfg.grayscale} onChange={v => update('grayscale', v)} />
 
       <div className="stit" style={{ marginTop: 8 }}>TESTO SULL'IMMAGINE</div>
       <div className="fld">
@@ -760,24 +763,42 @@ function TerminataPanel() {
           <input type="color" className="inp" value={cfg.overlayTextColor} onChange={e => update('overlayTextColor', e.target.value)} style={{ height: 40, padding: 4, cursor: 'pointer' }} />
         </div>
         <div className="fld" style={{ margin: 0 }}>
-          <label className="lbl">Dimensione ({cfg.overlayTextSize}%)</label>
+          <label className="lbl">Dim. ({cfg.overlayTextSize}%)</label>
           <input type="range" min={3} max={15} value={cfg.overlayTextSize} onChange={e => update('overlayTextSize', Number(e.target.value))} style={{ width: '100%', marginTop: 10 }} />
         </div>
       </div>
+
+      {/* Anteprima posizione testo */}
+      <div className="lbl" style={{ marginBottom: 6 }}>ANTEPRIMA POSIZIONE</div>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', background: cfg.grayscale ? '#555' : '#1a1a2e', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
+        {/* griglia guida */}
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px)', backgroundSize: '10% 10%' }} />
+        <div style={{
+          position: 'absolute',
+          left: `${cfg.overlayTextX}%`, top: `${cfg.overlayTextY}%`,
+          transform: 'translate(-50%,-50%)',
+          fontSize: previewSize, fontWeight: 900, fontFamily: 'Impact, Arial Black',
+          color: cfg.overlayTextColor,
+          textShadow: '0 0 6px #000, 0 0 2px #000',
+          whiteSpace: 'nowrap', pointerEvents: 'none',
+          maxWidth: '95%', textAlign: 'center',
+        }}>
+          {cfg.overlayText || '❌ TERMINATA'}
+        </div>
+      </div>
+
+      {/* Frecce posizione */}
+      <PositionArrows
+        x={cfg.overlayTextX} y={cfg.overlayTextY}
+        onChange={(x, y) => setCfg(prev => ({ ...prev, overlayTextX: x, overlayTextY: y }))}
+      />
 
       <div className="stit">ELEMENTI VISIBILI</div>
       <ToggleRow label="Mostra prezzo attuale" value={cfg.showPrezzo} onChange={v => update('showPrezzo', v)} />
       <ToggleRow label="Mostra prezzo precedente" value={cfg.showPrezzoPrecedente} onChange={v => update('showPrezzoPrecedente', v)} />
       <ToggleRow label="Mostra percentuale sconto" value={cfg.showSconto} onChange={v => update('showSconto', v)} />
 
-      <div className="stit" style={{ marginTop: 8 }}>TEMPLATE E TESTO TELEGRAM</div>
-      <div className="fld">
-        <label className="lbl">Template immagine base</label>
-        <select className="sel" value={cfg.templateId} onChange={e => update('templateId', e.target.value)}>
-          <option value="">— Primo disponibile —</option>
-          {templates.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
-        </select>
-      </div>
+      <div className="stit" style={{ marginTop: 8 }}>TESTO TELEGRAM</div>
       <div className="fld">
         <label className="lbl">Layout testo Telegram</label>
         <select className="sel" value={cfg.layoutId} onChange={e => update('layoutId', e.target.value)}>
