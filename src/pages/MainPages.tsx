@@ -5,7 +5,7 @@ import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanne
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags } from '../utils/tagUtils';
-import { productApi, postsApi, autopostApi } from '../lib/api';
+import { productApi, postsApi, autopostApi, publishedApi } from '../lib/api';
 import { generatePostImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
@@ -543,10 +543,23 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           });
         } catch { /* fall back to URL */ }
       }
-      await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, generatedImage });
+      const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, generatedImage }) as { ok: boolean; messageId?: number; chatId?: string };
       setQueue(q => q.filter(x => x.id !== id));
       autopostApi.delete(id).catch(() => {});
-      setPublished(prev => [...prev, { id: post.id, emoji: post.emoji, title: post.title, price: Number(post.discountedPrice).toFixed(2), platform: post.platform, ts: 'ora' }]);
+      const now = new Date().toISOString();
+      const pubRecord = {
+        id: post.id, emoji: post.emoji, title: post.title,
+        price: Number(post.discountedPrice).toFixed(2),
+        originalPrice: post.originalPrice, discountPercent: post.discountPercent,
+        platform: post.platform, image: post.image,
+        sourceUrl: post.sourceUrl, productId: post.productId,
+        customText: post.customText, layoutId: post.layoutId,
+        isHistoricalLow: post.isHistoricalLow,
+        chatId: pubResult.chatId ?? '', messageId: pubResult.messageId ?? 0,
+        publishedAt: now, ts: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+      };
+      setPublished(prev => [pubRecord, ...prev]);
+      publishedApi.save(pubRecord).catch(() => {});
     } catch (e) {
       const msg = e instanceof Error ? (e.message || 'Errore sconosciuto') : String(e) || 'Errore sconosciuto';
       setQueue(q => q.map(x => x.id === id ? { ...x, status: 'error' } : x));
@@ -650,7 +663,6 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060', flexShrink: 0 }}
               onClick={() => { move(item.id, 'down'); setCurrentIdx(i => Math.min(queue.length - 1, i + 1)); }}
               disabled={safeIdx === queue.length - 1}>↓ Giù</button>
-            <StatusBadge status={item.status} />
             <div style={{ flex: 1 }} />
             <button className="btn bsm bgh" style={{ flexShrink: 0 }}
               onClick={() => setExpandedId(isEditing ? null : item.id)}>
@@ -740,39 +752,119 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 // PUBLISHED PAGE
 // ============================================================
 export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { published, setQueue } = useApp();
+  const { published, setPublished, setQueue, layouts, tags } = useApp();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [editErr, setEditErr] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const reinsert = (p: typeof published[0]) => {
     const post: CreatedPost = {
-      id: genId(), platform: p.platform, sourceUrl: '', productId: '',
-      title: p.title, image: '', emoji: p.emoji,
-      originalPrice: parseFloat(p.price) * 1.5,
+      id: genId(), platform: p.platform, sourceUrl: p.sourceUrl, productId: p.productId,
+      title: p.title, image: p.image, emoji: p.emoji,
+      originalPrice: p.originalPrice,
       discountedPrice: parseFloat(p.price),
-      discountPercent: 33,
-      customText: '', isHistoricalLow: false, templateId: 'tpl1', layoutId: 'l1',
+      discountPercent: p.discountPercent,
+      customText: p.customText, isHistoricalLow: p.isHistoricalLow,
+      templateId: 'tpl1', layoutId: p.layoutId,
     };
     setQueue(prev => [...prev, { id: genId(), tipo: 'single', posts: [post], sched: 'Auto', status: 'draft', sel: false }]);
     nav('queue');
   };
 
+  const startEdit = (p: typeof published[0]) => {
+    setEditingId(p.id);
+    setEditText(p.customText || '');
+    setEditErr('');
+  };
+
+  const saveEdit = async (p: typeof published[0]) => {
+    if (!p.chatId || !p.messageId) {
+      setEditErr('message_id Telegram non disponibile — il post è stato pubblicato con una versione precedente del bot.');
+      return;
+    }
+    setSaving(true); setEditErr('');
+    try {
+      const layout = layouts.find(l => l.id === p.layoutId);
+      const updatedPost = { ...p, customText: editText };
+      const newCaption = layout
+        ? resolvePostTags(layout.contenuto, {
+            id: p.id, platform: p.platform, sourceUrl: p.sourceUrl, productId: p.productId,
+            title: p.title, image: p.image, emoji: p.emoji,
+            originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price),
+            discountPercent: p.discountPercent, customText: editText,
+            isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId,
+          }, tags)
+        : editText;
+      await publishedApi.editTelegram(p.id, { chatId: p.chatId, messageId: p.messageId, newCaption } as any);
+      setPublished(prev => prev.map(x => x.id === p.id ? { ...x, customText: editText } : x));
+      setEditingId(null);
+    } catch (e) {
+      setEditErr(e instanceof Error ? e.message : 'Errore durante la modifica');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markTerminata = async (p: typeof published[0]) => {
+    if (!p.chatId || !p.messageId) { alert('message_id non disponibile'); return; }
+    if (!window.confirm(`Segnare "${p.title.slice(0, 30)}..." come TERMINATA su Telegram?`)) return;
+    try {
+      await publishedApi.editTelegram(p.id, { chatId: p.chatId, messageId: p.messageId, terminata: true } as any);
+      setPublished(prev => prev.map(x => x.id === p.id ? { ...x, isHistoricalLow: false } : x));
+    } catch (e) {
+      alert('Errore: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
   return (
     <div className="pg">
-      <PageHeader title="Pubblicati" onBack={() => nav('dash')} badge={`${published.length} oggi`} badgeVariant="green" />
-      <div style={{ height: 10 }} />
-      {!published.length && <EmptyState icon="✅" text="Nessun post pubblicato oggi." />}
+      <PageHeader title="Pubblicati oggi" onBack={() => nav('dash')} badge={`${published.length}`} badgeVariant="green" />
+      <div style={{ height: 8 }} />
+      {!published.length && (
+        <EmptyState icon="✅" text="Nessun post pubblicato oggi."
+          action={<button className="btn bp" onClick={() => nav('queue')}>Vai alla coda</button>} />
+      )}
       {published.map(p => (
-        <div key={p.id} className="pub-card">
-          <div className="pub-thumb">{p.emoji}</div>
-          <div className="pub-info">
-            <div className="pub-tit">{p.title}</div>
-            <div className="pub-meta">
-              <SourceBadge platform={p.platform} /> {p.ts} · €{p.price}
+        <div key={p.id} className="card" style={{ margin: '0 16px 12px', padding: 0, overflow: 'hidden' }}>
+          {/* Mini image */}
+          {p.image && p.image.startsWith('http') && (
+            <img src={p.image} alt="" style={{ width: '100%', aspectRatio: '2/1', objectFit: 'cover', display: 'block' }} />
+          )}
+          <div style={{ padding: '10px 12px 12px' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <SourceBadge platform={p.platform} />
+              <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts}</span>
+              {p.isHistoricalLow && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700 }}>🏆 MIN</span>}
+              {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
             </div>
-            <div style={{ display: 'flex', gap: 5 }}>
-              <button className="btn bsm bs">✏️ Modifica</button>
-              <button className="btn bsm bs">📋 Duplica</button>
-              <button className="btn bsm bbl" onClick={() => reinsert(p)}>↩️ AutoPost</button>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--gr2)' }}>€{p.price}</span>
+              <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{p.discountPercent}%</span>
             </div>
+
+            {/* Edit form */}
+            {editingId === p.id ? (
+              <>
+                <div className="lbl">TESTO PERSONALIZZATO</div>
+                <textarea className="txta" rows={2} value={editText}
+                  onChange={e => setEditText(e.target.value)} style={{ marginBottom: 8 }} />
+                {editErr && <ErrorBanner>{editErr}</ErrorBanner>}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn bs bsm" style={{ flex: 1 }} onClick={() => setEditingId(null)}>Annulla</button>
+                  <button className="btn bp bsm" style={{ flex: 2 }} disabled={saving}
+                    onClick={() => saveEdit(p)}>{saving ? '...' : '💾 Salva su Telegram'}</button>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                <button className="btn bsm bgh" onClick={() => startEdit(p)}>✏️ Modifica</button>
+                <button className="btn bsm bgh" style={{ color: '#ef4444' }} onClick={() => markTerminata(p)}>❌ Terminata</button>
+                <button className="btn bsm bbl" onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
+              </div>
+            )}
           </div>
         </div>
       ))}

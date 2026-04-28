@@ -134,7 +134,18 @@ export interface PublishedPost {
   emoji: string;
   title: string;
   price: string;
+  originalPrice: number;
+  discountPercent: number;
   platform: Platform;
+  image: string;
+  sourceUrl: string;
+  productId: string;
+  customText: string;
+  layoutId: string;
+  isHistoricalLow: boolean;
+  chatId: string;
+  messageId: number;
+  publishedAt: string;
   ts: string;
 }
 

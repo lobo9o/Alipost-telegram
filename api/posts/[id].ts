@@ -26,7 +26,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
 }
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
-  if (!allowMethods(['POST', 'PUT', 'DELETE'], req, res)) return;
+  if (!allowMethods(['POST', 'PUT', 'DELETE', 'PATCH'], req, res)) return;
   const userId = requireUserId(req, res);
   if (!userId) return;
   const { id } = req.query as { id: string };
@@ -58,6 +58,38 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     `;
     if (!row) { res.status(404).json({ error: 'Not found' }); return; }
     res.json(row);
+    return;
+  }
+
+  // ── PATCH — edit already-published Telegram message ─────────
+  if (req.method === 'PATCH') {
+    const { chatId, messageId, newCaption, terminata } = req.body ?? {};
+    if (!chatId || !messageId) { res.status(400).json({ error: 'chatId and messageId required' }); return; }
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) { res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN non configurato' }); return; }
+    const tgBase = `https://api.telegram.org/bot${botToken}`;
+    const caption = terminata
+      ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim()
+      : (newCaption ?? '');
+    // Try editMessageCaption first (photo), fall back to editMessageText
+    let tgRes = await fetch(`${tgBase}/editMessageCaption`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption: caption.slice(0, 1024), parse_mode: 'HTML' }),
+    });
+    let tgData = await tgRes.json() as { ok: boolean; description?: string };
+    if (!tgData.ok && tgData.description?.includes('there is no caption')) {
+      tgRes = await fetch(`${tgBase}/editMessageText`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: caption.slice(0, 4096), parse_mode: 'HTML' }),
+      });
+      tgData = await tgRes.json() as { ok: boolean; description?: string };
+    }
+    if (!tgData.ok) { res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore'}` }); return; }
+    // Update terminata flag in DB
+    if (terminata) {
+      await sql`UPDATE published_posts SET terminata = true WHERE id = ${id} AND user_id = ${userId}`.catch(() => {});
+    }
+    res.json({ ok: true });
     return;
   }
 
@@ -139,7 +171,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
   }
 
-  const tgData = await tgRes.json() as { ok: boolean; description?: string };
+  const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
   console.log('[publish]', channel, hasImage ? 'photo' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
 
   if (!tgData.ok) {
@@ -147,5 +179,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  res.json({ ok: true });
+  const messageId = tgData.result?.message_id ?? 0;
+  const chatId = String(tgData.result?.chat?.id ?? channel);
+  res.json({ ok: true, messageId, chatId });
 });

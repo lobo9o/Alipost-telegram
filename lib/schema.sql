@@ -67,6 +67,31 @@ CREATE TABLE IF NOT EXISTS autopost_queue (
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
+-- ── Published Posts ──────────────────────────────────────────────────────────
+-- Persistenza dei post pubblicati nella giornata corrente.
+-- Eseguire se non già presente: CREATE TABLE ... o ALTER TABLE per aggiungere colonne.
+CREATE TABLE IF NOT EXISTS published_posts (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL,
+  emoji             TEXT DEFAULT '',
+  title             TEXT DEFAULT '',
+  image             TEXT DEFAULT '',
+  original_price    FLOAT DEFAULT 0,
+  discounted_price  FLOAT DEFAULT 0,
+  discount_percent  INT DEFAULT 0,
+  platform          TEXT DEFAULT 'amazon',
+  source_url        TEXT DEFAULT '',
+  product_id        TEXT DEFAULT '',
+  custom_text       TEXT DEFAULT '',
+  layout_id         TEXT DEFAULT '',
+  is_historical_low BOOLEAN DEFAULT false,
+  chat_id           TEXT DEFAULT '',
+  message_id        BIGINT DEFAULT 0,
+  terminata         BOOLEAN DEFAULT false,
+  published_at      TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS published_posts_user_date_idx ON published_posts (user_id, published_at DESC);
+
 -- ── Price History ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS price_history (
   id          SERIAL PRIMARY KEY,

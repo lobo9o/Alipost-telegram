@@ -1,4 +1,4 @@
-import { AppSettings, Tag, TextLayout, Template, CreatedPost, QueueItem } from '../types';
+import { AppSettings, Tag, TextLayout, Template, CreatedPost, QueueItem, PublishedPost } from '../types';
 
 const BASE = '';
 
@@ -80,6 +80,14 @@ export const autopostApi = {
   update: (id: string, item: Partial<QueueItem>) => req<QueueItem>('PUT', `/api/autopost/${id}`, item),
   delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/autopost/${id}`),
   deleteAll: () => req<{ ok: boolean }>('DELETE', '/api/autopost'),
+};
+
+// ── Published Posts ───────────────────────────────────────────────────────────
+export const publishedApi = {
+  listToday: () => req<PublishedPost[]>('GET', '/api/posts?view=published'),
+  save: (p: PublishedPost) => req<PublishedPost>('POST', '/api/posts?view=published', p),
+  editTelegram: (id: string, payload: { customText?: string; layoutContenuto?: string; terminata?: boolean }) =>
+    req<{ ok: boolean }>('PATCH', `/api/posts/${id}`, payload),
 };
 
 // ── Product fetch (via server — keeps API secrets safe) ───────────────────────

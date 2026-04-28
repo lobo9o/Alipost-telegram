@@ -3,7 +3,7 @@ import { AppContextType, QueueItem, PublishedPost, TextLayout, Template, AppSett
 import {
   INITIAL_TAGS, INITIAL_LAYOUTS, INITIAL_TEMPLATES, INITIAL_SETTINGS,
 } from '../data/mock';
-import { tagsApi, layoutsApi, templatesApi, settingsApi, autopostApi } from '../lib/api';
+import { tagsApi, layoutsApi, templatesApi, settingsApi, autopostApi, publishedApi } from '../lib/api';
 
 const AppCtx = createContext<AppContextType | null>(null);
 
@@ -62,21 +62,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       tryFetch(layoutsApi.list, INITIAL_LAYOUTS),
       tryFetch(templatesApi.list, INITIAL_TEMPLATES),
       tryFetch(settingsApi.get, {} as AppSettings),
-    ]).then(([q, t, l, tmpl, s]) => {
-      // Only restore draft items — error/scheduled/published are stale and shouldn't reappear
+      tryFetch(publishedApi.listToday, []),
+    ]).then(([q, t, l, tmpl, s, pub]) => {
       setQueue((q as QueueItem[]).filter(x => x.status === 'draft'));
       if (t.length > 0) setTags(t);
       if (l.length > 0) setLayouts(l);
       if (tmpl.length > 0) {
-        // Merge with defaults to handle old or partial DB data
         const normalized = (tmpl as Template[]).map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
         setTemplates(normalized);
       } else {
-        // First-time: persist default template to DB
         const def = makeDefaultTemplate('tpl1');
         templatesApi.create(def).catch(() => {});
       }
       setSettings(mergeSettings(s));
+      if (pub.length > 0) setPublished(pub as PublishedPost[]);
       setLoaded(true);
     });
   }, []);
