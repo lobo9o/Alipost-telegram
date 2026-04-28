@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/posts?action=price-check",
-      "schedule": "0 * * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
