@@ -147,28 +147,39 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const userHasCreds = !!(cfg.amazon?.credentialId && cfg.amazon?.credentialSecret);
     const credentialId     = cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '';
     const credentialSecret = cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '';
-    const partnerTag       = cfg.amazon?.affiliateTag     || process.env.AMAZON_AFFILIATE_TAG     || '';
-    // Se si usano le credenziali di sistema, usare anche version/marketplace di sistema
+
+    // apiTag: deve corrispondere all'account delle credenziali usate
+    const apiTag = userHasCreds
+      ? (cfg.amazon?.affiliateTag || '')
+      : (process.env.AMAZON_AFFILIATE_TAG || '');
+
+    // affiliateTag: tag nel link del post — sempre quello dell'utente se disponibile
+    const affiliateTag = cfg.amazon?.affiliateTag || process.env.AMAZON_AFFILIATE_TAG || '';
+
     const version = userHasCreds
-      ? (cfg.amazon?.version          || process.env.AMAZON_VERSION   || '2.2')
-      : (process.env.AMAZON_VERSION                                   || '2.2');
+      ? (cfg.amazon?.version      || process.env.AMAZON_VERSION      || '2.2')
+      : (process.env.AMAZON_VERSION                                  || '2.2');
     const marketplaceCode = userHasCreds
-      ? ((cfg.amazon?.marketplace     || process.env.AMAZON_MARKETPLACE || 'IT').toUpperCase())
-      : ((process.env.AMAZON_MARKETPLACE                               || 'IT').toUpperCase());
+      ? ((cfg.amazon?.marketplace || process.env.AMAZON_MARKETPLACE  || 'IT').toUpperCase())
+      : ((process.env.AMAZON_MARKETPLACE                             || 'IT').toUpperCase());
     const marketplaceDomain = MARKETPLACE_DOMAINS[marketplaceCode] ?? 'www.amazon.it';
 
-    console.log('[product] creds source:', userHasCreds ? 'user' : 'env', '| version:', version, '| marketplace:', marketplaceCode);
+    console.log('[product] creds:', userHasCreds ? 'user' : 'env', '| apiTag:', apiTag.slice(0, 20), '| affiliateTag:', affiliateTag.slice(0, 20));
 
-    if (!credentialId || !credentialSecret || !partnerTag) {
-      const isEnv = !userHasCreds;
-      res.status(400).json({ error: isEnv
-        ? 'Credenziali Amazon non configurate. Contatta l\'amministratore oppure inserisci le tue in Impostazioni.'
-        : 'Credenziali Amazon Creators API non configurate. Vai in Impostazioni e inserisci Credential ID, Credential Secret e Partner Tag.'
+    if (!credentialId || !credentialSecret || !apiTag) {
+      res.status(400).json({ error: userHasCreds
+        ? 'Credenziali Amazon non complete. Inserisci Credential ID, Credential Secret e Partner Tag in Impostazioni.'
+        : 'Credenziali Amazon di sistema non configurate. Contatta l\'amministratore.'
       });
       return;
     }
 
-    const data = await creatorsGetItem(resolvedAsin, credentialId, credentialSecret, partnerTag, version, marketplaceDomain) as any;
+    if (!affiliateTag) {
+      res.status(400).json({ error: 'Inserisci il tuo Partner Tag (tag affiliato) in Impostazioni → Amazon.' });
+      return;
+    }
+
+    const data = await creatorsGetItem(resolvedAsin, credentialId, credentialSecret, apiTag, version, marketplaceDomain) as any;
 
     // Supporto risposta camelCase e PascalCase
     const itemsResult = pick(data, 'itemsResult', 'ItemsResult') as any;
@@ -196,7 +207,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       originalPrice,
       discountedPrice,
       discountPercent,
-      affiliateUrl: `https://${marketplaceDomain}/dp/${resolvedAsin}?tag=${partnerTag}`,
+      affiliateUrl: `https://${marketplaceDomain}/dp/${resolvedAsin}?tag=${affiliateTag}`,
     });
 
   } else if (platform === 'aliexpress') {
