@@ -731,7 +731,7 @@ const Chevron = ({ open }: { open: boolean }) => (
 );
 
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { settings, setSettings, publishedCount } = useApp();
+  const { settings, setSettings } = useApp();
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState('');
@@ -757,9 +757,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
 
   const setAli = (field: keyof typeof s.aliexpress, value: string | boolean) =>
     setS(prev => ({ ...prev, aliexpress: { ...prev.aliexpress, [field]: value } }));
-
-  const canEditCredentials = publishedCount >= 3;
-  const postsUntilUnlock = Math.max(0, 3 - publishedCount);
 
   return (
     <div className="pg">
@@ -817,42 +814,24 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
 
             <div style={{ height: 12 }} />
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: 1, marginBottom: 8 }}>CREDENZIALI API</div>
-
-            {canEditCredentials ? (
-              <>
-                <div className="fld">
-                  <label className="lbl">Credential ID</label>
-                  <input className="inp" type="password" value={s.amazon.credentialId}
-                    onChange={e => setAmazon('credentialId', e.target.value)}
-                    placeholder="amzn1.application-oa2-client...." />
-                  {s.amazon.credentialId && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialId.length} car.)</div>}
-                </div>
-                <div className="fld">
-                  <label className="lbl">Credential Secret</label>
-                  <input className="inp" type="password" value={s.amazon.credentialSecret}
-                    onChange={e => setAmazon('credentialSecret', e.target.value)}
-                    placeholder="amzn1.oa2-cs.v1...." />
-                  {s.amazon.credentialSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Configurato ({s.amazon.credentialSecret.length} car.)</div>}
-                </div>
-              </>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--bdr)' }}>
-                <span style={{ fontSize: 20 }}>🔒</span>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t2)' }}>Credenziali personali bloccate</div>
-                  <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>
-                    {postsUntilUnlock === 0
-                      ? 'Sblocco in corso…'
-                      : `Pubblica ancora ${postsUntilUnlock} post per sbloccare`}
-                  </div>
-                  <div style={{ marginTop: 6, height: 4, borderRadius: 2, background: 'var(--bdr)' }}>
-                    <div style={{ height: '100%', borderRadius: 2, background: 'var(--bl)', width: `${Math.round((publishedCount / 3) * 100)}%`, transition: 'width .4s' }} />
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 3 }}>{publishedCount} / 3 post</div>
-                </div>
-              </div>
-            )}
-            <div style={{ marginTop: 8 }}><InfoBanner>Le credenziali non inserite usano quelle di sistema.</InfoBanner></div>
+            <div className="fld">
+              <label className="lbl">Credential ID</label>
+              <input className="inp" type="password" value={s.amazon.credentialId}
+                onChange={e => setAmazon('credentialId', e.target.value)}
+                placeholder="amzn1.application-oa2-client...." />
+              {s.amazon.credentialId
+                ? <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Personale ({s.amazon.credentialId.length} car.)</div>
+                : <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3 }}>Vuoto → usa credenziali di sistema</div>}
+            </div>
+            <div className="fld">
+              <label className="lbl">Credential Secret</label>
+              <input className="inp" type="password" value={s.amazon.credentialSecret}
+                onChange={e => setAmazon('credentialSecret', e.target.value)}
+                placeholder="amzn1.oa2-cs.v1...." />
+              {s.amazon.credentialSecret
+                ? <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Personale ({s.amazon.credentialSecret.length} car.)</div>
+                : <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3 }}>Vuoto → usa credenziali di sistema</div>}
+            </div>
           </div>
         )}
       </div>
