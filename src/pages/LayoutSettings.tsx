@@ -14,13 +14,12 @@ export function LayoutPage({ nav }: { nav: (p: NavPage) => void }) {
     <div className="pg">
       <PageHeader title="Layout" onBack={() => nav('dash')} />
       <SwitchTabs
-        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['template', '🖼️ Template'], ['terminata', '🚫 Terminata']]}
+        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['template', '🖼️ Template']]}
         value={tab} onChange={setTab}
       />
       {tab === 'tags' && <TagsSection />}
       {tab === 'testo' && <TextLayoutSection />}
       {tab === 'template' && <TemplateSection />}
-      {tab === 'terminata' && <TerminataSection />}
     </div>
   );
 }
@@ -715,6 +714,8 @@ function TemplateSection() {
       {!activePanel && (
         <InfoBanner>Seleziona un componente sopra per modificarlo. L'anteprima si aggiorna in tempo reale.</InfoBanner>
       )}
+
+      <TerminataSection />
     </>
   );
 }
