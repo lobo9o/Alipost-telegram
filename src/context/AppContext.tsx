@@ -106,12 +106,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', height: '100vh', gap: 16,
+        justifyContent: 'center', height: '100vh', gap: 20,
         background: 'var(--bg)', color: 'var(--t1)',
       }}>
-        <div style={{ fontSize: 40 }}>⚙️</div>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>PostDealBot</div>
-        <div style={{ fontSize: 13, color: 'var(--t2)' }}>Caricamento...</div>
+        <div style={{
+          fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 32,
+          letterSpacing: '-0.5px', lineHeight: 1,
+        }}>
+          <span style={{ color: 'var(--a3)' }}>Post</span>
+          <span style={{ color: 'var(--t1)' }}>Deal</span>
+          <span style={{ color: 'var(--a1)' }}>Bot</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--t3)', letterSpacing: '2px', textTransform: 'uppercase' }}>Caricamento...</div>
       </div>
     );
   }
