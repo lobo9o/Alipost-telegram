@@ -51,6 +51,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{checkout}':        '',
   };
 
+  const SENTINEL = '\x01';
   const knownTagNames = new Set(Object.keys(tags));
 
   function applyConditionals(text: string): string {
@@ -67,12 +68,11 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
             resolved = resolved.split(tag).join(val);
           }
         }
-        // Tag sconosciuti dentro {_ _} = vuoti → nascondi il blocco
         const found = inner.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) ?? [];
         for (const t of found) {
           if (!knownTagNames.has(t)) { hasEmpty = true; break; }
         }
-        return hasEmpty ? '' : resolved;
+        return hasEmpty ? SENTINEL : resolved;
       });
     }
     return cur;
@@ -84,6 +84,13 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     t = t.split(tag).join(val);
   }
   t = t.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+
+  // Rimuovi righe che contenevano solo blocchi condizionali vuoti
+  t = t.split('\n').filter(line => {
+    if (!line.includes(SENTINEL)) return true;
+    return line.replace(/\x01/g, '').trim() !== '';
+  }).map(line => line.replace(/\x01/g, '')).join('\n');
+
   return t;
 }
 

@@ -14,6 +14,9 @@ export const SYSTEM_TAGS = new Set([
   '{coupon}', '{boxcoupon}', '{checkout}',
 ]);
 
+// Sentinel usato internamente: riga che conteneva solo un blocco {_ _} vuoto → verrà rimossa
+const SENTINEL = '\x01';
+
 function pad(n: number): string { return n < 10 ? `0${n}` : String(n); }
 
 function computedTags(post: CreatedPost): Record<string, string> {
@@ -67,8 +70,23 @@ function applyTags(text: string, builtIn: Record<string, string>, customTags: Ta
   return t;
 }
 
+// Rimuove le righe che contengono solo sentinel (blocco condizionale vuoto su riga propria).
+// I sentinel inline (su riga con altro contenuto) vengono semplicemente eliminati.
+function cleanupSentinels(text: string): string {
+  return text
+    .split('\n')
+    .filter(line => {
+      if (!line.includes(SENTINEL)) return true;
+      // Linea con sentinel: la rimuoviamo solo se, tolto il sentinel, la riga è vuota
+      return line.replace(/\x01/g, '').trim() !== '';
+    })
+    .map(line => line.replace(/\x01/g, ''))
+    .join('\n');
+}
+
 export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]): string {
   const builtIn = computedTags(post);
+  const knownTags = new Set([...Object.keys(builtIn), ...tags.map(t => t.name)]);
 
   // Blocchi condizionali annidati {_ ... _}: elabora dall'interno verso l'esterno
   let result = template;
@@ -86,14 +104,15 @@ export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]
         }
       }
       // Tag sconosciuti (non built-in né custom) = vuoti → nascondi il blocco
-      const knownTags = new Set([...Object.keys(builtIn), ...tags.map(t => t.name)]);
       const found = inner.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) ?? [];
       for (const t of found) {
         if (!knownTags.has(t)) { hasEmpty = true; break; }
       }
-      return hasEmpty ? '' : applyTags(inner, builtIn, tags);
+      // Usa sentinel invece di '': permette di rilevare e rimuovere la riga intera
+      return hasEmpty ? SENTINEL : applyTags(inner, builtIn, tags);
     });
   }
 
-  return applyTags(result, builtIn, tags);
+  result = applyTags(result, builtIn, tags);
+  return cleanupSentinels(result);
 }
