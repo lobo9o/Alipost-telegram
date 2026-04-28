@@ -143,15 +143,27 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const resolvedAsin = (asin ?? extractAsin(url) ?? '').toUpperCase();
     if (!resolvedAsin) { res.status(400).json({ error: 'Impossibile estrarre ASIN dal link' }); return; }
 
+    const userHasCreds = !!(cfg.amazon?.credentialId && cfg.amazon?.credentialSecret);
     const credentialId     = cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '';
     const credentialSecret = cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '';
     const partnerTag       = cfg.amazon?.affiliateTag     || process.env.AMAZON_AFFILIATE_TAG     || '';
-    const version          = cfg.amazon?.version          || process.env.AMAZON_VERSION           || '2.2';
-    const marketplaceCode  = (cfg.amazon?.marketplace     || process.env.AMAZON_MARKETPLACE       || 'IT').toUpperCase();
+    // Se si usano le credenziali di sistema, usare anche version/marketplace di sistema
+    const version = userHasCreds
+      ? (cfg.amazon?.version          || process.env.AMAZON_VERSION   || '2.2')
+      : (process.env.AMAZON_VERSION                                   || '2.2');
+    const marketplaceCode = userHasCreds
+      ? ((cfg.amazon?.marketplace     || process.env.AMAZON_MARKETPLACE || 'IT').toUpperCase())
+      : ((process.env.AMAZON_MARKETPLACE                               || 'IT').toUpperCase());
     const marketplaceDomain = MARKETPLACE_DOMAINS[marketplaceCode] ?? 'www.amazon.it';
 
+    console.log('[product] creds source:', userHasCreds ? 'user' : 'env', '| version:', version, '| marketplace:', marketplaceCode);
+
     if (!credentialId || !credentialSecret || !partnerTag) {
-      res.status(400).json({ error: 'Credenziali Amazon Creators API non configurate. Vai in Impostazioni e inserisci Credential ID, Credential Secret e Partner Tag.' });
+      const isEnv = !userHasCreds;
+      res.status(400).json({ error: isEnv
+        ? 'Credenziali Amazon non configurate. Contatta l\'amministratore oppure inserisci le tue in Impostazioni.'
+        : 'Credenziali Amazon Creators API non configurate. Vai in Impostazioni e inserisci Credential ID, Credential Secret e Partner Tag.'
+      });
       return;
     }
 

@@ -177,11 +177,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     for (const [, userPosts] of byUser) {
       const rawData = userPosts[0].settings_data ?? {};
       const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
+      const userHasCreds = !!(cfg.amazon?.credentialId && cfg.amazon?.credentialSecret);
       const credId     = cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '';
       const credSecret = cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '';
       const tag        = cfg.amazon?.affiliateTag     || ''; // sempre dell'utente, nessun fallback
-      const version    = cfg.amazon?.version          || process.env.AMAZON_VERSION           || '2.2';
-      const mktCode    = (cfg.amazon?.marketplace     || process.env.AMAZON_MARKETPLACE       || 'IT').toUpperCase();
+      const version    = userHasCreds
+        ? (cfg.amazon?.version    || process.env.AMAZON_VERSION    || '2.2')
+        : (process.env.AMAZON_VERSION                              || '2.2');
+      const mktCode    = userHasCreds
+        ? ((cfg.amazon?.marketplace || process.env.AMAZON_MARKETPLACE || 'IT').toUpperCase())
+        : ((process.env.AMAZON_MARKETPLACE                           || 'IT').toUpperCase());
       const mktDomain  = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
 
       if (!credId || !credSecret || !tag) {
