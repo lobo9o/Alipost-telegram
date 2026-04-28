@@ -524,17 +524,18 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
 
 // ── Template Section ──────────────────────────────────────────
 
-type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store';
+type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store' | 'terminata';
 
 const COMP_INFO: Record<ComponentKey, string> = {
   product:          '📦 Riquadro dove apparirà la foto del prodotto. Spostalo con le frecce e ridimensionalo con lo slider.',
   overlay:          '🖼️ Immagine sovrapposta (cornice, sfondo decorativo). Carica un PNG con trasparenza. Spostalo e ridimensionalo.',
   badge:            '🏆 Icona visibile solo sui prodotti al minimo storico. Viene disegnata sopra tutti gli altri layer. Carica un PNG e posizionalo.',
-  prezzo:           '💰 Prezzo scontato — inserito automaticamente dal post. Spostalo, scegli font e colore. Con "ancora destra" il testo cresce verso sinistra dal punto impostato.',
-  prezzoPrecedente: '📉 Prezzo precedente (barrato) — inserito automaticamente. Puoi cambiare il colore della barra barrata separatamente dal colore del testo.',
+  prezzo:           '💰 Prezzo scontato — inserito automaticamente dal post. Spostalo, scegli font e colore.',
+  prezzoPrecedente: '📉 Prezzo precedente (barrato) — inserito automaticamente. Puoi cambiare il colore della barra barrata separatamente.',
   sconto:           '🏷️ Percentuale di sconto — calcolata automaticamente (es. -50%). Impostane font, colore e posizione.',
-  testoCustom:      '📝 Testo libero personalizzabile. Corrisponde al campo "Testo custom" del post. Puoi scrivere un testo fisso o lasciarlo vuoto.',
-  store:            '🏪 Logo negozio automatico: arancio Amazon, rosso AliExpress. Si adatta in base al tipo di prodotto del post.',
+  testoCustom:      '📝 Testo libero personalizzabile. Corrisponde al campo "Testo custom" del post.',
+  store:            '🏪 Logo negozio automatico: arancio Amazon, rosso AliExpress.',
+  terminata:        '🚫 Configura come appare il post quando l\'offerta termina: immagine B&N, testo overlay, elementi visibili e layout Telegram.',
 };
 
 const COMP_BUTTONS: { id: ComponentKey; icon: string; label: string }[] = [
@@ -546,10 +547,11 @@ const COMP_BUTTONS: { id: ComponentKey; icon: string; label: string }[] = [
   { id: 'sconto',           icon: '🏷️', label: 'Sconto' },
   { id: 'testoCustom',      icon: '📝', label: 'Testo' },
   { id: 'store',            icon: '🏪', label: 'Store' },
+  { id: 'terminata',        icon: '🚫', label: 'Terminata' },
 ];
 
 function getElEnabled(id: ComponentKey, tpl: Template): boolean {
-  if (id === 'product') return true;
+  if (id === 'product' || id === 'terminata') return true;
   if (id === 'overlay' || id === 'badge' || id === 'store') return (tpl[id] as ImgEl).enabled;
   return (tpl[id] as TextEl).enabled;
 }
@@ -612,7 +614,7 @@ function TemplateSection() {
     ['prezzo', 'prezzoPrecedente', 'sconto', 'testoCustom'].includes(k);
 
   const toggleEnabled = (id: ComponentKey) => {
-    if (id === 'product') return;
+    if (id === 'product' || id === 'terminata') return;
     const cur = getElEnabled(id, tpl);
     if (id === 'overlay' || id === 'badge' || id === 'store') {
       updateImg(id as 'overlay' | 'badge' | 'store', { enabled: !cur });
@@ -708,30 +710,27 @@ function TemplateSection() {
               showTextInput={activePanel === 'testoCustom'}
             />
           )}
+          {activePanel === 'terminata' && <TerminataPanel />}
         </div>
       )}
 
       {!activePanel && (
         <InfoBanner>Seleziona un componente sopra per modificarlo. L'anteprima si aggiorna in tempo reale.</InfoBanner>
       )}
-
-      <TerminataSection />
     </>
   );
 }
 
-// ── Terminata Section ─────────────────────────────────────────
+// ── Terminata Panel ───────────────────────────────────────────
 const DEFAULT_TERMINATA: TerminataConfig = {
   grayscale: true, overlayText: '❌ OFFERTA TERMINATA', overlayTextColor: '#ff0000',
   overlayTextSize: 7, showPrezzo: true, showPrezzoPrecedente: false,
   showSconto: false, layoutId: '', templateId: '',
 };
 
-function TerminataSection() {
+function TerminataPanel() {
   const { settings, setSettings, layouts, templates } = useApp();
-  const cfg0 = settings.terminata ?? DEFAULT_TERMINATA;
-  const [cfg, setCfg] = useState<TerminataConfig>(cfg0);
-  const [open, setOpen] = useState(false);
+  const [cfg, setCfg] = useState<TerminataConfig>(settings.terminata ?? DEFAULT_TERMINATA);
   const [saved, setSaved] = useState(false);
 
   const update = <K extends keyof TerminataConfig>(k: K, v: TerminataConfig[K]) =>
@@ -746,72 +745,50 @@ function TerminataSection() {
   };
 
   return (
-    <div style={{ margin: '12px 16px 8px' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-          background: 'var(--card, var(--bg2))', border: '1px solid var(--bdr, var(--bd))',
-          borderRadius: open ? '10px 10px 0 0' : 10, padding: '11px 14px',
-          cursor: 'pointer', color: 'var(--t1)',
-        }}>
-        <span style={{ fontSize: 16 }}>🚫</span>
-        <span style={{ fontWeight: 700, fontSize: 13, flex: 1, textAlign: 'left' }}>Configurazione TERMINATA</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width={15} height={15}
-          style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0 }}>
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
+    <>
+      <div className="stit">IMMAGINE</div>
+      <ToggleRow label="Bianco e nero" sub="Desatura l'immagine del prodotto" value={cfg.grayscale} onChange={v => update('grayscale', v)} />
 
-      {open && (
-        <div style={{ background: 'var(--card, var(--bg2))', border: '1px solid var(--bdr, var(--bd))', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '12px 14px 8px' }}>
-          <InfoBanner>Configura immagine e testo quando un'offerta termina.</InfoBanner>
-
-          <div className="stit" style={{ marginTop: 10 }}>IMMAGINE</div>
-          <ToggleRow label="Bianco e nero" sub="Desatura l'immagine del prodotto" value={cfg.grayscale} onChange={v => update('grayscale', v)} />
-
-          <div className="stit" style={{ marginTop: 8 }}>TESTO SULL'IMMAGINE</div>
-          <div className="fld">
-            <label className="lbl">Testo overlay</label>
-            <input className="inp" value={cfg.overlayText} onChange={e => update('overlayText', e.target.value)} placeholder="❌ OFFERTA TERMINATA" />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <div className="fld" style={{ margin: 0 }}>
-              <label className="lbl">Colore</label>
-              <input type="color" className="inp" value={cfg.overlayTextColor} onChange={e => update('overlayTextColor', e.target.value)} style={{ height: 40, padding: 4, cursor: 'pointer' }} />
-            </div>
-            <div className="fld" style={{ margin: 0 }}>
-              <label className="lbl">Dimensione ({cfg.overlayTextSize}%)</label>
-              <input type="range" min={3} max={15} value={cfg.overlayTextSize} onChange={e => update('overlayTextSize', Number(e.target.value))} style={{ width: '100%', marginTop: 10 }} />
-            </div>
-          </div>
-
-          <div className="stit">ELEMENTI VISIBILI</div>
-          <ToggleRow label="Mostra prezzo attuale" value={cfg.showPrezzo} onChange={v => update('showPrezzo', v)} />
-          <ToggleRow label="Mostra prezzo precedente" value={cfg.showPrezzoPrecedente} onChange={v => update('showPrezzoPrecedente', v)} />
-          <ToggleRow label="Mostra percentuale sconto" value={cfg.showSconto} onChange={v => update('showSconto', v)} />
-
-          <div className="stit" style={{ marginTop: 8 }}>TEMPLATE E TESTO TELEGRAM</div>
-          <div className="fld">
-            <label className="lbl">Template immagine base</label>
-            <select className="sel" value={cfg.templateId} onChange={e => update('templateId', e.target.value)}>
-              <option value="">— Primo disponibile —</option>
-              {templates.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
-            </select>
-          </div>
-          <div className="fld">
-            <label className="lbl">Layout testo Telegram</label>
-            <select className="sel" value={cfg.layoutId} onChange={e => update('layoutId', e.target.value)}>
-              <option value="">— Solo prefisso ❌ TERMINATA —</option>
-              {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
-            </select>
-          </div>
-
-          <button className="btn bp bfull" style={{ marginTop: 8 }} onClick={save}>✅ Salva</button>
-          {saved && <div style={{ marginTop: 8, color: '#4ade80', fontSize: 13, textAlign: 'center' }}>✓ Salvato</div>}
+      <div className="stit" style={{ marginTop: 8 }}>TESTO SULL'IMMAGINE</div>
+      <div className="fld">
+        <label className="lbl">Testo overlay</label>
+        <input className="inp" value={cfg.overlayText} onChange={e => update('overlayText', e.target.value)} placeholder="❌ OFFERTA TERMINATA" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+        <div className="fld" style={{ margin: 0 }}>
+          <label className="lbl">Colore</label>
+          <input type="color" className="inp" value={cfg.overlayTextColor} onChange={e => update('overlayTextColor', e.target.value)} style={{ height: 40, padding: 4, cursor: 'pointer' }} />
         </div>
-      )}
-    </div>
+        <div className="fld" style={{ margin: 0 }}>
+          <label className="lbl">Dimensione ({cfg.overlayTextSize}%)</label>
+          <input type="range" min={3} max={15} value={cfg.overlayTextSize} onChange={e => update('overlayTextSize', Number(e.target.value))} style={{ width: '100%', marginTop: 10 }} />
+        </div>
+      </div>
+
+      <div className="stit">ELEMENTI VISIBILI</div>
+      <ToggleRow label="Mostra prezzo attuale" value={cfg.showPrezzo} onChange={v => update('showPrezzo', v)} />
+      <ToggleRow label="Mostra prezzo precedente" value={cfg.showPrezzoPrecedente} onChange={v => update('showPrezzoPrecedente', v)} />
+      <ToggleRow label="Mostra percentuale sconto" value={cfg.showSconto} onChange={v => update('showSconto', v)} />
+
+      <div className="stit" style={{ marginTop: 8 }}>TEMPLATE E TESTO TELEGRAM</div>
+      <div className="fld">
+        <label className="lbl">Template immagine base</label>
+        <select className="sel" value={cfg.templateId} onChange={e => update('templateId', e.target.value)}>
+          <option value="">— Primo disponibile —</option>
+          {templates.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+        </select>
+      </div>
+      <div className="fld">
+        <label className="lbl">Layout testo Telegram</label>
+        <select className="sel" value={cfg.layoutId} onChange={e => update('layoutId', e.target.value)}>
+          <option value="">— Solo prefisso ❌ TERMINATA —</option>
+          {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+        </select>
+      </div>
+
+      <button className="btn bp bfull" style={{ marginTop: 8 }} onClick={save}>✅ Salva</button>
+      {saved && <div style={{ marginTop: 8, color: '#4ade80', fontSize: 13, textAlign: 'center' }}>✓ Salvato</div>}
+    </>
   );
 }
 
