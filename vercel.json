@@ -3,5 +3,11 @@
   "outputDirectory": "build",
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/posts?action=price-check",
+      "schedule": "0 * * * *"
+    }
   ]
 }
