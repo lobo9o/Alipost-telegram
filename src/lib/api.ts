@@ -103,6 +103,7 @@ export interface AmazonProductResult {
   recensioni?: string;
   author?: string;
   cat?: string;
+  coupon?: string;
 }
 export interface AliExpressProductResult {
   productId: string;

@@ -26,9 +26,9 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{titolo}':          esc(post.title),
     '{titoloup}':        esc((post.title || '').toUpperCase()),
     '{titoloshort}':     esc(titleShort),
-    '{prezzo}':          `<b>${discPrice}${valuta}</b>`,
-    '{prezzo_scontato}': `<b>${discPrice}${valuta}</b>`,
-    '{oldprezzo}':       `${origPrice}${valuta}`,
+    '{prezzo}':          discPrice,
+    '{prezzo_scontato}': discPrice,
+    '{oldprezzo}':       origPrice,
     '{sconto}':          String(disc),
     '{perc}':            `-${disc}%`,
     '{valuta}':          valuta,
@@ -46,20 +46,31 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{recensioni}':      post.recensioni || '',
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
+    '{coupon}':          post.coupon || '',
   };
 
-  // Blocchi condizionali {_ ... _}
-  let t = contenuto.replace(/\{_([\s\S]*?)_\}/g, (_, inner) => {
-    let hasEmpty = false;
-    let resolved = inner;
-    for (const [tag, val] of Object.entries(tags)) {
-      if (inner.includes(tag)) {
-        if (!val || val.trim() === '') hasEmpty = true;
-        resolved = resolved.split(tag).join(val);
-      }
+  function applyConditionals(text: string): string {
+    let prev = '';
+    let cur = text;
+    while (prev !== cur) {
+      prev = cur;
+      // Match innermost {_ ... _} blocks (no nested {_ inside)
+      cur = cur.replace(/\{_((?:(?!\{_)[\s\S])*?)_\}/g, (_, inner) => {
+        let hasEmpty = false;
+        let resolved = inner;
+        for (const [tag, val] of Object.entries(tags)) {
+          if (inner.includes(tag)) {
+            if (!val || val.trim() === '') hasEmpty = true;
+            resolved = resolved.split(tag).join(val);
+          }
+        }
+        return hasEmpty ? '' : resolved;
+      });
     }
-    return hasEmpty ? '' : resolved;
-  });
+    return cur;
+  }
+
+  let t = applyConditionals(contenuto);
 
   for (const [tag, val] of Object.entries(tags)) {
     t = t.split(tag).join(val);

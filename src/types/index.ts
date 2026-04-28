@@ -30,6 +30,7 @@ export interface CreatedPost {
   recensioni?: string;
   cat?: string;
   author?: string;
+  coupon?: string;
 }
 
 export interface CatalogProduct {

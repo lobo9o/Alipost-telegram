@@ -84,6 +84,7 @@ async function creatorsGetItem(
       'customerReviews.count',
       'itemInfo.byLineInfo',
       'browseNodeInfo.browseNodes',
+      'offersV2.listings.promotions',
     ],
   };
 
@@ -220,6 +221,17 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const browseNodes = (pick(pick(item, 'browseNodeInfo', 'BrowseNodeInfo'), 'browseNodes', 'BrowseNodes') as any[]) ?? [];
     const cat = browseNodes?.[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
 
+    const promotions = (pick(listings, 'promotions', 'Promotions') as any[]) ?? [];
+    let coupon = '';
+    for (const promo of promotions) {
+      const type = String(pick(promo, 'type', 'Type', 'promotionType', 'PromotionType') ?? '').toLowerCase();
+      const display = String(pick(promo, 'displayAmount', 'DisplayAmount', 'amount', 'Amount') ?? '');
+      if (type.includes('coupon') || type.includes('clip') || display) {
+        coupon = display || type;
+        break;
+      }
+    }
+
     res.json({
       asin: resolvedAsin,
       title: titleObj ?? '',
@@ -232,6 +244,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       recensioni: recensioni || undefined,
       author: author || undefined,
       cat: cat || undefined,
+      coupon: coupon || undefined,
     });
 
   } else if (platform === 'aliexpress') {
