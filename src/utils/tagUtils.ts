@@ -19,10 +19,19 @@ const SENTINEL = '\x01';
 
 function pad(n: number): string { return n < 10 ? `0${n}` : String(n); }
 
-function computedTags(post: CreatedPost): Record<string, string> {
+const ALI_CURRENCY_SYM: Record<string, string> = {
+  IT: '€', DE: '€', FR: '€', ES: '€', NL: '€',
+  US: '$', BR: 'R$', UK: '£', RU: '₽', PL: 'zł',
+};
+
+export function aliCurrencySym(country: string): string {
+  return ALI_CURRENCY_SYM[country.toUpperCase()] ?? '€';
+}
+
+function computedTags(post: CreatedPost, currency?: string): Record<string, string> {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-  const valuta = post.platform === 'aliexpress' ? '$' : '€';
+  const valuta = currency ?? (post.platform === 'aliexpress' ? '$' : '€');
   const flag = post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹';
   const titleShort = post.title.length > 60 ? post.title.slice(0, 57) + '...' : post.title;
 
@@ -84,8 +93,8 @@ function cleanupSentinels(text: string): string {
     .join('\n');
 }
 
-export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]): string {
-  const builtIn = computedTags(post);
+export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[], currency?: string): string {
+  const builtIn = computedTags(post, currency);
   const knownTags = new Set([...Object.keys(builtIn), ...tags.map(t => t.name)]);
 
   // Blocchi condizionali annidati {_ ... _}: elabora dall'interno verso l'esterno

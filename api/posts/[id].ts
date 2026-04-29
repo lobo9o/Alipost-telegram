@@ -12,11 +12,16 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string): string {
+const ALI_CURRENCY_SYM: Record<string, string> = {
+  IT: '€', DE: '€', FR: '€', ES: '€', NL: '€',
+  US: '$', BR: 'R$', UK: '£', RU: '₽', PL: 'zł',
+};
+
+function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string, currency?: string): string {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const pad = (n: number) => n < 10 ? `0${n}` : String(n);
-  const valuta = post.platform === 'aliexpress' ? '$' : '€';
+  const valuta = currency ?? (post.platform === 'aliexpress' ? '$' : '€');
   const discPrice = Number(post.discountedPrice).toFixed(2);
   const origPrice = Number(post.originalPrice).toFixed(2);
   const disc = Number(post.discountPercent);
@@ -101,7 +106,6 @@ function buildKeyboard(
 ): object | undefined {
   if (!contenuto?.trim()) return undefined;
 
-  const valuta = post.platform === 'aliexpress' ? '$' : '€';
   const waText = encodeURIComponent(`${post.title ?? ''}\n${affiliateUrl}`);
   const urlTags: Record<string, string> = {
     '{link}':       affiliateUrl,
@@ -261,7 +265,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato} <s>{prezzo}</s>\n🏷️ Sconto: -{sconto}\n\n{custom}`;
-  const messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl);
+  const aliCurrency = post.platform === 'aliexpress'
+    ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
+    : '€';
+  const messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl, aliCurrency);
 
   const replyMarkup = buildKeyboard(keyboardContenuto, post, affiliateUrl)
     ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);

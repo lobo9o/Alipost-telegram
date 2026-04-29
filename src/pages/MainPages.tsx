@@ -4,7 +4,7 @@ import { NavPage, CreatedPost, QueueItem, Platform, Template } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
-import { resolvePostTags } from '../utils/tagUtils';
+import { resolvePostTags, aliCurrencySym } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi, publishedApi } from '../lib/api';
 import { generatePostImage, generateTerminataImage } from '../utils/imageCompose';
 
@@ -143,13 +143,14 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
   onQueue: () => void;
   onPublish: () => void;
 }) {
-  const { createdPosts, setCreatedPosts, layouts, templates, tags } = useApp();
+  const { createdPosts, setCreatedPosts, layouts, templates, tags, settings } = useApp();
   const post = createdPosts.find(p => p.id === postId);
   if (!post) return null;
 
   const currentTemplate = templates.find(t => t.id === post.templateId);
   const currentLayout = layouts.find(l => l.id === post.layoutId);
-  const previewText = currentLayout ? resolvePostTags(currentLayout.contenuto, post, tags) : '—';
+  const currency = post.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+  const previewText = currentLayout ? resolvePostTags(currentLayout.contenuto, post, tags, currency) : '—';
 
   const update = (changes: Partial<CreatedPost>) =>
     setCreatedPosts(prev => prev.map(p => p.id === postId ? { ...p, ...changes } : p));
@@ -503,7 +504,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 // QUEUE PAGE
 // ============================================================
 export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
-  const { queue, setQueue, layouts, keyboards, templates, tags, setPublished, published } = useApp();
+  const { queue, setQueue, layouts, keyboards, templates, tags, setPublished, published, settings } = useApp();
   const [currentIdx, setCurrentIdx] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
@@ -627,7 +628,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const p = item?.posts[0] as CreatedPost | undefined;
   const template = p ? templates.find(t => t.id === p.templateId) : undefined;
   const layout = p ? layouts.find(l => l.id === p.layoutId) : undefined;
-  const previewText = (layout && p) ? resolvePostTags(layout.contenuto, p, tags) : '';
+  const qCurrency = p?.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+  const previewText = (layout && p) ? resolvePostTags(layout.contenuto, p, tags, qCurrency) : '';
   const isEditing = expandedId === item?.id;
 
   return (
@@ -821,6 +823,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     try {
       const layout = layouts.find(l => l.id === p.layoutId);
       const updatedPost = { ...p, customText: editText };
+      const pCurrency = p.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
       const newCaption = layout
         ? resolvePostTags(layout.contenuto, {
             id: p.id, platform: p.platform, sourceUrl: p.sourceUrl, productId: p.productId,
@@ -828,7 +831,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price),
             discountPercent: p.discountPercent, customText: editText,
             isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
-          }, tags)
+          }, tags, pCurrency)
         : editText;
       await publishedApi.editTelegram(p.id, { chatId: p.chatId, messageId: p.messageId, newCaption } as any);
       setPublished(prev => prev.map(x => x.id === p.id ? { ...x, customText: editText } : x));
