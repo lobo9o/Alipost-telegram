@@ -824,13 +824,18 @@ function TemplateSection() {
             const isActive = activePanel === b.id;
             const canToggle = b.id !== 'product';
             return (
-              <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+              <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0, width: 54 }}>
                 <button
                   className={`btn bsm ${isActive ? 'bp' : 'bgh'}`}
-                  style={{ fontSize: 11, opacity: canToggle && !enabled ? 0.45 : 1 }}
+                  style={{
+                    width: 54, padding: '6px 2px',
+                    opacity: canToggle && !enabled ? 0.45 : 1,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                  }}
                   onClick={() => setActivePanel(isActive ? null : b.id)}
                 >
-                  {b.icon} {b.label}
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>{b.icon}</span>
+                  <span style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center' }}>{b.label}</span>
                 </button>
                 {canToggle && (
                   <button
@@ -839,7 +844,7 @@ function TemplateSection() {
                       fontSize: 9, padding: '1px 8px', borderRadius: 8, cursor: 'pointer',
                       background: enabled ? 'var(--a1)' : 'var(--bg3)',
                       color: enabled ? '#fff' : 'var(--t3)',
-                      border: 'none', lineHeight: 1.6,
+                      border: 'none', lineHeight: 1.6, width: 54,
                     }}
                   >{enabled ? 'ON' : 'OFF'}</button>
                 )}
