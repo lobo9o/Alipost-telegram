@@ -123,8 +123,32 @@ function extractAsin(url: string): string | null {
 }
 
 function extractAliId(url: string): string | null {
-  const m = url.match(/\/item\/(\d+)\.html/) ?? url.match(/[?&]productId=(\d+)/) ?? url.match(/\/(\d{10,})/);
-  return m ? m[1] : null;
+  // /item/Nome-Prodotto-1234567890.html  oppure  /item/1234567890.html
+  let m = url.match(/\/item\/(?:[\w%-]*?[-_])?(\d{6,})(?:\.html|[?#&]|$)/i);
+  if (m) return m[1];
+  // /i/1234567890.html  (formato breve)
+  m = url.match(/\/i\/(\d{6,})(?:\.html|[?#&]|$)/i);
+  if (m) return m[1];
+  // ?productId=xxx  o  &product_id=xxx
+  m = url.match(/[?&](?:productId|product_id)=(\d+)/i);
+  if (m) return m[1];
+  // ultimo tentativo: qualsiasi sequenza di 10+ cifre nell'URL
+  m = url.match(/\b(\d{10,})\b/);
+  if (m) return m[1];
+  return null;
+}
+
+async function resolveAliUrl(url: string): Promise<string> {
+  // Link abbreviati AliExpress (s.click, a.aliexpress, ali.ski, ecc.) → segui redirect
+  if (/s\.click\.aliexpress|a\.aliexpress\.com|ali\.ski|aliexpress\.page\.link/i.test(url)) {
+    try {
+      const r = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+      return r.url || url;
+    } catch {
+      return url;
+    }
+  }
+  return url;
 }
 
 // ── AliExpress API helpers ────────────────────────────────────────────────────
@@ -333,8 +357,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     });
 
   } else if (platform === 'aliexpress') {
-    const productId = extractAliId(url);
-    if (!productId) { res.status(400).json({ error: 'Impossibile estrarre product ID dal link AliExpress' }); return; }
+    const resolvedUrl = await resolveAliUrl(url);
+    const productId = extractAliId(resolvedUrl);
+    if (!productId) { res.status(400).json({ error: `Impossibile estrarre product ID dal link AliExpress. URL ricevuto: ${url.slice(0, 80)}` }); return; }
 
     const appKey     = cfg.aliexpress?.appKey     || process.env.ALIEXPRESS_APP_KEY     || '';
     const appSecret  = cfg.aliexpress?.appSecret  || process.env.ALIEXPRESS_APP_SECRET  || '';
