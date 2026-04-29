@@ -139,16 +139,17 @@ function extractAliId(url: string): string | null {
 }
 
 async function resolveAliUrl(url: string): Promise<string> {
-  // Link abbreviati AliExpress (s.click, a.aliexpress, ali.ski, ecc.) → segui redirect
-  if (/s\.click\.aliexpress|a\.aliexpress\.com|ali\.ski|aliexpress\.page\.link/i.test(url)) {
-    try {
-      const r = await fetch(url, { method: 'HEAD', redirect: 'follow' });
-      return r.url || url;
-    } catch {
-      return url;
-    }
+  if (!/s\.click\.aliexpress|a\.aliexpress\.com|ali\.ski|aliexpress\.page\.link/i.test(url)) return url;
+  try {
+    // GET con redirect:follow — r.url è l'URL finale dopo tutti i redirect, il body non viene letto
+    const r = await fetch(url, { redirect: 'follow' });
+    const final = r.url || url;
+    console.log('[ali] redirect', url.slice(0, 60), '→', final.slice(0, 100));
+    return final;
+  } catch (e) {
+    console.warn('[ali] resolveAliUrl failed:', e);
+    return url;
   }
-  return url;
 }
 
 // ── AliExpress API helpers ────────────────────────────────────────────────────
@@ -212,9 +213,11 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
   }) as any;
 
   const resp = data?.aliexpress_affiliate_productdetail_get_response?.resp_result;
-  if (resp?.resp_code !== 200) throw new Error(`AliExpress: ${resp?.resp_msg ?? 'Errore sconosciuto'}`);
+  if (!resp || resp.resp_code !== 200) {
+    throw new Error(`AliExpress prodotto [${resp?.resp_code ?? '?'}]: ${resp?.resp_msg ?? JSON.stringify(data).slice(0, 200)}`);
+  }
   const product = resp?.result?.products?.product?.[0];
-  if (!product) throw new Error('Prodotto non trovato su AliExpress');
+  if (!product) throw new Error('Prodotto non trovato su AliExpress (ID: ' + productId + ')');
   return product;
 }
 
@@ -226,9 +229,11 @@ async function aliGetAffiliateLink(productUrl: string, appKey: string, appSecret
   }) as any;
 
   const resp = data?.aliexpress_affiliate_link_generate_response?.resp_result;
-  if (resp?.resp_code !== 200) throw new Error(`AliExpress link: ${resp?.resp_msg ?? 'Errore'}`);
+  if (!resp || resp.resp_code !== 200) {
+    throw new Error(`AliExpress link [${resp?.resp_code ?? '?'}]: ${resp?.resp_msg ?? JSON.stringify(data).slice(0, 200)}`);
+  }
   const link = resp?.result?.promotion_links?.promotion_link?.[0]?.promotion_link;
-  if (!link) throw new Error('Link affiliato non generato');
+  if (!link) throw new Error('Link affiliato non restituito dall\'API (verifica Tracking ID)');
   return link;
 }
 
@@ -376,11 +381,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
 
     const productUrl = `https://www.aliexpress.com/item/${productId}.html`;
+    console.log('[ali] productId:', productId, '| url:', productUrl);
 
-    const [product, affiliateUrl] = await Promise.all([
-      aliGetProductDetail(productId, appKey, appSecret, trackingId, country),
-      aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId),
-    ]);
+    const product = await aliGetProductDetail(productId, appKey, appSecret, trackingId, country);
+    const affiliateUrl = await aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId);
 
     const salePrice = parseFloat(String(product.target_sale_price ?? 0)) || 0;
     const origPrice = parseFloat(String(product.target_original_price ?? 0)) || 0;
