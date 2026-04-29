@@ -1133,14 +1133,37 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 14px 8px' }}>
             <ToggleRow label="Attiva AliExpress" value={s.aliexpress.enabled} onChange={v => setAli('enabled', v)} />
             <div className="fld">
-              <label className="lbl">Affiliate ID</label>
-              <input className="inp" value={s.aliexpress.affiliateId}
-                onChange={e => setAli('affiliateId', e.target.value)} placeholder="12345678" />
+              <label className="lbl">App Key</label>
+              <input className="inp" value={s.aliexpress.appKey}
+                onChange={e => setAli('appKey', e.target.value)} placeholder="123456789" />
+              {s.aliexpress.appKey && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ {s.aliexpress.appKey}</div>}
+            </div>
+            <div className="fld">
+              <label className="lbl">App Secret</label>
+              <input className="inp" type="password" value={s.aliexpress.appSecret}
+                onChange={e => setAli('appSecret', e.target.value)} placeholder="••••••••••••••••" />
+              {s.aliexpress.appSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Inserito ({s.aliexpress.appSecret.length} car.)</div>}
             </div>
             <div className="fld">
               <label className="lbl">Tracking ID</label>
               <input className="inp" value={s.aliexpress.trackingId}
-                onChange={e => setAli('trackingId', e.target.value)} placeholder="affiliate_tracking_id" />
+                onChange={e => setAli('trackingId', e.target.value)} placeholder="es: mio_sito" />
+              {s.aliexpress.trackingId && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ {s.aliexpress.trackingId}</div>}
+            </div>
+            <div className="fld">
+              <label className="lbl">Paese target</label>
+              <select className="sel" value={s.aliexpress.targetCountry} onChange={e => setAli('targetCountry', e.target.value)}>
+                <option value="IT">🇮🇹 Italia (EUR)</option>
+                <option value="US">🇺🇸 USA (USD)</option>
+                <option value="DE">🇩🇪 Germania (EUR)</option>
+                <option value="FR">🇫🇷 Francia (EUR)</option>
+                <option value="ES">🇪🇸 Spagna (EUR)</option>
+                <option value="UK">🇬🇧 UK (GBP)</option>
+                <option value="PL">🇵🇱 Polonia (PLN)</option>
+                <option value="NL">🇳🇱 Olanda (EUR)</option>
+                <option value="RU">🇷🇺 Russia (RUB)</option>
+                <option value="BR">🇧🇷 Brasile (BRL)</option>
+              </select>
             </div>
           </div>
         )}

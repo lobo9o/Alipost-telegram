@@ -66,7 +66,7 @@ export const INITIAL_SETTINGS: AppSettings = {
   oraI: '08:00', oraF: '22:00', interv: 60, attivo: false,
   channels: [],
   amazon: { enabled: false, affiliateTag: '', credentialId: '', credentialSecret: '', version: '2.2', marketplace: 'IT' },
-  aliexpress: { enabled: false, affiliateId: '', trackingId: '' },
+  aliexpress: { enabled: false, appKey: '', appSecret: '', trackingId: '', targetCountry: 'IT' },
   terminata: {
     grayscale: true,
     overlayText: '❌ OFFERTA TERMINATA',

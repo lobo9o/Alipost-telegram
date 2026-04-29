@@ -39,8 +39,10 @@ function mergeSettings(fetched: unknown): AppSettings {
     },
     aliexpress: {
       enabled: typeof al.enabled === 'boolean' ? al.enabled : INITIAL_SETTINGS.aliexpress.enabled,
-      affiliateId: typeof al.affiliateId === 'string' ? al.affiliateId : '',
+      appKey: typeof al.appKey === 'string' ? al.appKey : '',
+      appSecret: typeof al.appSecret === 'string' ? al.appSecret : '',
       trackingId: typeof al.trackingId === 'string' ? al.trackingId : '',
+      targetCountry: typeof al.targetCountry === 'string' ? al.targetCountry : 'IT',
     },
     terminata: {
       grayscale: typeof tm.grayscale === 'boolean' ? tm.grayscale : true,

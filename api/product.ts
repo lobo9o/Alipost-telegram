@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withErrorHandler, allowMethods, requireUserId } from './_utils.js';
 import sql from '../lib/db.js';
+import crypto from 'crypto';
 
 // Token endpoints per versione credenziale
 const TOKEN_ENDPOINTS: Record<string, string> = {
@@ -122,8 +123,89 @@ function extractAsin(url: string): string | null {
 }
 
 function extractAliId(url: string): string | null {
-  const m = url.match(/\/item\/(\d+)\.html/) ?? url.match(/[?&]productId=(\d+)/);
+  const m = url.match(/\/item\/(\d+)\.html/) ?? url.match(/[?&]productId=(\d+)/) ?? url.match(/\/(\d{10,})/);
   return m ? m[1] : null;
+}
+
+// ── AliExpress API helpers ────────────────────────────────────────────────────
+
+const ALI_COUNTRY_MAP: Record<string, { currency: string; language: string }> = {
+  IT: { currency: 'EUR', language: 'IT' },
+  US: { currency: 'USD', language: 'EN' },
+  DE: { currency: 'EUR', language: 'DE' },
+  FR: { currency: 'EUR', language: 'FR' },
+  ES: { currency: 'EUR', language: 'ES' },
+  UK: { currency: 'GBP', language: 'EN' },
+  RU: { currency: 'RUB', language: 'RU' },
+  BR: { currency: 'BRL', language: 'PT' },
+  PL: { currency: 'PLN', language: 'PL' },
+  NL: { currency: 'EUR', language: 'NL' },
+};
+
+function aliSign(params: Record<string, string>, secret: string): string {
+  const sorted = Object.keys(params).sort();
+  const str = secret + sorted.map(k => `${k}${params[k]}`).join('') + secret;
+  return crypto.createHash('md5').update(str, 'utf8').digest('hex').toUpperCase();
+}
+
+function aliTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+async function aliCall(method: string, appKey: string, appSecret: string, extra: Record<string, string>): Promise<unknown> {
+  const params: Record<string, string> = {
+    app_key: appKey,
+    method,
+    sign_method: 'md5',
+    timestamp: aliTimestamp(),
+    v: '2.0',
+    ...extra,
+  };
+  params.sign = aliSign(params, appSecret);
+
+  const body = new URLSearchParams(params).toString();
+  const res = await fetch('https://api-sg.aliexpress.com/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+    body,
+  });
+  const text = await res.text();
+  console.log(`[ali] ${method} ${res.status}:`, text.slice(0, 300));
+  if (!res.ok) throw new Error(`AliExpress API HTTP ${res.status}: ${text.slice(0, 200)}`);
+  return JSON.parse(text);
+}
+
+async function aliGetProductDetail(productId: string, appKey: string, appSecret: string, trackingId: string, country: string) {
+  const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
+  const data = await aliCall('aliexpress.affiliate.productdetail.get', appKey, appSecret, {
+    product_ids: productId,
+    target_currency: currency,
+    target_language: language,
+    tracking_id: trackingId,
+    fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id',
+  }) as any;
+
+  const resp = data?.aliexpress_affiliate_productdetail_get_response?.resp_result;
+  if (resp?.resp_code !== 200) throw new Error(`AliExpress: ${resp?.resp_msg ?? 'Errore sconosciuto'}`);
+  const product = resp?.result?.products?.product?.[0];
+  if (!product) throw new Error('Prodotto non trovato su AliExpress');
+  return product;
+}
+
+async function aliGetAffiliateLink(productUrl: string, appKey: string, appSecret: string, trackingId: string): Promise<string> {
+  const data = await aliCall('aliexpress.affiliate.link.generate', appKey, appSecret, {
+    promotion_link_type: '0',
+    source_values: productUrl,
+    tracking_id: trackingId,
+  }) as any;
+
+  const resp = data?.aliexpress_affiliate_link_generate_response?.resp_result;
+  if (resp?.resp_code !== 200) throw new Error(`AliExpress link: ${resp?.resp_msg ?? 'Errore'}`);
+  const link = resp?.result?.promotion_links?.promotion_link?.[0]?.promotion_link;
+  if (!link) throw new Error('Link affiliato non generato');
+  return link;
 }
 
 // Legge un campo sia in camelCase che PascalCase dalla risposta
@@ -254,16 +336,40 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const productId = extractAliId(url);
     if (!productId) { res.status(400).json({ error: 'Impossibile estrarre product ID dal link AliExpress' }); return; }
 
+    const appKey     = cfg.aliexpress?.appKey     || process.env.ALIEXPRESS_APP_KEY     || '';
+    const appSecret  = cfg.aliexpress?.appSecret  || process.env.ALIEXPRESS_APP_SECRET  || '';
     const trackingId = cfg.aliexpress?.trackingId || process.env.ALIEXPRESS_TRACKING_ID || '';
+    const country    = cfg.aliexpress?.targetCountry || process.env.ALIEXPRESS_COUNTRY   || 'IT';
+
+    if (!appKey || !appSecret) {
+      res.status(400).json({ error: 'Credenziali AliExpress non configurate. Vai in Impostazioni → AliExpress e inserisci App Key e App Secret.' });
+      return;
+    }
+    if (!trackingId) {
+      res.status(400).json({ error: 'Inserisci il Tracking ID AliExpress in Impostazioni → AliExpress.' });
+      return;
+    }
+
+    const productUrl = `https://www.aliexpress.com/item/${productId}.html`;
+
+    const [product, affiliateUrl] = await Promise.all([
+      aliGetProductDetail(productId, appKey, appSecret, trackingId, country),
+      aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId),
+    ]);
+
+    const salePrice = parseFloat(String(product.target_sale_price ?? 0)) || 0;
+    const origPrice = parseFloat(String(product.target_original_price ?? 0)) || 0;
+    const discountStr = String(product.discount ?? '').replace('%', '');
+    const discountPercent = parseInt(discountStr) || (origPrice > salePrice ? Math.round((1 - salePrice / origPrice) * 100) : 0);
 
     res.json({
       productId,
-      title: `Prodotto AliExpress #${productId}`,
-      image: '',
-      originalPrice: 0,
-      discountedPrice: 0,
-      discountPercent: 0,
-      affiliateUrl: `https://s.click.aliexpress.com/e/_link?productId=${productId}&trackingId=${trackingId}`,
+      title: product.product_title ?? '',
+      image: product.product_main_image_url ?? '',
+      originalPrice: origPrice || salePrice,
+      discountedPrice: salePrice,
+      discountPercent,
+      affiliateUrl,
     });
 
   } else {

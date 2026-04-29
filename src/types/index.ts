@@ -187,8 +187,10 @@ export interface AmazonSettings {
 
 export interface AliExpressSettings {
   enabled: boolean;
-  affiliateId: string;
+  appKey: string;
+  appSecret: string;
   trackingId: string;
+  targetCountry: string;
 }
 
 export interface AppSettings {
