@@ -114,5 +114,7 @@ export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]
   }
 
   result = applyTags(result, builtIn, tags);
+  // Stessa conversione del server: ~~testo~~ → <s>testo</s>
+  result = result.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
   return cleanupSentinels(result);
 }

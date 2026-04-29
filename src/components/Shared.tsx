@@ -131,7 +131,10 @@ export function TelegramPreview({ text, lines, buttons = ['🛒 Compra ora'] }: 
     <div className="pvbox">
       <span className="pvbdg">PREVIEW TELEGRAM</span>
       {text !== undefined
-        ? <div className="pvmsg" style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
+        ? <div
+            className="pvmsg"
+            dangerouslySetInnerHTML={{ __html: text.replace(/\n/g, '<br>') }}
+          />
         : <div className="pvmsg">{lines}</div>
       }
       {buttons.map((b, i) => (

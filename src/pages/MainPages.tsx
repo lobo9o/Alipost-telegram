@@ -506,6 +506,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const touchStartX = useRef(0);
 
   const safeIdx = Math.min(currentIdx, Math.max(0, queue.length - 1));
@@ -519,6 +520,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   };
 
   const publish = async (id: string) => {
+    if (publishingId) return;
     const item = queue.find(x => x.id === id);
     if (!item) { setPublishErr('Elemento coda non trovato'); return; }
     const rawPost = item.posts[0];
@@ -540,12 +542,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       if (!ok) return;
     }
 
-    // Marca subito come 'published' nel DB — così non riappare al reload anche se l'app viene chiusa
-    try { await autopostApi.update(id, { status: 'published' }); } catch { /* best effort */ }
+    setPublishingId(id);
 
-    // Rimuovi immediatamente dalla UI per evitare double-publish
+    // Rimuovi subito dalla UI + marca come published nel DB (fire-and-forget — non blocca la UI)
     setQueue(q => q.filter(x => x.id !== id));
     setCurrentIdx(i => Math.max(0, Math.min(i, queue.length - 2)));
+    autopostApi.update(id, { status: 'published' }).catch(() => {});
+
     try {
       let generatedImage: string | undefined;
       if (template) {
@@ -574,12 +577,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       };
       setPublished(prev => [pubRecord, ...prev]);
       publishedApi.save(pubRecord).catch(() => {});
+      setPublishingId(null);
     } catch (e) {
       const msg = e instanceof Error ? (e.message || 'Errore sconosciuto') : String(e) || 'Errore sconosciuto';
-      // Ripristina a 'draft' nel DB e ri-aggiungi in UI
       autopostApi.update(id, { status: 'draft' }).catch(() => {});
       setQueue(q => [item, ...q]);
       setPublishErr(msg);
+      setPublishingId(null);
     }
   };
 
@@ -683,7 +687,14 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               onClick={() => setExpandedId(isEditing ? null : item.id)}>
               {isEditing ? '✕ Chiudi' : '✏️ Modifica'}
             </button>
-            <button className="btn bgr bsm" style={{ flexShrink: 0 }} onClick={() => publish(item.id)}>⚡ Pubblica</button>
+            <button
+              className="btn bgr bsm"
+              style={{ flexShrink: 0, minWidth: 90, opacity: publishingId ? 0.6 : 1 }}
+              onClick={() => publish(item.id)}
+              disabled={!!publishingId}
+            >
+              {publishingId === item.id ? '⏳ Invio...' : '⚡ Pubblica'}
+            </button>
             <button className="btn bre bsm" style={{ flexShrink: 0 }} onClick={() => del(item.id)}>🗑️</button>
           </div>
 
