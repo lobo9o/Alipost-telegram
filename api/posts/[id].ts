@@ -112,26 +112,28 @@ function buildKeyboard(
     '{grafico}':    affiliateUrl,
   };
 
+  const COLOR_MAP: Record<string, string> = { g: 'success', r: 'danger', b: 'primary' };
+
   const rows = contenuto.trim().split('\n').filter(r => r.trim());
   const keyboard = rows.map(row => {
     const btns = row.split('&&').map(b => b.trim()).filter(Boolean);
     return btns.map(btn => {
-      // Strip color prefix (#g, #r, #b)
-      const clean = btn.replace(/^#[grb]\s+/, '');
+      const colorMatch = btn.match(/^#([grb])\s+/);
+      const style = colorMatch ? COLOR_MAP[colorMatch[1]] : undefined;
+      const clean = colorMatch ? btn.slice(colorMatch[0].length) : btn;
       const lastDash = clean.lastIndexOf(' - ');
       if (lastDash === -1) return null;
       const text = clean.slice(0, lastDash).trim();
       let url = clean.slice(lastDash + 3).trim();
-      // Resolve URL tags
       for (const [tag, val] of Object.entries(urlTags)) {
         url = url.split(tag).join(val);
       }
       if (!text) return null;
       if (url === '{poll}' || url.includes('{poll}')) {
-        return { text, callback_data: 'poll_' + Math.random().toString(36).slice(2, 6) };
+        return { text, callback_data: 'poll_' + Math.random().toString(36).slice(2, 6), ...(style ? { style } : {}) };
       }
       if (!url) return null;
-      return { text, url };
+      return { text, url, ...(style ? { style } : {}) };
     }).filter(Boolean);
   }).filter(r => r.length > 0);
 
