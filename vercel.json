@@ -2,6 +2,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "build",
   "rewrites": [
+    { "source": "/api/keyboards/:id", "destination": "/api/keyboards?id=:id" },
+    { "source": "/api/tags/:id", "destination": "/api/tags?id=:id" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
