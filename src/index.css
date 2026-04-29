@@ -188,7 +188,8 @@ html, body, #root { height: 100%; background: var(--bg); color: var(--t1); font-
   margin: 0 16px 14px;
 }
 .sw-opt {
-  flex: 1; padding: 9px;
+  flex: 1; padding: 8px 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; font-size: 13px; font-weight: 600;
   border-radius: 8px; cursor: pointer; transition: all .15s;
   color: var(--t3);

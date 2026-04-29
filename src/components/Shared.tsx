@@ -64,9 +64,17 @@ interface SwitchTabsProps {
 export function SwitchTabs({ options, value, onChange }: SwitchTabsProps) {
   return (
     <div className="sw-wrap">
-      {options.map(([v, l]) => (
-        <div key={v} className={`sw-opt ${value === v ? 'on' : ''}`} onClick={() => onChange(v)}>{l}</div>
-      ))}
+      {options.map(([v, l]) => {
+        const spaceIdx = l.indexOf(' ');
+        const emoji = spaceIdx !== -1 ? l.slice(0, spaceIdx) : l;
+        const label = spaceIdx !== -1 ? l.slice(spaceIdx + 1) : '';
+        return (
+          <div key={v} className={`sw-opt ${value === v ? 'on' : ''}`} onClick={() => onChange(v)}>
+            <div style={{ fontSize: 18, lineHeight: 1 }}>{emoji}</div>
+            {label && <div style={{ fontSize: 10, lineHeight: 1.3, marginTop: 2 }}>{label}</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }
