@@ -179,7 +179,7 @@ function aliTimestamp(): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
-async function aliCall(method: string, appKey: string, appSecret: string, extra: Record<string, string>): Promise<unknown> {
+async function aliCall(method: string, appKey: string, appSecret: string, extra: Record<string, string>, attempt = 1): Promise<unknown> {
   const params: Record<string, string> = {
     app_key: appKey.trim(),
     method,
@@ -197,12 +197,18 @@ async function aliCall(method: string, appKey: string, appSecret: string, extra:
     body,
   });
   const text = await res.text();
-  console.log(`[ali] ${method} ${res.status}:`, text.slice(0, 300));
+  console.log(`[ali] ${method} attempt=${attempt} ${res.status}:`, text.slice(0, 300));
   if (!res.ok) throw new Error(`AliExpress API HTTP ${res.status}: ${text.slice(0, 200)}`);
   const json = JSON.parse(text);
-  // Errore di autenticazione o parametro restituito al livello radice
   if (json.error_response) {
     const e = json.error_response;
+    // Rate limit: riprova dopo una pausa (max 3 tentativi)
+    if (e.code === 'ApiCallLimit' && attempt < 3) {
+      const wait = attempt * 1500;
+      console.log(`[ali] rate limit, retry in ${wait}ms`);
+      await new Promise(r => setTimeout(r, wait));
+      return aliCall(method, appKey, appSecret, extra, attempt + 1);
+    }
     throw new Error(`AliExpress [${e.code}]: ${e.msg}`);
   }
   return json;
@@ -390,6 +396,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     console.log('[ali] productId:', productId, '| url:', productUrl);
 
     const product = await aliGetProductDetail(productId, appKey, appSecret, trackingId, country);
+    await new Promise(r => setTimeout(r, 600));
     const affiliateUrl = await aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId);
 
     const salePrice = parseFloat(String(product.target_sale_price ?? 0)) || 0;
