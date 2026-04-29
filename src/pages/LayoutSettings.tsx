@@ -465,7 +465,9 @@ export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata
             position: 'absolute',
             ...(el.textAnchor === 'right'
               ? { right: `${100 - el.x}%`, top: `${el.y}%` }
-              : { left: `${el.x}%`, top: `${el.y}%` }),
+              : el.textAnchor === 'center'
+                ? { left: `${el.x}%`, top: `${el.y}%`, transform: 'translateX(-50%)' }
+                : { left: `${el.x}%`, top: `${el.y}%` }),
             fontSize: `${el.fontSize * PREVIEW_SCALE}px`,
             fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
             color: el.color,
@@ -646,9 +648,11 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
         <div className="lbl">ANCORA TESTO</div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className={`btn bsm ${(el.textAnchor ?? 'left') === 'left' ? 'bp' : 'bgh'}`}
-            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'left' })}>← da sinistra</button>
+            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'left' })}>◀ Sinistra</button>
+          <button className={`btn bsm ${el.textAnchor === 'center' ? 'bp' : 'bgh'}`}
+            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'center' })}>▶◀ Centro</button>
           <button className={`btn bsm ${el.textAnchor === 'right' ? 'bp' : 'bgh'}`}
-            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'right' })}>da destra →</button>
+            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'right' })}>Destra ▶</button>
         </div>
       </div>
 

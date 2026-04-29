@@ -78,7 +78,7 @@ export interface TextEl {
   strokeWidth: number;
   strikethrough: boolean;
   strikethroughColor: string;
-  textAnchor: 'left' | 'right';
+  textAnchor: 'left' | 'right' | 'center';
   text: string;
 }
 
