@@ -181,14 +181,14 @@ function aliTimestamp(): string {
 
 async function aliCall(method: string, appKey: string, appSecret: string, extra: Record<string, string>): Promise<unknown> {
   const params: Record<string, string> = {
-    app_key: appKey,
+    app_key: appKey.trim(),
     method,
     sign_method: 'md5',
     timestamp: aliTimestamp(),
     v: '2.0',
     ...extra,
   };
-  params.sign = aliSign(params, appSecret);
+  params.sign = aliSign(params, appSecret.trim());
 
   const body = new URLSearchParams(params).toString();
   const res = await fetch('https://api-sg.aliexpress.com/sync', {
@@ -199,7 +199,13 @@ async function aliCall(method: string, appKey: string, appSecret: string, extra:
   const text = await res.text();
   console.log(`[ali] ${method} ${res.status}:`, text.slice(0, 300));
   if (!res.ok) throw new Error(`AliExpress API HTTP ${res.status}: ${text.slice(0, 200)}`);
-  return JSON.parse(text);
+  const json = JSON.parse(text);
+  // Errore di autenticazione o parametro restituito al livello radice
+  if (json.error_response) {
+    const e = json.error_response;
+    throw new Error(`AliExpress [${e.code}]: ${e.msg}`);
+  }
+  return json;
 }
 
 async function aliGetProductDetail(productId: string, appKey: string, appSecret: string, trackingId: string, country: string) {
