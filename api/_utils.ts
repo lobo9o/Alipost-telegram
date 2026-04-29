@@ -67,6 +67,13 @@ async function ensureMigrated() {
     scheduled  TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
   )`;
+  await sql`CREATE TABLE IF NOT EXISTS keyboards (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL DEFAULT 'legacy',
+    nome       TEXT NOT NULL,
+    body       TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+  )`;
   await sql`CREATE TABLE IF NOT EXISTS price_history (
     id          SERIAL PRIMARY KEY,
     product_id  TEXT NOT NULL,

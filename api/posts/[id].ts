@@ -94,6 +94,51 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
   return t;
 }
 
+function buildKeyboard(
+  contenuto: string | undefined,
+  post: Record<string, any>,
+  affiliateUrl: string,
+): object | undefined {
+  if (!contenuto?.trim()) return undefined;
+
+  const valuta = post.platform === 'aliexpress' ? '$' : '€';
+  const waText = encodeURIComponent(`${post.title ?? ''}\n${affiliateUrl}`);
+  const urlTags: Record<string, string> = {
+    '{link}':       affiliateUrl,
+    '{link_affiliato}': affiliateUrl,
+    '{whatsapp}':   `https://api.whatsapp.com/send?text=${waText}`,
+    '{app}':        affiliateUrl,
+    '{amici}':      affiliateUrl,
+    '{grafico}':    affiliateUrl,
+  };
+
+  const rows = contenuto.trim().split('\n').filter(r => r.trim());
+  const keyboard = rows.map(row => {
+    const btns = row.split('&&').map(b => b.trim()).filter(Boolean);
+    return btns.map(btn => {
+      // Strip color prefix (#g, #r, #b)
+      const clean = btn.replace(/^#[grb]\s+/, '');
+      const lastDash = clean.lastIndexOf(' - ');
+      if (lastDash === -1) return null;
+      const text = clean.slice(0, lastDash).trim();
+      let url = clean.slice(lastDash + 3).trim();
+      // Resolve URL tags
+      for (const [tag, val] of Object.entries(urlTags)) {
+        url = url.split(tag).join(val);
+      }
+      if (!text) return null;
+      if (url === '{poll}' || url.includes('{poll}')) {
+        return { text, callback_data: 'poll_' + Math.random().toString(36).slice(2, 6) };
+      }
+      if (!url) return null;
+      return { text, url };
+    }).filter(Boolean);
+  }).filter(r => r.length > 0);
+
+  if (!keyboard.length) return undefined;
+  return { inline_keyboard: keyboard };
+}
+
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['POST', 'PUT', 'DELETE', 'PATCH'], req, res)) return;
   const userId = requireUserId(req, res);
@@ -186,7 +231,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // ── POST — publish to Telegram ───────────────────────────────
-  const { post, layoutContenuto, generatedImage } = req.body ?? {};
+  const { post, layoutContenuto, keyboardContenuto, generatedImage } = req.body ?? {};
   if (!post) { res.status(400).json({ error: 'post required' }); return; }
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -216,9 +261,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato} <s>{prezzo}</s>\n🏷️ Sconto: -{sconto}\n\n{custom}`;
   const messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl);
 
-  const replyMarkup = affiliateUrl
-    ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] }
-    : undefined;
+  const replyMarkup = buildKeyboard(keyboardContenuto, post, affiliateUrl)
+    ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
 

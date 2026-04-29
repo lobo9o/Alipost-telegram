@@ -1,4 +1,4 @@
-import { AppSettings, Tag, TextLayout, Template, makeDefaultTemplate } from '../types';
+import { AppSettings, Tag, TextLayout, Template, KeyboardLayout, makeDefaultTemplate } from '../types';
 
 export function genId(): string {
   return Math.random().toString(36).slice(2, 8);
@@ -54,6 +54,10 @@ export const INITIAL_LAYOUTS: TextLayout[] = [
     id: 'l3', nome: 'Post Multiplo', tipo: 'multi',
     contenuto: '🔥 OFFERTE DEL GIORNO 🔥\n\n{lista_prodotti}\n\n👇 Link nei pulsanti sotto',
   },
+];
+
+export const INITIAL_KEYBOARDS: KeyboardLayout[] = [
+  { id: 'kb1', nome: 'Default', contenuto: '💥 Link Articolo - {link}' },
 ];
 
 export const INITIAL_TEMPLATES: Template[] = [makeDefaultTemplate('tpl1')];

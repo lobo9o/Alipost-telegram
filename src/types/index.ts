@@ -10,6 +10,12 @@ export interface Tag {
   value: string;
 }
 
+export interface KeyboardLayout {
+  id: string;
+  nome: string;
+  contenuto: string;
+}
+
 export interface CreatedPost {
   id: string;
   platform: Platform;
@@ -24,6 +30,7 @@ export interface CreatedPost {
   isHistoricalLow: boolean;
   templateId: string;
   layoutId: string;
+  keyboardId: string;
   emoji: string;
   // Dati extra da API (opzionali)
   stelle?: string;
@@ -201,6 +208,7 @@ export interface AppState {
   published: PublishedPost[];
   tags: Tag[];
   layouts: TextLayout[];
+  keyboards: KeyboardLayout[];
   templates: Template[];
   settings: AppSettings;
 }
@@ -211,6 +219,7 @@ export interface AppContextType extends AppState {
   setPublished: React.Dispatch<React.SetStateAction<PublishedPost[]>>;
   setTags: React.Dispatch<React.SetStateAction<Tag[]>>;
   setLayouts: React.Dispatch<React.SetStateAction<TextLayout[]>>;
+  setKeyboards: React.Dispatch<React.SetStateAction<KeyboardLayout[]>>;
   setTemplates: React.Dispatch<React.SetStateAction<Template[]>>;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   stats: { inCoda: number; sched: number; pub: number };

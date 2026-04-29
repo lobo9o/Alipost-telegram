@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, TextLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig } from '../types';
+import { NavPage, TextLayout, KeyboardLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId } from '../data/mock';
-import { tagsApi, layoutsApi, templatesApi, settingsApi } from '../lib/api';
+import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi } from '../lib/api';
 import { SYSTEM_TAGS } from '../utils/tagUtils';
 
 // ============================================================
@@ -15,11 +15,12 @@ export function LayoutPage({ nav }: { nav: (p: NavPage) => void }) {
     <div className="pg">
       <PageHeader title="Layout" onBack={() => nav('dash')} />
       <SwitchTabs
-        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['template', '🖼️ Template']]}
+        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['tastiera', '⌨️ Tastiera'], ['template', '🖼️ Template']]}
         value={tab} onChange={setTab}
       />
       {tab === 'tags' && <TagsSection />}
       {tab === 'testo' && <TextLayoutSection />}
+      {tab === 'tastiera' && <KeyboardSection />}
       {tab === 'template' && <TemplateSection />}
     </div>
   );
@@ -195,6 +196,134 @@ function TextLayoutSection() {
             <button className="btn bgh bsm" style={{ color: 'var(--re)' }} onClick={() => { setLayouts(ls => ls.filter(x => x.id !== l.id)); layoutsApi.delete(l.id).catch(() => {}); }}>×</button>
           </div>
           <div className="lpreview">{l.contenuto}</div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+// ── Keyboard Layout ───────────────────────────────────────────
+
+const KB_TAG_LABELS: Record<string, string> = {
+  '{link}': 'Link offerta',
+  '{whatsapp}': 'Condivisione WhatsApp',
+  '{poll}': 'Sondaggio 👍👎',
+};
+
+const COLOR_MAP: Record<string, string> = { g: '#22c55e', r: '#ef4444', b: '#3b82f6' };
+
+function parseKbButton(raw: string): { text: string; color?: string; url: string } {
+  let s = raw.trim();
+  let color: string | undefined;
+  const colorMatch = s.match(/^#([grb])\s+/);
+  if (colorMatch) { color = COLOR_MAP[colorMatch[1]]; s = s.slice(colorMatch[0].length); }
+  const lastDash = s.lastIndexOf(' - ');
+  if (lastDash === -1) return { text: s, url: '' };
+  return { text: s.slice(0, lastDash).trim(), color, url: s.slice(lastDash + 3).trim() };
+}
+
+function KbPreview({ contenuto }: { contenuto: string }) {
+  const rows = contenuto.split('\n').filter(r => r.trim());
+  if (!rows.length) return null;
+  return (
+    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {rows.map((row, ri) => (
+        <div key={ri} style={{ display: 'flex', gap: 5 }}>
+          {row.split('&&').map((btn, bi) => {
+            const { text, color, url } = parseKbButton(btn);
+            const isPoll = url === '{poll}';
+            return (
+              <div key={bi} style={{
+                flex: 1, textAlign: 'center', padding: '7px 10px',
+                borderRadius: 8, fontSize: 13, fontWeight: 600,
+                background: color ? `${color}22` : 'var(--bg4)',
+                color: color ?? 'var(--a1)',
+                border: `1px solid ${color ?? 'var(--a1)'}44`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              }}>
+                {isPoll ? '📊' : '🔗'} {text}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function KeyboardSection() {
+  const { keyboards, setKeyboards } = useApp();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [form, setForm] = useState<Omit<KeyboardLayout, 'id'>>({ nome: '', contenuto: '' });
+
+  const startNew = () => { setForm({ nome: '', contenuto: '' }); setEditing('new'); };
+  const startEdit = (kb: KeyboardLayout) => { setForm({ nome: kb.nome, contenuto: kb.contenuto }); setEditing(kb.id); };
+
+  const save = () => {
+    if (editing === 'new') {
+      const kb: KeyboardLayout = { id: genId(), ...form };
+      setKeyboards(ks => [...ks, kb]);
+      keyboardsApi.create(kb).catch(() => {});
+    } else {
+      setKeyboards(ks => ks.map(x => x.id === editing ? { ...x, ...form } : x));
+      if (editing) keyboardsApi.update(editing, form).catch(() => {});
+    }
+    setEditing(null);
+  };
+
+  if (editing) {
+    return (
+      <>
+        <div className="stit">{editing === 'new' ? 'NUOVA TASTIERA' : 'MODIFICA TASTIERA'}</div>
+        <div style={{ padding: '0 16px' }}>
+          <InfoBanner>
+            <b>Formato:</b> <code>Testo - url</code> per ogni riga. Usa <code>&amp;&amp;</code> per più bottoni sulla stessa riga.<br />
+            <b>Colori:</b> <code>#g</code> verde · <code>#r</code> rosso · <code>#b</code> blu<br />
+            <b>Tag URL:</b> <code>{'{link}'}</code> link offerta · <code>{'{whatsapp}'}</code> condividi · <code>{'{poll}'}</code> sondaggio
+          </InfoBanner>
+        </div>
+        <div className="fld">
+          <label className="lbl">Nome tastiera</label>
+          <input className="inp" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Es: Default, Con WhatsApp..." />
+        </div>
+        <div className="fld">
+          <label className="lbl">Bottoni</label>
+          <textarea
+            className="txta"
+            value={form.contenuto}
+            onChange={e => setForm({ ...form, contenuto: e.target.value })}
+            rows={6}
+            placeholder={'💥 Link Articolo - {link}\n#g 📲 WhatsApp - {whatsapp} && #b 👍 - {poll}'}
+          />
+        </div>
+        {form.contenuto && (
+          <div style={{ padding: '0 16px' }}>
+            <div className="lbl" style={{ marginBottom: 4 }}>ANTEPRIMA</div>
+            <KbPreview contenuto={form.contenuto} />
+          </div>
+        )}
+        <div style={{ padding: '16px', display: 'flex', gap: 8 }}>
+          <button className="btn bs" style={{ flex: 1 }} onClick={() => setEditing(null)}>Annulla</button>
+          <button className="btn bp" style={{ flex: 1 }} onClick={save}>💾 Salva tastiera</button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ padding: '10px 16px 0', display: 'flex', justifyContent: 'flex-end' }}>
+        <button className="btn bp bsm" onClick={startNew}>+ Nuova tastiera</button>
+      </div>
+      {keyboards.map(kb => (
+        <div key={kb.id} className="lc">
+          <div className="lc-top">
+            <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{kb.nome}</span>
+            <button className="btn bgh bsm" onClick={() => startEdit(kb)}>✏️</button>
+            <button className="btn bgh bsm" style={{ color: 'var(--re)' }}
+              onClick={() => { setKeyboards(ks => ks.filter(x => x.id !== kb.id)); keyboardsApi.delete(kb.id).catch(() => {}); }}>×</button>
+          </div>
+          <KbPreview contenuto={kb.contenuto} />
         </div>
       ))}
     </>

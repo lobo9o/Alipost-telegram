@@ -358,7 +358,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 interface LinkItem { id: string; url: string; platform: Platform; }
 
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { createdPosts, setQueue, layouts, templates } = useApp();
+  const { createdPosts, setQueue, layouts, keyboards, templates } = useApp();
 
   const [phase, setPhase] = useState<'input' | 'loading'>('input');
   const [mode, setMode] = useState<'single' | 'multi'>('single');
@@ -386,15 +386,16 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
     try {
       const defaultNormalTpl = templates[0]?.id ?? 'tpl1';
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
+      const defaultKb = keyboards[0]?.id ?? 'kb1';
 
       const newPosts: CreatedPost[] = await Promise.all(links.map(async l => {
         const newId = genId();
         if (l.platform === 'amazon') {
           const p = await productApi.fetchAmazon({ url: l.url });
-          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon };
+          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon };
         } else {
           const p = await productApi.fetchAliExpress({ url: l.url });
-          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, emoji: '📦' };
+          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦' };
         }
       }));
 
@@ -502,7 +503,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 // QUEUE PAGE
 // ============================================================
 export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
-  const { queue, setQueue, layouts, templates, tags, setPublished, published } = useApp();
+  const { queue, setQueue, layouts, keyboards, templates, tags, setPublished, published } = useApp();
   const [currentIdx, setCurrentIdx] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
@@ -561,7 +562,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           });
         } catch { /* fall back to URL */ }
       }
-      const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, generatedImage }) as { ok: boolean; messageId?: number; chatId?: string };
+      const keyboard = keyboards.find(k => k.id === post.keyboardId) ?? keyboards[0];
+      const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage }) as { ok: boolean; messageId?: number; chatId?: string };
       autopostApi.delete(id).catch(() => {}); // cleanup finale, fire-and-forget OK (status già aggiornato)
       const now = new Date().toISOString();
       const pubRecord = {
@@ -755,6 +757,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                 </select>
               </div>
               <div style={{ marginBottom: 10 }}>
+                <div className="lbl">TASTIERA BOTTONI</div>
+                <select className="sel" value={p.keyboardId ?? keyboards[0]?.id ?? ''} onChange={e => updateQueuePost(item.id, { keyboardId: e.target.value })}>
+                  {keyboards.map(k => <option key={k.id} value={k.id}>{k.nome}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 10 }}>
                 <div className="lbl">TESTO PERSONALIZZATO</div>
                 <textarea className="txta" rows={2} value={p.customText}
                   onChange={e => updateQueuePost(item.id, { customText: e.target.value })}
@@ -792,7 +800,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
       discountedPrice: parseFloat(p.price),
       discountPercent: p.discountPercent,
       customText: p.customText, isHistoricalLow: p.isHistoricalLow,
-      templateId: 'tpl1', layoutId: p.layoutId,
+      templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
     };
     setQueue(prev => [...prev, { id: genId(), tipo: 'single', posts: [post], sched: 'Auto', status: 'draft', sel: false }]);
     nav('queue');
@@ -819,7 +827,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             title: p.title, image: p.image, emoji: p.emoji,
             originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price),
             discountPercent: p.discountPercent, customText: editText,
-            isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId,
+            isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
           }, tags)
         : editText;
       await publishedApi.editTelegram(p.id, { chatId: p.chatId, messageId: p.messageId, newCaption } as any);

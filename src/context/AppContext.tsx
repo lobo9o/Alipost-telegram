@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { AppContextType, QueueItem, PublishedPost, TextLayout, Template, AppSettings, Tag, CreatedPost, makeDefaultTemplate } from '../types';
+import { AppContextType, QueueItem, PublishedPost, TextLayout, KeyboardLayout, Template, AppSettings, Tag, CreatedPost, makeDefaultTemplate } from '../types';
 import {
-  INITIAL_TAGS, INITIAL_LAYOUTS, INITIAL_TEMPLATES, INITIAL_SETTINGS,
+  INITIAL_TAGS, INITIAL_LAYOUTS, INITIAL_KEYBOARDS, INITIAL_TEMPLATES, INITIAL_SETTINGS,
 } from '../data/mock';
-import { tagsApi, layoutsApi, templatesApi, settingsApi, autopostApi, publishedApi } from '../lib/api';
+import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, autopostApi, publishedApi } from '../lib/api';
 
 const AppCtx = createContext<AppContextType | null>(null);
 
@@ -63,6 +63,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [published, setPublished] = useState<PublishedPost[]>([]);
   const [tags, setTags] = useState<Tag[]>(INITIAL_TAGS);
   const [layouts, setLayouts] = useState<TextLayout[]>(INITIAL_LAYOUTS);
+  const [keyboards, setKeyboards] = useState<KeyboardLayout[]>(INITIAL_KEYBOARDS);
   const [templates, setTemplates] = useState<Template[]>(INITIAL_TEMPLATES);
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   const [publishedCount, setPublishedCount] = useState(0);
@@ -74,10 +75,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       tryFetch(autopostApi.list, []),
       tryFetch(tagsApi.list, INITIAL_TAGS),
       tryFetch(layoutsApi.list, INITIAL_LAYOUTS),
+      tryFetch(keyboardsApi.list, INITIAL_KEYBOARDS),
       tryFetch(templatesApi.list, INITIAL_TEMPLATES),
       tryFetch(settingsApi.get, {} as AppSettings),
       tryFetch(publishedApi.listToday, []),
-    ]).then(([q, t, l, tmpl, s, pub]) => {
+    ]).then(([q, t, l, kb, tmpl, s, pub]) => {
       setQueue((q as QueueItem[]).filter(x => x.status === 'draft'));
       if (t.length > 0) setTags(t);
       // Merge DB layouts with defaults: DB ha la precedenza per ID corrispondenti,
@@ -87,6 +89,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const merged = INITIAL_LAYOUTS.map(d => dbById.get(d.id) ?? d);
         const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => d.id === x.id));
         setLayouts([...merged, ...extra]);
+      }
+      // Merge keyboards: stessa logica dei layouts
+      {
+        const kbById = new Map((kb as KeyboardLayout[]).map((x: KeyboardLayout) => [x.id, x]));
+        const merged = INITIAL_KEYBOARDS.map(d => kbById.get(d.id) ?? d);
+        const extra = (kb as KeyboardLayout[]).filter((x: KeyboardLayout) => !INITIAL_KEYBOARDS.some(d => d.id === x.id));
+        setKeyboards([...merged, ...extra]);
       }
       if (tmpl.length > 0) {
         const normalized = (tmpl as Template[]).map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
@@ -136,6 +145,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       published, setPublished,
       tags, setTags,
       layouts, setLayouts,
+      keyboards, setKeyboards,
       templates, setTemplates,
       settings, setSettings,
       stats,
