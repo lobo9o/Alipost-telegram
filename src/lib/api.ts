@@ -7,7 +7,7 @@ function getTgInitData(): string {
   return (window as any).Telegram?.WebApp?.initData ?? '';
 }
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function req<T>(method: string, path: string, body?: unknown, opts?: { keepAlive?: boolean }): Promise<T> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
   const initData = getTgInitData();
@@ -18,6 +18,8 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     headers,
     body: body ? JSON.stringify(body) : undefined,
     cache: 'no-store',
+    // keepalive: il browser completa la richiesta anche se la pagina viene chiusa
+    ...(opts?.keepAlive ? { keepalive: true } : {}),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -77,8 +79,12 @@ export const postsApi = {
   create: (post: CreatedPost) => req<CreatedPost>('POST', '/api/posts', post),
   update: (id: string, post: Partial<CreatedPost>) => req<CreatedPost>('PUT', `/api/posts/${id}`, post),
   delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/posts/${id}`),
+  // keepAlive: la richiesta viene completata anche se l'utente chiude la mini app
   publish: (id: string, payload: { post: CreatedPost; layoutContenuto?: string; keyboardContenuto?: string; generatedImage?: string }) =>
-    req<{ ok: boolean }>('POST', `/api/posts/${id}`, payload),
+    req<{ ok: boolean; messageId?: number; chatId?: string }>('POST', `/api/posts/${id}`, payload, { keepAlive: true }),
+  // Aggiorna l'immagine del messaggio già pubblicato con l'immagine template generata
+  editWithImage: (id: string, payload: { chatId: string; messageId: number; newImage: string }) =>
+    req<{ ok: boolean }>('PATCH', `/api/posts/${id}`, payload),
 };
 
 // ── Autopost Queue ────────────────────────────────────────────────────────────
