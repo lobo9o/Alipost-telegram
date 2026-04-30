@@ -202,12 +202,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const form = new FormData();
       form.append('chat_id', chatId);
       form.append('message_id', String(messageId));
-      form.append('media', JSON.stringify({
-        type: 'photo',
-        media: 'attach://photo',
-        caption: caption.slice(0, 1024),
-        parse_mode: 'HTML',
-      }));
+      // Includi caption solo se esplicitamente fornita o se è terminata — altrimenti Telegram mantiene il testo originale
+      const mediaObj: Record<string, string> = { type: 'photo', media: 'attach://photo' };
+      if (newCaption !== undefined || terminata) {
+        mediaObj.caption = caption.slice(0, 1024);
+        mediaObj.parse_mode = 'HTML';
+      }
+      form.append('media', JSON.stringify(mediaObj));
       form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'photo');
       tgRes = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form });
       tgData = await tgRes.json() as { ok: boolean; description?: string };
