@@ -405,9 +405,7 @@ function SizeSlider({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE' 
   );
 }
 
-// PREVIEW_SCALE: fontSize nel canvas è fontSize*2 su 1024px; nella preview CSS
-// usiamo ref per misurare la larghezza reale e scalare esattamente come fa il canvas.
-const PREVIEW_SCALE = 0.65;
+const CANVAS_SIZE_CONST = 1024;
 
 export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata?: TerminataConfig }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -417,6 +415,8 @@ export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata
   }, []);
 
   const pp = tpl.product;
+  // fontScale esatto: canvas usa fontSize*2 su 1024px, quindi nella preview usiamo lo stesso rapporto
+  const fontScale = (2 * containerW) / CANVAS_SIZE_CONST;
   // fontSize per il testo terminata: uguale al canvas (overlayTextSize% di containerW)
   const terminataFontPx = terminata ? (terminata.overlayTextSize / 100) * containerW : 0;
 
@@ -468,11 +468,11 @@ export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata
               : el.textAnchor === 'center'
                 ? { left: `${el.x}%`, top: `${el.y}%`, transform: 'translateX(-50%)' }
                 : { left: `${el.x}%`, top: `${el.y}%` }),
-            fontSize: `${el.fontSize * PREVIEW_SCALE}px`,
+            fontSize: `${el.fontSize * fontScale}px`,
             fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
             color: el.color,
             textDecoration: el.strikethrough ? `line-through ${el.strikethroughColor || el.color}` : 'none',
-            WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * PREVIEW_SCALE}px ${el.strokeColor}` : undefined,
+            WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * fontScale}px ${el.strokeColor}` : undefined,
             whiteSpace: 'nowrap', pointerEvents: 'none',
           }}>{text}</div>
         ) : null

@@ -95,7 +95,13 @@ function cleanupSentinels(text: string): string {
 
 export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[], currency?: string): string {
   const builtIn = computedTags(post, currency);
-  const knownTags = new Set([...Object.keys(builtIn), ...tags.map(t => t.name)]);
+  // Override per-post: i tagOverrides del post hanno priorità sui valori globali dei tag custom
+  const effectiveTags = tags.map(t =>
+    post.tagOverrides?.[t.name] !== undefined
+      ? { ...t, value: post.tagOverrides![t.name] }
+      : t
+  );
+  const knownTags = new Set([...Object.keys(builtIn), ...effectiveTags.map(t => t.name)]);
 
   // Blocchi condizionali annidati {_ ... _}: elabora dall'interno verso l'esterno
   let result = template;
@@ -107,7 +113,7 @@ export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]
       for (const [tag, val] of Object.entries(builtIn)) {
         if (inner.includes(tag) && (!val || val.trim() === '')) hasEmpty = true;
       }
-      for (const tag of tags) {
+      for (const tag of effectiveTags) {
         if (!builtIn[tag.name] && inner.includes(tag.name) && (!tag.value || tag.value.trim() === '')) {
           hasEmpty = true;
         }
@@ -118,11 +124,11 @@ export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]
         if (!knownTags.has(t)) { hasEmpty = true; break; }
       }
       // Usa sentinel invece di '': permette di rilevare e rimuovere la riga intera
-      return hasEmpty ? SENTINEL : applyTags(inner, builtIn, tags);
+      return hasEmpty ? SENTINEL : applyTags(inner, builtIn, effectiveTags);
     });
   }
 
-  result = applyTags(result, builtIn, tags);
+  result = applyTags(result, builtIn, effectiveTags);
   // Stessa conversione del server: ~~testo~~ → <s>testo</s>
   result = result.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
   return cleanupSentinels(result);

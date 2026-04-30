@@ -38,6 +38,7 @@ export interface CreatedPost {
   cat?: string;
   author?: string;
   coupon?: string;
+  tagOverrides?: Record<string, string>; // override per-post dei tag personalizzati
 }
 
 export interface CatalogProduct {

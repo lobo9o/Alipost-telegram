@@ -34,29 +34,30 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string) {
 
   const anchor = el.textAnchor ?? 'left';
   ctx.save();
-  ctx.textAlign = anchor === 'right' ? 'right' : anchor === 'center' ? 'center' : 'left';
+  ctx.textAlign = 'left';
   ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}`;
   ctx.textBaseline = 'top';
+
+  const textW = ctx.measureText(text).width;
+  const drawX = anchor === 'right' ? x - textW : anchor === 'center' ? x - textW / 2 : x;
 
   if (el.strokeEnabled && el.strokeWidth > 0) {
     ctx.strokeStyle = el.strokeColor;
     ctx.lineWidth = el.strokeWidth * 2;
     ctx.lineJoin = 'round';
-    ctx.strokeText(text, x, y);
+    ctx.strokeText(text, drawX, y);
   }
 
   ctx.fillStyle = el.color;
-  ctx.fillText(text, x, y);
+  ctx.fillText(text, drawX, y);
 
   if (el.strikethrough) {
-    const metrics = ctx.measureText(text);
     const strikeY = y + fs * 0.55;
-    const startX = anchor === 'right' ? x - metrics.width : anchor === 'center' ? x - metrics.width / 2 : x;
     ctx.strokeStyle = el.strikethroughColor || el.color;
     ctx.lineWidth = Math.max(1, fs * 0.06);
     ctx.beginPath();
-    ctx.moveTo(startX, strikeY);
-    ctx.lineTo(startX + metrics.width, strikeY);
+    ctx.moveTo(drawX, strikeY);
+    ctx.lineTo(drawX + textW, strikeY);
     ctx.stroke();
   }
 

@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, CreatedPost, QueueItem, Platform, Template } from '../types';
+import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
-import { resolvePostTags, aliCurrencySym } from '../utils/tagUtils';
+import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi, publishedApi } from '../lib/api';
 import { generatePostImage, generateTerminataImage } from '../utils/imageCompose';
 
@@ -79,7 +79,11 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       {template.prezzo.enabled && (
         <div style={{
           position: 'absolute',
-          ...(template.prezzo.textAnchor === 'right' ? { right: `${100 - template.prezzo.x}%` } : { left: `${template.prezzo.x}%` }),
+          ...(template.prezzo.textAnchor === 'right'
+            ? { right: `${100 - template.prezzo.x}%` }
+            : template.prezzo.textAnchor === 'center'
+              ? { left: `${template.prezzo.x}%`, transform: 'translateX(-50%)' }
+              : { left: `${template.prezzo.x}%` }),
           top: `${template.prezzo.y}%`,
           fontSize: `${template.prezzo.fontSize * TPL_SCALE}px`,
           fontFamily: template.prezzo.fontFamily, fontWeight: template.prezzo.bold ? 700 : 400,
@@ -90,7 +94,11 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       {template.prezzoPrecedente.enabled && (
         <div style={{
           position: 'absolute',
-          ...(template.prezzoPrecedente.textAnchor === 'right' ? { right: `${100 - template.prezzoPrecedente.x}%` } : { left: `${template.prezzoPrecedente.x}%` }),
+          ...(template.prezzoPrecedente.textAnchor === 'right'
+            ? { right: `${100 - template.prezzoPrecedente.x}%` }
+            : template.prezzoPrecedente.textAnchor === 'center'
+              ? { left: `${template.prezzoPrecedente.x}%`, transform: 'translateX(-50%)' }
+              : { left: `${template.prezzoPrecedente.x}%` }),
           top: `${template.prezzoPrecedente.y}%`,
           fontSize: `${template.prezzoPrecedente.fontSize * TPL_SCALE}px`,
           fontFamily: template.prezzoPrecedente.fontFamily, fontWeight: template.prezzoPrecedente.bold ? 700 : 400,
@@ -103,7 +111,11 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       {template.sconto.enabled && (
         <div style={{
           position: 'absolute',
-          ...(template.sconto.textAnchor === 'right' ? { right: `${100 - template.sconto.x}%` } : { left: `${template.sconto.x}%` }),
+          ...(template.sconto.textAnchor === 'right'
+            ? { right: `${100 - template.sconto.x}%` }
+            : template.sconto.textAnchor === 'center'
+              ? { left: `${template.sconto.x}%`, transform: 'translateX(-50%)' }
+              : { left: `${template.sconto.x}%` }),
           top: `${template.sconto.y}%`,
           fontSize: `${template.sconto.fontSize * TPL_SCALE}px`,
           fontFamily: template.sconto.fontFamily, fontWeight: template.sconto.bold ? 700 : 400,
@@ -114,7 +126,11 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       {template.testoCustom.enabled && post.customText && (
         <div style={{
           position: 'absolute',
-          ...(template.testoCustom.textAnchor === 'right' ? { right: `${100 - template.testoCustom.x}%` } : { left: `${template.testoCustom.x}%` }),
+          ...(template.testoCustom.textAnchor === 'right'
+            ? { right: `${100 - template.testoCustom.x}%` }
+            : template.testoCustom.textAnchor === 'center'
+              ? { left: `${template.testoCustom.x}%`, transform: 'translateX(-50%)' }
+              : { left: `${template.testoCustom.x}%` }),
           top: `${template.testoCustom.y}%`,
           fontSize: `${template.testoCustom.fontSize * TPL_SCALE}px`,
           fontFamily: template.testoCustom.fontFamily, fontWeight: template.testoCustom.bold ? 700 : 400,
@@ -500,6 +516,115 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   );
 }
 
+// ── Tag editing helpers ───────────────────────────────────────
+
+// Tag di sistema auto-calcolati o già coperti da altri campi del form (non mostrare nel pannello tag)
+const SKIP_IN_TAG_PANEL = new Set([
+  '{titolo}', '{titoloup}', '{titoloshort}',
+  '{prezzo}', '{prezzo_scontato}', '{oldprezzo}', '{sconto}', '{perc}', '{valuta}',
+  '{link}', '{link_affiliato}',
+  '{minimo_storico}',
+  '{custom}', // già coperto da "TESTO PERSONALIZZATO"
+  '{store}', '{storeup}', '{countryflag}',
+  '{giorno}', '{ora}', '{data}',
+  '{checkout}',
+]);
+
+// Tag di sistema che l'utente può editare (mappati a campi di CreatedPost)
+type EditableSystemTag = { label: string; field: keyof CreatedPost; placeholder: string };
+const EDITABLE_SYSTEM_TAG_MAP: Record<string, EditableSystemTag> = {
+  '{coupon}':     { label: 'Coupon',      field: 'coupon',     placeholder: 'Codice sconto...' },
+  '{boxcoupon}':  { label: 'Coupon',      field: 'coupon',     placeholder: 'Codice sconto...' },
+  '{stelle}':     { label: 'Stelle',      field: 'stelle',     placeholder: '⭐⭐⭐⭐' },
+  '{recensioni}': { label: 'Recensioni',  field: 'recensioni', placeholder: 'es. 1.234 recensioni' },
+  '{cat}':        { label: 'Categoria',   field: 'cat',        placeholder: 'Categoria prodotto...' },
+  '{author}':     { label: 'Autore',      field: 'author',     placeholder: 'Nome autore...' },
+};
+
+function extractLayoutTags(contenuto: string): string[] {
+  const matches = contenuto.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) ?? [];
+  return [...new Set(matches)];
+}
+
+function DynamicTagFields({ layout, post, postTags, itemId, onUpdate }: {
+  layout: { contenuto: string } | undefined;
+  post: CreatedPost;
+  postTags: Tag[];
+  itemId: string;
+  onUpdate: (id: string, ch: Partial<CreatedPost>) => void;
+}) {
+  if (!layout) return null;
+
+  const layoutTags = extractLayoutTags(layout.contenuto);
+
+  // Tag di sistema editabili presenti nel layout (dedup per campo)
+  const shownFields = new Set<string>();
+  const systemFields: Array<EditableSystemTag & { tag: string }> = [];
+  for (const tag of layoutTags) {
+    const m = EDITABLE_SYSTEM_TAG_MAP[tag];
+    if (m && !shownFields.has(m.field as string)) {
+      shownFields.add(m.field as string);
+      systemFields.push({ tag, ...m });
+    }
+  }
+
+  // Tag personalizzati (non in SYSTEM_TAGS) presenti nel layout
+  const customFields: Array<{ tag: string; globalValue: string }> = [];
+  for (const tag of layoutTags) {
+    if (!SYSTEM_TAGS.has(tag)) {
+      const globalTag = postTags.find(t => t.name === tag);
+      if (globalTag) customFields.push({ tag, globalValue: globalTag.value });
+    }
+  }
+
+  if (systemFields.length === 0 && customFields.length === 0) return null;
+
+  const pillStyle = (color: string, bg: string): React.CSSProperties => ({
+    fontSize: 10, padding: '1px 7px', borderRadius: 10,
+    fontFamily: 'monospace', color, background: bg, flexShrink: 0,
+  });
+
+  return (
+    <>
+      <div className="stit">TAG NEL LAYOUT</div>
+
+      {systemFields.map(({ tag, label, field, placeholder }) => (
+        <div key={field as string} style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+            <span className="lbl" style={{ marginBottom: 0 }}>{label.toUpperCase()}</span>
+            <span style={pillStyle('var(--a1)', 'rgba(6,182,212,0.12)')}>{tag}</span>
+          </div>
+          <input className="inp" value={(post[field] as string) || ''} placeholder={placeholder}
+            onChange={e => onUpdate(itemId, { [field]: e.target.value })} />
+        </div>
+      ))}
+
+      {customFields.map(({ tag, globalValue }) => {
+        const override = post.tagOverrides?.[tag];
+        const currentValue = override !== undefined ? override : globalValue;
+        const isOverridden = override !== undefined && override !== globalValue;
+        return (
+          <div key={tag} style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <span className="lbl" style={{ marginBottom: 0 }}>TAG PERSONALIZZATO</span>
+              <span style={pillStyle('#f59e0b', 'rgba(251,191,36,0.12)')}>{tag}</span>
+              {isOverridden && (
+                <span style={{ fontSize: 9, color: 'var(--t3)', marginLeft: 'auto' }}>
+                  globale: "{globalValue}"
+                </span>
+              )}
+            </div>
+            <input className="inp" value={currentValue} placeholder={`Valore per ${tag}...`}
+              onChange={e => onUpdate(itemId, {
+                tagOverrides: { ...(post.tagOverrides ?? {}), [tag]: e.target.value },
+              })} />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 // ============================================================
 // QUEUE PAGE
 // ============================================================
@@ -765,11 +890,18 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                 </select>
               </div>
               <div style={{ marginBottom: 10 }}>
-                <div className="lbl">TESTO PERSONALIZZATO</div>
+                <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
                 <textarea className="txta" rows={2} value={p.customText}
                   onChange={e => updateQueuePost(item.id, { customText: e.target.value })}
                   placeholder="Testo aggiuntivo..." />
               </div>
+              <DynamicTagFields
+                layout={layout}
+                post={p}
+                postTags={tags}
+                itemId={item.id}
+                onUpdate={updateQueuePost}
+              />
               {previewText && (
                 <>
                   <div className="stit">ANTEPRIMA TESTO</div>
