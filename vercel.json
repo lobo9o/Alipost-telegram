@@ -10,6 +10,10 @@
     {
       "path": "/api/posts?action=price-check",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/autopost/publish",
+      "schedule": "* * * * *"
     }
   ]
 }
