@@ -646,6 +646,26 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     setQueue(q => q.map(x => x.id === itemId ? { ...x, posts: [{ ...x.posts[0], ...changes }] } : x));
   };
 
+  // Cache immagini pre-generate: key = queue item id, value = base64 jpeg
+  const pregenImages = React.useRef<Record<string, string>>({});
+
+  // Pre-genera l'immagine del post corrente non appena viene visualizzato
+  React.useEffect(() => {
+    const currentItem = queue[safeIdx];
+    if (!currentItem) return;
+    const currentPost = currentItem.posts[0] as CreatedPost | undefined;
+    if (!currentPost) return;
+    const tpl = templates.find(t => t.id === currentPost.templateId);
+    if (!tpl || pregenImages.current[currentItem.id]) return;
+
+    generatePostImage(tpl, currentPost.image, currentPost.isHistoricalLow, currentPost.platform, {
+      prezzo: `€${Number(currentPost.discountedPrice).toFixed(2)}`,
+      prezzoPrecedente: `€${Number(currentPost.originalPrice).toFixed(2)}`,
+      sconto: `-${currentPost.discountPercent}%`,
+      testoCustom: currentPost.customText,
+    }).then(img => { pregenImages.current[currentItem.id] = img; }).catch(() => {});
+  }, [safeIdx, queue, templates]);
+
   const publish = async (id: string) => {
     if (publishingId) return;
     const item = queue.find(x => x.id === id);
@@ -670,21 +690,30 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     }
 
     setPublishingId(id);
+
+    // Rimuovi subito dalla UI + marca come published nel DB (fire-and-forget — non blocca la UI)
     setQueue(q => q.filter(x => x.id !== id));
     setCurrentIdx(i => Math.max(0, Math.min(i, queue.length - 2)));
     autopostApi.update(id, { status: 'published' }).catch(() => {});
 
     try {
+      let generatedImage: string | undefined;
+      if (template) {
+        try {
+          // Usa l'immagine pre-generata se disponibile (pronta in background da quando il post era visibile)
+          generatedImage = pregenImages.current[id] ?? await generatePostImage(
+            template, post.image, post.isHistoricalLow, post.platform, {
+              prezzo: `€${Number(post.discountedPrice).toFixed(2)}`,
+              prezzoPrecedente: `€${Number(post.originalPrice).toFixed(2)}`,
+              sconto: `-${post.discountPercent}%`,
+              testoCustom: post.customText,
+            }
+          );
+        } catch { /* fall back to URL */ }
+      }
       const keyboard = keyboards.find(k => k.id === post.keyboardId) ?? keyboards[0];
-
-      // PASSO 1 — pubblica subito sul server (usa immagine URL, keepalive = completa anche se l'utente chiude l'app)
-      const pubResult = await postsApi.publish(post.id, {
-        post,
-        layoutContenuto: layout?.contenuto,
-        keyboardContenuto: keyboard?.contenuto,
-      });
-
-      autopostApi.delete(id).catch(() => {});
+      const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage });
+      autopostApi.delete(id).catch(() => {}); // cleanup finale, fire-and-forget OK (status già aggiornato)
       const now = new Date().toISOString();
       const pubRecord = {
         id: post.id, emoji: post.emoji, title: post.title,
@@ -700,23 +729,6 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       setPublished(prev => [pubRecord, ...prev]);
       publishedApi.save(pubRecord).catch(() => {});
       setPublishingId(null);
-
-      // PASSO 2 — genera immagine template in background e sostituisce quella nel messaggio già pubblicato
-      // (fire-and-forget: il post è già su Telegram, questo è solo un miglioramento visivo)
-      if (template && pubResult.messageId && pubResult.chatId) {
-        generatePostImage(template, post.image, post.isHistoricalLow, post.platform, {
-          prezzo: `€${Number(post.discountedPrice).toFixed(2)}`,
-          prezzoPrecedente: `€${Number(post.originalPrice).toFixed(2)}`,
-          sconto: `-${post.discountPercent}%`,
-          testoCustom: post.customText,
-        }).then(generatedImage =>
-          postsApi.editWithImage(post.id, {
-            chatId: pubResult.chatId!,
-            messageId: pubResult.messageId!,
-            newImage: generatedImage,
-          })
-        ).catch(() => {});
-      }
     } catch (e) {
       const msg = e instanceof Error ? (e.message || 'Errore sconosciuto') : String(e) || 'Errore sconosciuto';
       autopostApi.update(id, { status: 'draft' }).catch(() => {});
