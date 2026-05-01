@@ -378,6 +378,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const { createdPosts, queue, setQueue, layouts, keyboards, templates } = useApp();
 
   const [phase, setPhase] = useState<'input' | 'loading'>('input');
+  const [progress, setProgress] = useState(0);
   const [mode, setMode] = useState<'single' | 'multi'>('single');
   const [linkInput, setLinkInput] = useState('');
   const [links, setLinks] = useState<LinkItem[]>([]);
@@ -399,22 +400,31 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const creaPost = async () => {
     if (!links.length) return;
     setPhase('loading');
+    setProgress(0);
     setErr('');
     try {
       const defaultNormalTpl = templates[0]?.id ?? 'tpl1';
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
       const defaultKb = keyboards[0]?.id ?? 'kb1';
+      const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-      const newPosts: CreatedPost[] = await Promise.all(links.map(async l => {
+      // Sequenziale con delay 600ms tra chiamate Amazon — evita rate limit 429
+      const newPosts: CreatedPost[] = [];
+      let amazonCount = 0;
+      for (let i = 0; i < links.length; i++) {
+        const l = links[i];
         const newId = genId();
         if (l.platform === 'amazon') {
+          if (amazonCount > 0) await delay(600);
           const p = await productApi.fetchAmazon({ url: l.url });
-          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon };
+          newPosts.push({ id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon });
+          amazonCount++;
         } else {
           const p = await productApi.fetchAliExpress({ url: l.url });
-          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦' };
+          newPosts.push({ id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦' });
         }
-      }));
+        setProgress(i + 1);
+      }
 
       // Genera immagini canvas per il cron autopost (browser-side, non disponibile server-side)
       const newPostsWithImages = await Promise.all(newPosts.map(async p => {
@@ -538,7 +548,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
           <div style={{ fontSize: 44 }}>⏳</div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>Analisi in corso...</div>
           <div style={{ fontSize: 13, color: 'var(--t2)', textAlign: 'center' }}>
-            Recupero dati da {links.length} {links.length === 1 ? 'link' : 'link'}
+            {progress}/{links.length} link elaborati
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             {links.map(l => <SourceBadge key={l.id} platform={l.platform} />)}
