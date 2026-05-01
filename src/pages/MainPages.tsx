@@ -9,14 +9,21 @@ import { productApi, postsApi, autopostApi, publishedApi } from '../lib/api';
 import { generatePostImage, generateTerminataImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
-const TPL_SCALE = 0.65; // allineato a canvas: fontSize*2 / preview ~340px
+const CANVAS_SIZE_PREVIEW = 1024;
 
 function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
   const hasImage = post.image && post.image !== 'placeholder.jpg';
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerW, setContainerW] = useState(340);
+  React.useEffect(() => {
+    if (containerRef.current) setContainerW(containerRef.current.clientWidth);
+  }, []);
+  // Stesso calcolo di TemplatePreviewer in LayoutSettings: canvas usa fontSize*2 su 1024px
+  const fontScale = (2 * containerW) / CANVAS_SIZE_PREVIEW;
 
   if (!template) {
     return (
-      <div className="tpl-preview">
+      <div className="tpl-preview" ref={containerRef}>
         <div className="tpl-product">
           {hasImage
             ? <img src={post.image} alt="" style={{ width: '65%', height: '65%', objectFit: 'contain' }} />
@@ -36,7 +43,7 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
 
   const pp = template.product;
   return (
-    <div style={{
+    <div ref={containerRef} style={{
       margin: '0 16px 12px', borderRadius: 10, overflow: 'hidden',
       position: 'relative', aspectRatio: '1/1', background: template.bgColor,
       boxShadow: '0 2px 16px rgba(0,0,0,0.35)', isolation: 'isolate',
@@ -76,69 +83,29 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       )}
 
       {/* Text elements with actual values */}
-      {template.prezzo.enabled && (
-        <div style={{
-          position: 'absolute',
-          ...(template.prezzo.textAnchor === 'right'
-            ? { right: `${100 - template.prezzo.x}%` }
-            : template.prezzo.textAnchor === 'center'
-              ? { left: `${template.prezzo.x}%`, transform: 'translateX(-50%)' }
-              : { left: `${template.prezzo.x}%` }),
-          top: `${template.prezzo.y}%`,
-          fontSize: `${template.prezzo.fontSize * TPL_SCALE}px`,
-          fontFamily: template.prezzo.fontFamily, fontWeight: template.prezzo.bold ? 700 : 400,
-          color: template.prezzo.color, whiteSpace: 'nowrap', pointerEvents: 'none',
-          WebkitTextStroke: template.prezzo.strokeEnabled ? `${template.prezzo.strokeWidth * TPL_SCALE}px ${template.prezzo.strokeColor}` : undefined,
-        }}>€{post.discountedPrice.toFixed(2)}</div>
-      )}
-      {template.prezzoPrecedente.enabled && (
-        <div style={{
-          position: 'absolute',
-          ...(template.prezzoPrecedente.textAnchor === 'right'
-            ? { right: `${100 - template.prezzoPrecedente.x}%` }
-            : template.prezzoPrecedente.textAnchor === 'center'
-              ? { left: `${template.prezzoPrecedente.x}%`, transform: 'translateX(-50%)' }
-              : { left: `${template.prezzoPrecedente.x}%` }),
-          top: `${template.prezzoPrecedente.y}%`,
-          fontSize: `${template.prezzoPrecedente.fontSize * TPL_SCALE}px`,
-          fontFamily: template.prezzoPrecedente.fontFamily, fontWeight: template.prezzoPrecedente.bold ? 700 : 400,
-          color: template.prezzoPrecedente.color,
-          textDecoration: template.prezzoPrecedente.strikethrough ? `line-through ${template.prezzoPrecedente.strikethroughColor || template.prezzoPrecedente.color}` : 'none',
-          whiteSpace: 'nowrap', pointerEvents: 'none',
-          WebkitTextStroke: template.prezzoPrecedente.strokeEnabled ? `${template.prezzoPrecedente.strokeWidth * TPL_SCALE}px ${template.prezzoPrecedente.strokeColor}` : undefined,
-        }}>€{post.originalPrice.toFixed(2)}</div>
-      )}
-      {template.sconto.enabled && (
-        <div style={{
-          position: 'absolute',
-          ...(template.sconto.textAnchor === 'right'
-            ? { right: `${100 - template.sconto.x}%` }
-            : template.sconto.textAnchor === 'center'
-              ? { left: `${template.sconto.x}%`, transform: 'translateX(-50%)' }
-              : { left: `${template.sconto.x}%` }),
-          top: `${template.sconto.y}%`,
-          fontSize: `${template.sconto.fontSize * TPL_SCALE}px`,
-          fontFamily: template.sconto.fontFamily, fontWeight: template.sconto.bold ? 700 : 400,
-          color: template.sconto.color, whiteSpace: 'nowrap', pointerEvents: 'none',
-          WebkitTextStroke: template.sconto.strokeEnabled ? `${template.sconto.strokeWidth * TPL_SCALE}px ${template.sconto.strokeColor}` : undefined,
-        }}>-{post.discountPercent}%</div>
-      )}
-      {template.testoCustom.enabled && post.customText && (
-        <div style={{
-          position: 'absolute',
-          ...(template.testoCustom.textAnchor === 'right'
-            ? { right: `${100 - template.testoCustom.x}%` }
-            : template.testoCustom.textAnchor === 'center'
-              ? { left: `${template.testoCustom.x}%`, transform: 'translateX(-50%)' }
-              : { left: `${template.testoCustom.x}%` }),
-          top: `${template.testoCustom.y}%`,
-          fontSize: `${template.testoCustom.fontSize * TPL_SCALE}px`,
-          fontFamily: template.testoCustom.fontFamily, fontWeight: template.testoCustom.bold ? 700 : 400,
-          color: template.testoCustom.color,
-          textDecoration: template.testoCustom.strikethrough ? `line-through ${template.testoCustom.strikethroughColor || template.testoCustom.color}` : 'none',
-          whiteSpace: 'nowrap', pointerEvents: 'none',
-          WebkitTextStroke: template.testoCustom.strokeEnabled ? `${template.testoCustom.strokeWidth * TPL_SCALE}px ${template.testoCustom.strokeColor}` : undefined,
-        }}>{post.customText}</div>
+      {([
+        { el: template.prezzo,          text: `€${post.discountedPrice.toFixed(2)}` },
+        { el: template.prezzoPrecedente, text: `€${post.originalPrice.toFixed(2)}` },
+        { el: template.sconto,          text: `-${post.discountPercent}%` },
+        { el: template.testoCustom,     text: post.customText },
+      ] as const).map(({ el, text }, i) =>
+        el.enabled && text ? (
+          <div key={i} style={{
+            position: 'absolute',
+            ...(el.textAnchor === 'right'
+              ? { right: `${100 - el.x}%`, top: `${el.y}%` }
+              : el.textAnchor === 'center'
+                ? { left: `${el.x}%`, top: `${el.y}%`, transform: 'translateX(-50%)' }
+                : { left: `${el.x}%`, top: `${el.y}%` }),
+            fontSize: `${el.fontSize * fontScale}px`,
+            lineHeight: 1,
+            fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
+            color: el.color,
+            textDecoration: (el as any).strikethrough ? `line-through ${(el as any).strikethroughColor || el.color}` : 'none',
+            whiteSpace: 'nowrap', pointerEvents: 'none',
+            WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * fontScale}px ${el.strokeColor}` : undefined,
+          }}>{text}</div>
+        ) : null
       )}
 
       {/* Badge — sopra tutto, incluso il testo, solo se minimo storico */}

@@ -469,6 +469,7 @@ export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata
                 ? { left: `${el.x}%`, top: `${el.y}%`, transform: 'translateX(-50%)' }
                 : { left: `${el.x}%`, top: `${el.y}%` }),
             fontSize: `${el.fontSize * fontScale}px`,
+            lineHeight: 1,
             fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
             color: el.color,
             textDecoration: el.strikethrough ? `line-through ${el.strikethroughColor || el.color}` : 'none',
