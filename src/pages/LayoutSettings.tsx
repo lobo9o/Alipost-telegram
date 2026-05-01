@@ -1215,7 +1215,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       </div>
       <div className="fld">
         <label className="lbl">Intervallo (minuti)</label>
-        <input type="number" className="inp" value={s.interv} min={15} max={1440} onChange={e => setS({ ...s, interv: parseInt(e.target.value) || 60 })} />
+        <input type="number" className="inp" value={s.interv || ''} min={1} max={1440} onChange={e => setS({ ...s, interv: parseInt(e.target.value) || 0 })} onBlur={() => { if (!s.interv || s.interv < 1) setS({ ...s, interv: 1 }); }} />
       </div>
       <div className="fld">
         <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>
