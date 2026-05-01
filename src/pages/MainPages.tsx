@@ -407,23 +407,27 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
       const defaultKb = keyboards[0]?.id ?? 'kb1';
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+      const BATCH = 10;
 
-      // Sequenziale con delay 600ms tra chiamate Amazon — evita rate limit 429
-      const newPosts: CreatedPost[] = [];
-      let amazonCount = 0;
-      for (let i = 0; i < links.length; i++) {
-        const l = links[i];
+      const fetchOne = async (l: LinkItem): Promise<CreatedPost> => {
         const newId = genId();
         if (l.platform === 'amazon') {
-          if (amazonCount > 0) await delay(600);
           const p = await productApi.fetchAmazon({ url: l.url });
-          newPosts.push({ id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon });
-          amazonCount++;
+          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon };
         } else {
           const p = await productApi.fetchAliExpress({ url: l.url });
-          newPosts.push({ id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦' });
+          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦' };
         }
-        setProgress(i + 1);
+      };
+
+      // Blocchi da 10 in parallelo, 1s di pausa tra un blocco e il successivo
+      const newPosts: CreatedPost[] = [];
+      for (let i = 0; i < links.length; i += BATCH) {
+        if (i > 0) await delay(1000);
+        const batch = links.slice(i, i + BATCH);
+        const results = await Promise.all(batch.map(fetchOne));
+        newPosts.push(...results);
+        setProgress(Math.min(i + BATCH, links.length));
       }
 
       // Genera immagini canvas per il cron autopost (browser-side, non disponibile server-side)
