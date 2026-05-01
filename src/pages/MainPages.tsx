@@ -736,15 +736,6 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     const template = templates.find(t => t.id === post.templateId);
     setPublishErr(null);
 
-    // Avviso se già pubblicato oggi
-    const dupPub = published.find(p => p.productId === post.productId);
-    if (dupPub) {
-      const ok = window.confirm(
-        `⚠️ Questo prodotto è già stato pubblicato oggi alle ${dupPub.ts}.\n\nVuoi pubblicarlo di nuovo?`
-      );
-      if (!ok) return;
-    }
-
     setPublishingId(id);
 
     // Rimuovi subito dalla UI + marca come published nel DB (fire-and-forget — non blocca la UI)
@@ -836,6 +827,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const previewText = (layout && p) ? resolvePostTags(layout.contenuto, p, tags, qCurrency) : '';
   const isEditing = expandedId === item?.id;
 
+  // Post in coda già pubblicati oggi
+  const publishedIds = new Set(published.map(pub => pub.productId));
+  const duplicatesInQueue = queue.filter(qi => {
+    const post = qi.posts[0] as CreatedPost | undefined;
+    return post?.productId && publishedIds.has(post.productId);
+  });
+
   return (
     <div className="pg">
       <PageHeader title="Coda AutoPost" onBack={() => nav('dash')} badge={queue.length}
@@ -845,6 +843,29 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           </button>
         }
       />
+
+      {/* Banner post già pubblicati */}
+      {duplicatesInQueue.length > 0 && (
+        <div style={{
+          margin: '8px 16px 0', padding: '10px 14px', borderRadius: 10,
+          background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.35)',
+          fontSize: 12, color: '#f59e0b',
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>
+            ⚠️ {duplicatesInQueue.length} post {duplicatesInQueue.length === 1 ? 'già pubblicato' : 'già pubblicati'} in coda
+          </div>
+          {duplicatesInQueue.map(qi => {
+            const qp = qi.posts[0] as CreatedPost;
+            const pub = published.find(pb => pb.productId === qp.productId);
+            return (
+              <div key={qi.id} style={{ color: 'var(--t2)', marginTop: 2 }}>
+                · {qp.emoji} {qp.title.slice(0, 40)}{qp.title.length > 40 ? '…' : ''}
+                {pub && <span style={{ color: 'var(--t3)', marginLeft: 4 }}>({pub.ts})</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Contatore + navigazione frecce */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 4px', gap: 8 }}>
