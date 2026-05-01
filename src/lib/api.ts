@@ -112,6 +112,7 @@ export interface AmazonProductResult {
   author?: string;
   cat?: string;
   coupon?: string;
+  priceWarning?: string;
 }
 export interface AliExpressProductResult {
   productId: string;

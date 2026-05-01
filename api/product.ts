@@ -325,16 +325,22 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     const titleObj   = pick(pick(pick(item, 'itemInfo', 'ItemInfo'), 'title', 'Title'), 'displayValue', 'DisplayValue');
     const imageUrl   = pick(pick(pick(pick(item, 'images', 'Images'), 'primary', 'Primary'), 'large', 'Large'), 'url', 'URL');
-    const listings       = (pick(pick(item, 'offersV2'), 'listings') as any[])?.[0];
-    const priceObj       = pick(listings, 'price') as any;
-    const discountedPrice = (pick(pick(priceObj, 'money'), 'amount') as number) ?? 0;
-    const savingBasisAmt  = (pick(pick(pick(priceObj, 'savingBasis'), 'money'), 'amount') as number) ?? 0;
-    const savingsPct      = (pick(pick(priceObj, 'savings'), 'percentage') as number) ?? 0;
+    const offersV2        = pick(item, 'offersV2', 'OffersV2') as any;
+    const allListings     = (pick(offersV2, 'listings', 'Listings') as any[]) ?? [];
+    const listings        = allListings[0];
+    const priceObj        = pick(listings, 'price', 'Price') as any;
+    const discountedPrice = (pick(pick(priceObj, 'money', 'Money'), 'amount', 'Amount') as number) ?? 0;
+    const savingBasisAmt  = (pick(pick(pick(priceObj, 'savingBasis', 'SavingBasis'), 'money', 'Money'), 'amount', 'Amount') as number) ?? 0;
+    const savingsPct      = (pick(pick(priceObj, 'savings', 'Savings'), 'percentage', 'Percentage') as number) ?? 0;
     const originalPrice   = savingBasisAmt > 0 ? savingBasisAmt : discountedPrice;
     const discountPercent = savingsPct > 0
       ? Math.round(savingsPct)
       : originalPrice > discountedPrice
         ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
+
+    if (discountedPrice === 0) {
+      console.warn('[product] prezzo zero per ASIN', resolvedAsin, '| listings count:', allListings.length, '| offersV2:', JSON.stringify(offersV2).slice(0, 300));
+    }
 
     // Dati extra (resiliente: non fallisce se non presenti)
     const reviews = pick(data, 'customerReviews', 'CustomerReviews') as any;
@@ -375,6 +381,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       author: author || undefined,
       cat: cat || undefined,
       coupon: coupon || undefined,
+      priceWarning: discountedPrice === 0 ? 'Prezzo non trovato (prodotto non disponibile o offerta scaduta). Inseriscilo manualmente.' : undefined,
     });
 
   } else if (platform === 'aliexpress') {

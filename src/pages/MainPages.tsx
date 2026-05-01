@@ -409,10 +409,12 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
       const BATCH = 10;
 
+      const priceWarnings: string[] = [];
       const fetchOne = async (l: LinkItem): Promise<CreatedPost> => {
         const newId = genId();
         if (l.platform === 'amazon') {
           const p = await productApi.fetchAmazon({ url: l.url });
+          if (p.priceWarning) priceWarnings.push(`${p.title.slice(0, 30)}… — ${p.priceWarning}`);
           return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon };
         } else {
           const p = await productApi.fetchAliExpress({ url: l.url });
@@ -470,6 +472,9 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 
       const firstNewIdx = queue.length;
       sessionStorage.setItem('queueJumpIdx', String(firstNewIdx));
+      if (priceWarnings.length > 0) {
+        sessionStorage.setItem('queuePriceWarnings', JSON.stringify(priceWarnings));
+      }
       setQueue(prev => [...prev, ...saved]);
       setLinks([]);
       nav('queue');
@@ -682,6 +687,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [priceWarnings, setPriceWarnings] = useState<string[]>([]);
   const touchStartX = useRef(0);
 
   const safeIdx = Math.min(currentIdx, Math.max(0, queue.length - 1));
@@ -695,6 +701,11 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     if (jumpIdx !== null) {
       setCurrentIdx(Math.max(0, parseInt(jumpIdx) || 0));
       sessionStorage.removeItem('queueJumpIdx');
+    }
+    const warnings = sessionStorage.getItem('queuePriceWarnings');
+    if (warnings) {
+      try { setPriceWarnings(JSON.parse(warnings)); } catch {}
+      sessionStorage.removeItem('queuePriceWarnings');
     }
   }, []);
 
@@ -870,6 +881,23 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
       )}
 
+      {/* Banner prezzi zero */}
+      {priceWarnings.length > 0 && (
+        <div style={{
+          margin: '8px 16px 0', padding: '10px 14px', borderRadius: 10,
+          background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.35)',
+          fontSize: 12, color: '#ef4444',
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
+            <span>⚠️ {priceWarnings.length} post con prezzo non trovato — modifica manualmente</span>
+            <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setPriceWarnings([])}>✕</span>
+          </div>
+          {priceWarnings.map((w, i) => (
+            <div key={i} style={{ color: 'var(--t2)', marginTop: 2 }}>· {w}</div>
+          ))}
+        </div>
+      )}
+
       {/* Contatore + navigazione frecce */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 4px', gap: 8 }}>
         <button className="btn bgh bsm" disabled={safeIdx === 0}
@@ -945,23 +973,26 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             <div style={{ padding: '12px 16px 28px', borderTop: '1px solid var(--bd)' }}>
               <div style={{ marginBottom: 10 }}>
                 <div className="lbl">TITOLO</div>
-                <input className="inp" value={p.title} onChange={e => updateQueuePost(item.id, { title: e.target.value })} />
+                <input className="inp" defaultValue={p.title} key={item.id + '-title'}
+                  onBlur={e => updateQueuePost(item.id, { title: e.target.value })} />
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <div style={{ flex: 1 }}>
                   <div className="lbl">PREZZO ORIG.</div>
-                  <input className="inp" type="number" step="0.01" value={p.originalPrice}
-                    onChange={e => {
-                      const orig = parseFloat(e.target.value) || 0;
+                  <input className="inp" type="text" inputMode="decimal"
+                    key={item.id + '-orig'} defaultValue={p.originalPrice}
+                    onBlur={e => {
+                      const orig = parseFloat(e.target.value.replace(',', '.')) || 0;
                       const pct = orig > 0 ? Math.round((1 - p.discountedPrice / orig) * 100) : 0;
                       updateQueuePost(item.id, { originalPrice: orig, discountPercent: Math.max(0, pct) });
                     }} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div className="lbl">PREZZO SCONT.</div>
-                  <input className="inp" type="number" step="0.01" value={p.discountedPrice}
-                    onChange={e => {
-                      const disc = parseFloat(e.target.value) || 0;
+                  <input className="inp" type="text" inputMode="decimal"
+                    key={item.id + '-disc'} defaultValue={p.discountedPrice}
+                    onBlur={e => {
+                      const disc = parseFloat(e.target.value.replace(',', '.')) || 0;
                       const pct = p.originalPrice > 0 ? Math.round((1 - disc / p.originalPrice) * 100) : 0;
                       updateQueuePost(item.id, { discountedPrice: disc, discountPercent: Math.max(0, pct) });
                     }} />
@@ -994,8 +1025,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               </div>
               <div style={{ marginBottom: 10 }}>
                 <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
-                <textarea className="txta" rows={2} value={p.customText}
-                  onChange={e => updateQueuePost(item.id, { customText: e.target.value })}
+                <textarea className="txta" rows={2} key={item.id + '-custom'}
+                  defaultValue={p.customText}
+                  onBlur={e => updateQueuePost(item.id, { customText: e.target.value })}
                   placeholder="Testo aggiuntivo..." />
               </div>
               <DynamicTagFields
