@@ -114,6 +114,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Polling coda ogni 30s — rimuove i post pubblicati dal cron senza dover ricaricare l'app
+  useEffect(() => {
+    if (IS_DEV) return;
+    const id = setInterval(() => {
+      autopostApi.list()
+        .then(q => setQueue((q as QueueItem[]).filter(x => x.status === 'draft')))
+        .catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const stats = {
     inCoda: queue.length,
     sched: queue.filter(x => x.status === 'scheduled').length,
