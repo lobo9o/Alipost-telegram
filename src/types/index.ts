@@ -39,6 +39,7 @@ export interface CreatedPost {
   author?: string;
   coupon?: string;
   tagOverrides?: Record<string, string>; // override per-post dei tag personalizzati
+  generatedImage?: string; // base64 immagine con overlay, generata client-side per autopost
 }
 
 export interface CatalogProduct {

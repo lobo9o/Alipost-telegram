@@ -305,10 +305,22 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
 
       const channel = channels[0];
-      const hasImage = post.image && post.image !== 'placeholder.jpg' && String(post.image).startsWith('http');
+      const hasGeneratedImage = post.generatedImage && String(post.generatedImage).startsWith('data:image/');
+      const hasUrlImage = !hasGeneratedImage && post.image && post.image !== 'placeholder.jpg' && String(post.image).startsWith('http');
 
       let tgRes: Response;
-      if (hasImage) {
+      if (hasGeneratedImage) {
+        // Immagine con overlay generata dal browser — upload multipart
+        const base64Data = String(post.generatedImage).replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const formData = new FormData();
+        formData.append('chat_id', channel);
+        formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
+        formData.append('caption', messageText.slice(0, 1024));
+        formData.append('parse_mode', 'HTML');
+        if (replyMarkup) formData.append('reply_markup', JSON.stringify(replyMarkup));
+        tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
+      } else if (hasUrlImage) {
         tgRes = await fetch(`${tgBase}/sendPhoto`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

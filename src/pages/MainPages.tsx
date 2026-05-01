@@ -416,12 +416,29 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         }
       }));
 
+      // Genera immagini canvas per il cron autopost (browser-side, non disponibile server-side)
+      const newPostsWithImages = await Promise.all(newPosts.map(async p => {
+        const tpl = templates.find(t => t.id === p.templateId);
+        if (!tpl) return p;
+        try {
+          const generatedImage = await generatePostImage(
+            tpl, p.image, p.isHistoricalLow, p.platform, {
+              prezzo: `€${Number(p.discountedPrice).toFixed(2)}`,
+              prezzoPrecedente: `€${Number(p.originalPrice).toFixed(2)}`,
+              sconto: `-${p.discountPercent}%`,
+              testoCustom: p.customText,
+            }
+          );
+          return { ...p, generatedImage };
+        } catch { return p; }
+      }));
+
       // Aggiungi direttamente alla coda e naviga
-      const queueItems: QueueItem[] = newPosts.map(p => ({
+      const queueItems: QueueItem[] = newPostsWithImages.map(p => ({
         id: genId(), tipo: 'single' as const, posts: [p], sched: 'Auto', status: 'draft' as const, sel: false,
       }));
       setQueue(prev => [...prev, ...queueItems]);
-      newPosts.forEach(p => postsApi.create(p).catch(() => {}));
+      newPostsWithImages.forEach(p => postsApi.create(p).catch(() => {}));
       queueItems.forEach(item => autopostApi.create(item).catch(() => {}));
       setLinks([]);
       nav('queue');
