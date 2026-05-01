@@ -1,10 +1,9 @@
 module.exports = {
   apps: [{
     name: 'postdealbot',
-    script: './node_modules/.bin/tsx',
-    args: 'server.ts',
+    script: 'node',
+    args: '--env-file=.env ./node_modules/.bin/tsx server.ts',
     cwd: __dirname,
-    env_file: '.env',
     watch: false,
     instances: 1,
     autorestart: true,

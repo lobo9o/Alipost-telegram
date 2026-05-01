@@ -13,7 +13,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "server": "tsx server.ts",
+    "server": "node --env-file=.env ./node_modules/.bin/tsx server.ts",
     "test": "react-scripts test"
   },
   "browserslist": {
