@@ -244,8 +244,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const priceCheck = await checkPostPrice(candidatePost, cfg);
       if (!priceCheck.valid) {
         console.log(`[autopost] prezzo scaduto userId=${userId} postId=${candidatePost.id}: ${priceCheck.reason}`);
-        await sql`UPDATE autopost_queue SET status = 'expired' WHERE id = ${candidate.id}`.catch(() => {});
-        skipped.push(`${userId}: offerta scaduta — ${String(candidatePost.title ?? '').slice(0, 40)}`);
+        await sql`DELETE FROM autopost_queue WHERE id = ${candidate.id}`.catch(() => {});
+        skipped.push(`${userId}: offerta scaduta — ${String(candidatePost.title ?? '').slice(0, 40)} (${priceCheck.reason})`);
         triedIds.push(candidate.id as string);
         continue;
       }
