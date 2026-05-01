@@ -71,7 +71,6 @@ async function creatorsGetItem(
   marketplaceDomain: string,
 ): Promise<unknown> {
   const token = await getToken(credentialId, credentialSecret, version);
-  const authHeader = `Bearer ${token}`;
 
   const requestBody = {
     itemIds: [asin],
@@ -90,28 +89,33 @@ async function creatorsGetItem(
   };
 
   const apiUrl = 'https://creatorsapi.amazon/catalog/v1/getItems';
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    'x-marketplace': marketplaceDomain,
+    'User-Agent': 'creatorsapi-nodejs-sdk/1.2.0',
+  };
 
-  const res = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': authHeader,
-      'x-marketplace': marketplaceDomain,
-      'User-Agent': 'creatorsapi-nodejs-sdk/1.2.0',
-    },
-    body: JSON.stringify(requestBody),
-  });
+  // Retry con backoff su 429 (rate limit)
+  const delays = [2000, 5000, 10000];
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    const res = await fetch(apiUrl, { method: 'POST', headers, body: JSON.stringify(requestBody) });
+    const responseText = await res.text();
 
-  const responseText = await res.text();
-  console.log('[product] SUMMARY', JSON.stringify({
-    asin, tag: partnerTag.slice(0, 30), ver: version, mkt: marketplaceDomain,
-    tok: token.slice(0, 20), status: res.status, resp: responseText.slice(0, 200),
-  }));
+    console.log('[product] SUMMARY', JSON.stringify({
+      asin, attempt, status: res.status, resp: responseText.slice(0, 200),
+    }));
 
-  if (!res.ok) {
-    throw new Error(`Creators API (${res.status}): ${responseText}`);
+    if (res.status === 429 && attempt < delays.length) {
+      const wait = delays[attempt];
+      console.log(`[product] rate limit 429, retry in ${wait}ms (tentativo ${attempt + 1}/${delays.length})`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+
+    if (!res.ok) throw new Error(`Creators API (${res.status}): ${responseText}`);
+    return JSON.parse(responseText);
   }
-  return JSON.parse(responseText);
 }
 
 function extractAsin(url: string): string | null {
