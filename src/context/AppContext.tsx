@@ -121,7 +121,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       autopostApi.list()
         .then(q => setQueue((q as QueueItem[]).filter(x => x.status === 'draft')))
         .catch(() => {});
-    }, 30_000);
+    }, 10_000);
     return () => clearInterval(id);
   }, []);
 

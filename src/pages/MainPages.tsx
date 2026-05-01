@@ -827,12 +827,14 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const previewText = (layout && p) ? resolvePostTags(layout.contenuto, p, tags, qCurrency) : '';
   const isEditing = expandedId === item?.id;
 
-  // Post in coda già pubblicati oggi
+  // Post in coda già pubblicati oggi (con posizione aggiornata dinamicamente)
   const publishedIds = new Set(published.map(pub => pub.productId));
-  const duplicatesInQueue = queue.filter(qi => {
-    const post = qi.posts[0] as CreatedPost | undefined;
-    return post?.productId && publishedIds.has(post.productId);
-  });
+  const duplicatesInQueue = queue
+    .map((qi, idx) => ({ qi, pos: idx + 1 }))
+    .filter(({ qi }) => {
+      const post = qi.posts[0] as CreatedPost | undefined;
+      return post?.productId && publishedIds.has(post.productId);
+    });
 
   return (
     <div className="pg">
@@ -854,12 +856,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           <div style={{ fontWeight: 700, marginBottom: 4 }}>
             ⚠️ {duplicatesInQueue.length} post {duplicatesInQueue.length === 1 ? 'già pubblicato' : 'già pubblicati'} in coda
           </div>
-          {duplicatesInQueue.map(qi => {
+          {duplicatesInQueue.map(({ qi, pos }) => {
             const qp = qi.posts[0] as CreatedPost;
             const pub = published.find(pb => pb.productId === qp.productId);
             return (
               <div key={qi.id} style={{ color: 'var(--t2)', marginTop: 2 }}>
-                · {qp.emoji} {qp.title.slice(0, 40)}{qp.title.length > 40 ? '…' : ''}
+                · <span style={{ fontWeight: 700, color: '#f59e0b' }}>#{pos}</span>{' '}
+                {qp.emoji} {qp.title.slice(0, 38)}{qp.title.length > 38 ? '…' : ''}
                 {pub && <span style={{ color: 'var(--t3)', marginLeft: 4 }}>({pub.ts})</span>}
               </div>
             );
