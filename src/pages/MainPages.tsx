@@ -407,7 +407,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
       const defaultKb = keyboards[0]?.id ?? 'kb1';
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
-      const BATCH = 10;
+      const BATCH = 5;
 
       const priceWarnings: string[] = [];
       const fetchOne = async (l: LinkItem): Promise<CreatedPost> => {
@@ -425,7 +425,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       // Blocchi da 10 in parallelo, 1s di pausa tra un blocco e il successivo
       const newPosts: CreatedPost[] = [];
       for (let i = 0; i < links.length; i += BATCH) {
-        if (i > 0) await delay(1000);
+        if (i > 0) await delay(2000);
         const batch = links.slice(i, i + BATCH);
         const results = await Promise.all(batch.map(fetchOne));
         newPosts.push(...results);
