@@ -298,7 +298,6 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
         </div>
         <div className="hero-stats">
           <div className="stat"><div className="sn" style={{ color: 'var(--a3)' }}>{stats.inCoda}</div><div className="sl">In coda</div></div>
-          <div className="stat"><div className="sn" style={{ color: 'var(--am2)' }}>{stats.sched}</div><div className="sl">Programmati</div></div>
           <div className="stat"><div className="sn" style={{ color: 'var(--gr2)' }}>{stats.pub}</div><div className="sl">Pubblicati</div></div>
         </div>
       </div>
