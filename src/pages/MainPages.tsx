@@ -375,7 +375,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 interface LinkItem { id: string; url: string; platform: Platform; }
 
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { createdPosts, setQueue, layouts, keyboards, templates } = useApp();
+  const { createdPosts, queue, setQueue, layouts, keyboards, templates } = useApp();
 
   const [phase, setPhase] = useState<'input' | 'loading'>('input');
   const [mode, setMode] = useState<'single' | 'multi'>('single');
