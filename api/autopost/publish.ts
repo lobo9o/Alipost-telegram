@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler } from '../_utils.js';
+import { checkPostPrice } from '../_priceCheck.js';
 
 const MARKETPLACE_DOMAINS: Record<string, string> = {
   IT: 'www.amazon.it', US: 'www.amazon.com', DE: 'www.amazon.de',
@@ -214,29 +215,55 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
-    // Prende il prossimo elemento dalla coda (il più vecchio in stato draft)
-    const [queueItem] = await sql`
-      SELECT id, posts FROM autopost_queue
-      WHERE user_id = ${userId} AND status = 'draft'
-      ORDER BY created_at ASC LIMIT 1
-    `;
+    // Scorre la coda finché trova un post con prezzo ancora valido (max 5 tentativi)
+    let queueItem: Record<string, any> | null = null;
+    let post: Record<string, any> | null = null;
+    const triedIds: string[] = [];
 
-    if (!queueItem) { skipped.push(`${userId}: coda vuota`); continue; }
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const excludeClause = triedIds.length
+        ? sql`AND id NOT IN (${sql(triedIds)})`
+        : sql``;
 
-    const postsArr = typeof queueItem.posts === 'string' ? JSON.parse(queueItem.posts) : queueItem.posts;
-    const post = Array.isArray(postsArr) ? postsArr[0] : null;
-    if (!post) {
-      await sql`DELETE FROM autopost_queue WHERE id = ${queueItem.id}`.catch(() => {});
-      skipped.push(`${userId}: item non valido`); continue;
+      const [candidate] = await sql`
+        SELECT id, posts FROM autopost_queue
+        WHERE user_id = ${userId} AND status = 'draft' ${excludeClause}
+        ORDER BY created_at ASC LIMIT 1
+      `;
+      if (!candidate) break;
+
+      const postsArr = typeof candidate.posts === 'string' ? JSON.parse(candidate.posts) : candidate.posts;
+      const candidatePost = Array.isArray(postsArr) ? postsArr[0] : null;
+      if (!candidatePost) {
+        await sql`DELETE FROM autopost_queue WHERE id = ${candidate.id}`.catch(() => {});
+        triedIds.push(candidate.id as string);
+        continue;
+      }
+
+      // Verifica prezzo prima di bloccare l'item
+      const priceCheck = await checkPostPrice(candidatePost, cfg);
+      if (!priceCheck.valid) {
+        console.log(`[autopost] prezzo scaduto userId=${userId} postId=${candidatePost.id}: ${priceCheck.reason}`);
+        await sql`UPDATE autopost_queue SET status = 'expired' WHERE id = ${candidate.id}`.catch(() => {});
+        skipped.push(`${userId}: offerta scaduta — ${String(candidatePost.title ?? '').slice(0, 40)}`);
+        triedIds.push(candidate.id as string);
+        continue;
+      }
+
+      // Blocca atomicamente — evita doppia pubblicazione in caso di cron sovrapposti
+      const updated = await sql`
+        UPDATE autopost_queue SET status = 'published'
+        WHERE id = ${candidate.id} AND user_id = ${userId} AND status = 'draft'
+        RETURNING id
+      `;
+      if (!updated.length) { triedIds.push(candidate.id as string); continue; }
+
+      queueItem = candidate;
+      post = candidatePost;
+      break;
     }
 
-    // Segna come 'published' subito — evita doppia pubblicazione in caso di cron sovrapposti
-    const updated = await sql`
-      UPDATE autopost_queue SET status = 'published'
-      WHERE id = ${queueItem.id} AND user_id = ${userId} AND status = 'draft'
-      RETURNING id
-    `;
-    if (!updated.length) { skipped.push(`${userId}: già preso`); continue; }
+    if (!queueItem || !post) { skipped.push(`${userId}: coda vuota o tutti i prezzi scaduti`); continue; }
 
     try {
       // Carica layout testo
