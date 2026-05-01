@@ -18,7 +18,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (req.method === 'GET') {
     const rows = await sql`
       SELECT id, posts, status, scheduled, created_at AS "createdAt"
-      FROM autopost_queue WHERE user_id = ${userId} ORDER BY created_at DESC
+      FROM autopost_queue WHERE user_id = ${userId} ORDER BY created_at ASC
     `;
     // Handle legacy rows where posts was stored as JSON string instead of JSONB array
     const parsed = rows.map((r: any) => ({
