@@ -330,6 +330,7 @@ html, body, #root { height: 100%; background: var(--bg); color: var(--t1); font-
 
 /* ── Ltype variants ──────────────────────────────────────── */
 .ltype.hist { background: rgba(245,158,11,0.12); color: var(--am); }
+.ltype.ali  { background: rgba(228,50,38,0.12);  color: #E43226; }
 
 /* ── Template cards in settings ──────────────────────────── */
 .tpl-card { background: var(--bg2); border: 1px solid var(--bd); border-radius: var(--r); margin: 0 16px 12px; overflow: hidden; }

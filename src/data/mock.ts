@@ -54,6 +54,10 @@ export const INITIAL_LAYOUTS: TextLayout[] = [
     id: 'l3', nome: 'Post Multiplo', tipo: 'multi',
     contenuto: '🔥 OFFERTE DEL GIORNO 🔥\n\n{lista_prodotti}\n\n👇 Link nei pulsanti sotto',
   },
+  {
+    id: 'l4', nome: 'AliExpress', tipo: 'aliexpress',
+    contenuto: '🛒 {titolo}\n\n💰 {prezzo} <s>{oldprezzo}</s>\n🏷️ {perc} di sconto\n\n🚀 Spedizione gratuita\n\n{custom}\n\n👇 Link nel pulsante',
+  },
 ];
 
 export const INITIAL_KEYBOARDS: KeyboardLayout[] = [

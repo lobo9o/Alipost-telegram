@@ -127,11 +127,13 @@ const TIPO_STYLE: Record<LayoutType, string> = {
   normal: 'ltype norm',
   historical_low: 'ltype hist',
   multi: 'ltype mult',
+  aliexpress: 'ltype ali',
 };
 const TIPO_LABEL: Record<LayoutType, string> = {
   normal: 'Normale',
   historical_low: 'Min. Storico',
   multi: 'Multiplo',
+  aliexpress: 'AliExpress',
 };
 
 function TextLayoutSection() {
@@ -168,6 +170,7 @@ function TextLayoutSection() {
             <option value="normal">Normale</option>
             <option value="historical_low">Minimo Storico</option>
             <option value="multi">Multiplo</option>
+            <option value="aliexpress">AliExpress</option>
           </select>
         </div>
         <div className="fld">

@@ -371,6 +371,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
     try {
       const defaultNormalTpl = templates[0]?.id ?? 'tpl1';
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
+      const defaultAliLay = layouts.find(l => l.tipo === 'aliexpress')?.id ?? defaultNormalLay;
       const defaultKb = keyboards[0]?.id ?? 'kb1';
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
       const BATCH = 5;
@@ -384,7 +385,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
           return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon };
         } else {
           const p = await productApi.fetchAliExpress({ url: l.url });
-          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦' };
+          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultAliLay, keyboardId: defaultKb, emoji: '📦' };
         }
       };
 
