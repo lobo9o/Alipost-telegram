@@ -571,7 +571,7 @@ function DynamicTagFields({ layout, post, postTags, itemId, onUpdate }: {
   post: CreatedPost;
   postTags: Tag[];
   itemId: string;
-  onUpdate: (id: string, ch: Partial<CreatedPost>) => void;
+  onUpdate: (id: string, ch: Partial<CreatedPost>) => void | Promise<void>;
 }) {
   if (!layout) return null;
 
@@ -614,8 +614,9 @@ function DynamicTagFields({ layout, post, postTags, itemId, onUpdate }: {
             <span className="lbl" style={{ marginBottom: 0 }}>{label.toUpperCase()}</span>
             <span style={pillStyle('var(--a1)', 'rgba(6,182,212,0.12)')}>{tag}</span>
           </div>
-          <input className="inp" value={(post[field] as string) || ''} placeholder={placeholder}
-            onChange={e => onUpdate(itemId, { [field]: e.target.value })} />
+          <input className="inp" key={`${itemId}-sys-${field as string}`}
+            defaultValue={(post[field] as string) || ''} placeholder={placeholder}
+            onBlur={e => onUpdate(itemId, { [field]: e.target.value })} />
         </div>
       ))}
 
@@ -634,8 +635,9 @@ function DynamicTagFields({ layout, post, postTags, itemId, onUpdate }: {
                 </span>
               )}
             </div>
-            <input className="inp" value={currentValue} placeholder={`Valore per ${tag}...`}
-              onChange={e => onUpdate(itemId, {
+            <input className="inp" key={`${itemId}-tag-${tag}`}
+              defaultValue={currentValue} placeholder={`Valore per ${tag}...`}
+              onBlur={e => onUpdate(itemId, {
                 tagOverrides: { ...(post.tagOverrides ?? {}), [tag]: e.target.value },
               })} />
           </div>
@@ -1031,7 +1033,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                 post={p}
                 postTags={tags}
                 itemId={item.id}
-                onUpdate={updateQueuePost}
+                onUpdate={updatePostWithImage}
               />
               {previewText && (
                 <>
