@@ -433,18 +433,30 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         } catch { return p; }
       }));
 
-      // Aggiungi direttamente alla coda e naviga
+      // Salva i post (non bloccante, best-effort)
+      newPostsWithImages.forEach(p => postsApi.create(p).catch(() => {}));
+
+      // Inserimento sequenziale in DB — tiene solo quelli salvati con successo
       const queueItems: QueueItem[] = newPostsWithImages.map(p => ({
         id: genId(), tipo: 'single' as const, posts: [p], sched: 'Auto', status: 'draft' as const, sel: false,
       }));
-      const firstNewIdx = queue.length; // indice del primo nuovo post nella coda
-      sessionStorage.setItem('queueJumpIdx', String(firstNewIdx));
-      setQueue(prev => [...prev, ...queueItems]);
-      newPostsWithImages.forEach(p => postsApi.create(p).catch(() => {}));
-      // Inserimento sequenziale — garantisce created_at crescente e quindi ordine FIFO corretto
+      const saved: QueueItem[] = [];
       for (const item of queueItems) {
-        await autopostApi.create(item).catch(() => {});
+        try {
+          await autopostApi.create(item);
+          saved.push(item);
+        } catch (e) {
+          console.error('[creaPost] insert fallita:', e);
+        }
       }
+
+      if (saved.length === 0) {
+        throw new Error('Nessun post salvato nel DB. Riprova.');
+      }
+
+      const firstNewIdx = queue.length;
+      sessionStorage.setItem('queueJumpIdx', String(firstNewIdx));
+      setQueue(prev => [...prev, ...saved]);
       setLinks([]);
       nav('queue');
     } catch (err) {
