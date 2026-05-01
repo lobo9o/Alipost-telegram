@@ -437,9 +437,14 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       const queueItems: QueueItem[] = newPostsWithImages.map(p => ({
         id: genId(), tipo: 'single' as const, posts: [p], sched: 'Auto', status: 'draft' as const, sel: false,
       }));
+      const firstNewIdx = queue.length; // indice del primo nuovo post nella coda
+      sessionStorage.setItem('queueJumpIdx', String(firstNewIdx));
       setQueue(prev => [...prev, ...queueItems]);
       newPostsWithImages.forEach(p => postsApi.create(p).catch(() => {}));
-      queueItems.forEach(item => autopostApi.create(item).catch(() => {}));
+      // Inserimento sequenziale — garantisce created_at crescente e quindi ordine FIFO corretto
+      for (const item of queueItems) {
+        await autopostApi.create(item).catch(() => {});
+      }
       setLinks([]);
       nav('queue');
     } catch (err) {
@@ -658,6 +663,14 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   React.useEffect(() => {
     if (queue.length > 0 && currentIdx >= queue.length) setCurrentIdx(queue.length - 1);
   }, [queue.length, currentIdx]);
+
+  React.useEffect(() => {
+    const jumpIdx = sessionStorage.getItem('queueJumpIdx');
+    if (jumpIdx !== null) {
+      setCurrentIdx(Math.max(0, parseInt(jumpIdx) || 0));
+      sessionStorage.removeItem('queueJumpIdx');
+    }
+  }, []);
 
   const updateQueuePost = (itemId: string, changes: Partial<CreatedPost>) => {
     setQueue(q => q.map(x => x.id === itemId ? { ...x, posts: [{ ...x.posts[0], ...changes }] } : x));
