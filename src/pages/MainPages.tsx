@@ -713,29 +713,33 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     setQueue(q => q.map(x => x.id === itemId ? { ...x, posts: [{ ...x.posts[0], ...changes }] } : x));
   };
 
-  // Aggiorna post + rigenera immagine + persiste nel DB
+  // Aggiorna post + persiste subito nel DB + rigenera immagine in background
   const updatePostWithImage = async (itemId: string, changes: Partial<CreatedPost>) => {
     const currentItem = queue.find(x => x.id === itemId);
     if (!currentItem) return;
     const updatedPost: CreatedPost = { ...(currentItem.posts[0] as CreatedPost), ...changes };
+
+    // 1. Aggiorna UI subito
+    updateQueuePost(itemId, changes);
+
+    // 2. Salva nel DB subito — così il polling non riporta i valori vecchi
+    await autopostApi.update(itemId, { posts: [updatedPost], status: currentItem.status }).catch(() => {});
+
+    // 3. Rigenera immagine in background con i nuovi valori
     const tpl = templates.find(t => t.id === updatedPost.templateId);
-    let generatedImage: string | undefined;
-    if (tpl) {
-      try {
-        const cur = updatedPost.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-        generatedImage = await generatePostImage(tpl, updatedPost.image, updatedPost.isHistoricalLow, updatedPost.platform, {
-          prezzo: `${cur}${Number(updatedPost.discountedPrice).toFixed(2)}`,
-          prezzoPrecedente: `${cur}${Number(updatedPost.originalPrice).toFixed(2)}`,
-          sconto: `-${updatedPost.discountPercent}%`,
-          testoCustom: updatedPost.customText,
-        });
-        pregenImages.current[itemId] = generatedImage;
-      } catch {}
-    }
-    const finalChanges = generatedImage ? { ...changes, generatedImage } : changes;
-    updateQueuePost(itemId, finalChanges);
-    const finalPost = { ...updatedPost, ...(generatedImage ? { generatedImage } : {}) };
-    autopostApi.update(itemId, { posts: [finalPost], status: currentItem.status }).catch(() => {});
+    if (!tpl) return;
+    try {
+      const cur = updatedPost.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+      const generatedImage = await generatePostImage(tpl, updatedPost.image, updatedPost.isHistoricalLow, updatedPost.platform, {
+        prezzo: `${cur}${Number(updatedPost.discountedPrice).toFixed(2)}`,
+        prezzoPrecedente: `${cur}${Number(updatedPost.originalPrice).toFixed(2)}`,
+        sconto: `-${updatedPost.discountPercent}%`,
+        testoCustom: updatedPost.customText,
+      });
+      pregenImages.current[itemId] = generatedImage;
+      updateQueuePost(itemId, { generatedImage });
+      autopostApi.update(itemId, { posts: [{ ...updatedPost, generatedImage }], status: currentItem.status }).catch(() => {});
+    } catch {}
   };
 
   // Cache immagini pre-generate: key = queue item id, value = base64 jpeg
