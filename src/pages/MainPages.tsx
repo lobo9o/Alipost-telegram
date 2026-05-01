@@ -713,6 +713,31 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     setQueue(q => q.map(x => x.id === itemId ? { ...x, posts: [{ ...x.posts[0], ...changes }] } : x));
   };
 
+  // Aggiorna post + rigenera immagine + persiste nel DB
+  const updatePostWithImage = async (itemId: string, changes: Partial<CreatedPost>) => {
+    const currentItem = queue.find(x => x.id === itemId);
+    if (!currentItem) return;
+    const updatedPost: CreatedPost = { ...(currentItem.posts[0] as CreatedPost), ...changes };
+    const tpl = templates.find(t => t.id === updatedPost.templateId);
+    let generatedImage: string | undefined;
+    if (tpl) {
+      try {
+        const cur = updatedPost.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        generatedImage = await generatePostImage(tpl, updatedPost.image, updatedPost.isHistoricalLow, updatedPost.platform, {
+          prezzo: `${cur}${Number(updatedPost.discountedPrice).toFixed(2)}`,
+          prezzoPrecedente: `${cur}${Number(updatedPost.originalPrice).toFixed(2)}`,
+          sconto: `-${updatedPost.discountPercent}%`,
+          testoCustom: updatedPost.customText,
+        });
+        pregenImages.current[itemId] = generatedImage;
+      } catch {}
+    }
+    const finalChanges = generatedImage ? { ...changes, generatedImage } : changes;
+    updateQueuePost(itemId, finalChanges);
+    const finalPost = { ...updatedPost, ...(generatedImage ? { generatedImage } : {}) };
+    autopostApi.update(itemId, { posts: [finalPost], status: currentItem.status }).catch(() => {});
+  };
+
   // Cache immagini pre-generate: key = queue item id, value = base64 jpeg
   const pregenImages = React.useRef<Record<string, string>>({});
 
@@ -974,7 +999,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               <div style={{ marginBottom: 10 }}>
                 <div className="lbl">TITOLO</div>
                 <input className="inp" defaultValue={p.title} key={item.id + '-title'}
-                  onBlur={e => updateQueuePost(item.id, { title: e.target.value })} />
+                  onBlur={e => updatePostWithImage(item.id, { title: e.target.value })} />
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <div style={{ flex: 1 }}>
@@ -984,7 +1009,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                     onBlur={e => {
                       const orig = parseFloat(e.target.value.replace(',', '.')) || 0;
                       const pct = orig > 0 ? Math.round((1 - p.discountedPrice / orig) * 100) : 0;
-                      updateQueuePost(item.id, { originalPrice: orig, discountPercent: Math.max(0, pct) });
+                      updatePostWithImage(item.id, { originalPrice: orig, discountPercent: Math.max(0, pct) });
                     }} />
                 </div>
                 <div style={{ flex: 1 }}>
@@ -994,7 +1019,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                     onBlur={e => {
                       const disc = parseFloat(e.target.value.replace(',', '.')) || 0;
                       const pct = p.originalPrice > 0 ? Math.round((1 - disc / p.originalPrice) * 100) : 0;
-                      updateQueuePost(item.id, { discountedPrice: disc, discountPercent: Math.max(0, pct) });
+                      updatePostWithImage(item.id, { discountedPrice: disc, discountPercent: Math.max(0, pct) });
                     }} />
                 </div>
               </div>
@@ -1008,7 +1033,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                     const layId = v
                       ? (layouts.find(l => l.tipo === 'historical_low')?.id ?? p.layoutId)
                       : (layouts.find(l => l.tipo === 'normal')?.id ?? p.layoutId);
-                    updateQueuePost(item.id, { isHistoricalLow: v, layoutId: layId });
+                    updatePostWithImage(item.id, { isHistoricalLow: v, layoutId: layId });
                   }} />
               </div>
               <div style={{ marginBottom: 10 }}>
@@ -1027,7 +1052,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                 <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
                 <textarea className="txta" rows={2} key={item.id + '-custom'}
                   defaultValue={p.customText}
-                  onBlur={e => updateQueuePost(item.id, { customText: e.target.value })}
+                  onBlur={e => updatePostWithImage(item.id, { customText: e.target.value })}
                   placeholder="Testo aggiuntivo..." />
               </div>
               <DynamicTagFields
