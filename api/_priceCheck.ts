@@ -37,8 +37,8 @@ async function getAmazonToken(credentialId: string, credentialSecret: string, ve
   } else {
     res = await fetch(tokenUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grant_type: 'client_credentials', client_id: credentialId, client_secret: credentialSecret, scope: 'creatorsapi::default' }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: credentialId, client_secret: credentialSecret, scope: 'creatorsapi::default' }).toString(),
     });
   }
   if (!res.ok) throw new Error(`Token Amazon (${res.status})`);
