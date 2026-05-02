@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, KeyboardLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
-import { genId } from '../data/mock';
+import { genId, INITIAL_LAYOUTS, INITIAL_KEYBOARDS } from '../data/mock';
 import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi } from '../lib/api';
 import { SYSTEM_TAGS } from '../utils/tagUtils';
 
@@ -128,12 +128,14 @@ const TIPO_STYLE: Record<LayoutType, string> = {
   historical_low: 'ltype hist',
   multi: 'ltype mult',
   aliexpress: 'ltype ali',
+  aliexpress_historical_low: 'ltype ali',
 };
 const TIPO_LABEL: Record<LayoutType, string> = {
   normal: 'Normale',
   historical_low: 'Min. Storico',
   multi: 'Multiplo',
   aliexpress: 'AliExpress',
+  aliexpress_historical_low: 'Min. Storico Ali',
 };
 
 function TextLayoutSection() {
@@ -171,6 +173,7 @@ function TextLayoutSection() {
             <option value="historical_low">Minimo Storico</option>
             <option value="multi">Multiplo</option>
             <option value="aliexpress">AliExpress</option>
+            <option value="aliexpress_historical_low">Min. Storico AliExpress</option>
           </select>
         </div>
         <div className="fld">
@@ -185,6 +188,8 @@ function TextLayoutSection() {
     );
   }
 
+  const defaultLayoutIds = new Set(INITIAL_LAYOUTS.map(d => d.id));
+
   return (
     <>
       <div style={{ padding: '10px 16px 0', display: 'flex', justifyContent: 'flex-end' }}>
@@ -196,7 +201,9 @@ function TextLayoutSection() {
             <span className={TIPO_STYLE[l.tipo]}>{TIPO_LABEL[l.tipo]}</span>
             <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{l.nome}</span>
             <button className="btn bgh bsm" onClick={() => startEdit(l)}>✏️</button>
-            <button className="btn bgh bsm" style={{ color: 'var(--re)' }} onClick={() => { setLayouts(ls => ls.filter(x => x.id !== l.id)); layoutsApi.delete(l.id).catch(() => {}); }}>×</button>
+            {!defaultLayoutIds.has(l.id) && (
+              <button className="btn bgh bsm" style={{ color: 'var(--re)' }} onClick={() => { setLayouts(ls => ls.filter(x => x.id !== l.id)); layoutsApi.delete(l.id).catch(() => {}); }}>×</button>
+            )}
           </div>
           <div className="lpreview">{l.contenuto}</div>
         </div>

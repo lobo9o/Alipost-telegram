@@ -58,6 +58,10 @@ export const INITIAL_LAYOUTS: TextLayout[] = [
     id: 'l4', nome: 'AliExpress', tipo: 'aliexpress',
     contenuto: '🛒 {titolo}\n\n💰 {prezzo} <s>{oldprezzo}</s>\n🏷️ {perc} di sconto\n\n🚀 Spedizione gratuita\n\n{custom}\n\n👇 Link nel pulsante',
   },
+  {
+    id: 'l5', nome: 'Min. Storico AliExpress', tipo: 'aliexpress_historical_low',
+    contenuto: '🏆 MINIMO STORICO!\n\n🛒 {titolo}\n\n💰 {prezzo}\n📉 Minimo di sempre su AliExpress!\n\n🚀 Spedizione gratuita\n\n{custom}',
+  },
 ];
 
 export const INITIAL_KEYBOARDS: KeyboardLayout[] = [

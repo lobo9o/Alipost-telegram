@@ -1,7 +1,7 @@
 export type Platform = 'amazon' | 'aliexpress';
 export type PostType = 'single' | 'multi';
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'error';
-export type LayoutType = 'normal' | 'historical_low' | 'multi' | 'aliexpress';
+export type LayoutType = 'normal' | 'historical_low' | 'multi' | 'aliexpress' | 'aliexpress_historical_low';
 export type NavPage = 'dash' | 'search' | 'newpost' | 'queue' | 'published' | 'layout' | 'settings';
 
 export interface Tag {

@@ -147,9 +147,10 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
   };
 
   const handleHistoricalLow = (v: boolean) => {
+    const isAli = post.platform === 'aliexpress';
     const layId = v
-      ? (layouts.find(l => l.tipo === 'historical_low')?.id ?? post.layoutId)
-      : (layouts.find(l => l.tipo === 'normal')?.id ?? post.layoutId);
+      ? (layouts.find(l => l.tipo === (isAli ? 'aliexpress_historical_low' : 'historical_low'))?.id ?? post.layoutId)
+      : (layouts.find(l => l.tipo === (isAli ? 'aliexpress' : 'normal'))?.id ?? post.layoutId);
     update({ isHistoricalLow: v, layoutId: layId });
   };
 
@@ -1003,9 +1004,10 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
                 <ToggleRow label="Minimo Storico" value={p.isHistoricalLow}
                   onChange={v => {
+                    const isAli = p.platform === 'aliexpress';
                     const layId = v
-                      ? (layouts.find(l => l.tipo === 'historical_low')?.id ?? p.layoutId)
-                      : (layouts.find(l => l.tipo === 'normal')?.id ?? p.layoutId);
+                      ? (layouts.find(l => l.tipo === (isAli ? 'aliexpress_historical_low' : 'historical_low'))?.id ?? p.layoutId)
+                      : (layouts.find(l => l.tipo === (isAli ? 'aliexpress' : 'normal'))?.id ?? p.layoutId);
                     updatePostWithImage(item.id, { isHistoricalLow: v, layoutId: layId });
                   }} />
               </div>
