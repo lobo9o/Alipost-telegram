@@ -218,6 +218,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // Scorre la coda finché trova un post con prezzo ancora valido (max 5 tentativi)
     let queueItem: Record<string, any> | null = null;
     let post: Record<string, any> | null = null;
+    let postsArr: Record<string, any>[] = [];
+    let isMulti = false;
     const triedIds: string[] = [];
 
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -232,14 +234,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       `;
       if (!candidate) break;
 
-      const postsArr = typeof candidate.posts === 'string' ? JSON.parse(candidate.posts) : candidate.posts;
+      postsArr = typeof candidate.posts === 'string' ? JSON.parse(candidate.posts) : candidate.posts;
       const candidatePost = Array.isArray(postsArr) ? postsArr[0] : null;
       if (!candidatePost) {
         await sql`DELETE FROM autopost_queue WHERE id = ${candidate.id}`.catch(() => {});
         triedIds.push(candidate.id as string);
         continue;
       }
-      const isMulti = Array.isArray(postsArr) && postsArr.length > 1;
+      isMulti = Array.isArray(postsArr) && postsArr.length > 1;
 
       // Verifica prezzo prima di bloccare l'item (solo per post singoli)
       if (!isMulti) {
