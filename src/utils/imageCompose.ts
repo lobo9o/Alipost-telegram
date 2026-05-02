@@ -150,38 +150,35 @@ export async function generateMultiPostImage(imageUrls: string[]): Promise<strin
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#f8f8f8';
   ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  const cellW = Math.floor(CANVAS_SIZE / cols);
-  const cellH = Math.floor(CANVAS_SIZE / rows);
-  const PAD = 8;
+
+  // Celle quadrate: usa la dimensione minore tra canvas/cols e canvas/rows
+  const cellSize = Math.floor(Math.min(CANVAS_SIZE / cols, CANVAS_SIZE / rows));
+  const gridW = cellSize * cols;
+  const gridH = cellSize * rows;
+  const offsetX = Math.floor((CANVAS_SIZE - gridW) / 2);
+  const offsetY = Math.floor((CANVAS_SIZE - gridH) / 2);
+
+  const PAD = 4;
   for (let i = 0; i < n; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const cellX = col * cellW;
-    const cellY = row * cellH;
+    const cellX = offsetX + col * cellSize;
+    const cellY = offsetY + row * cellSize;
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(cellX + 1, cellY + 1, cellW - 2, cellH - 2);
+    ctx.fillRect(cellX, cellY, cellSize, cellSize);
     if (!imageUrls[i]) continue;
     try {
       const proxyUrl = imageUrls[i].startsWith('http')
         ? `/api/posts?img=${encodeURIComponent(imageUrls[i])}`
         : imageUrls[i];
       const img = await loadImage(proxyUrl);
-      const availW = cellW - PAD * 2;
-      const availH = cellH - PAD * 2;
+      const availW = cellSize - PAD * 2;
+      const availH = cellSize - PAD * 2;
       const ratio = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
       const dw = img.naturalWidth * ratio;
       const dh = img.naturalHeight * ratio;
       ctx.drawImage(img, cellX + PAD + (availW - dw) / 2, cellY + PAD + (availH - dh) / 2, dw, dh);
     } catch { /* skip */ }
-  }
-  // Separator lines
-  ctx.strokeStyle = '#e5e5e5';
-  ctx.lineWidth = 1;
-  for (let c = 1; c < cols; c++) {
-    ctx.beginPath(); ctx.moveTo(c * cellW, 0); ctx.lineTo(c * cellW, CANVAS_SIZE); ctx.stroke();
-  }
-  for (let r = 1; r < rows; r++) {
-    ctx.beginPath(); ctx.moveTo(0, r * cellH); ctx.lineTo(CANVAS_SIZE, r * cellH); ctx.stroke();
   }
   return canvas.toDataURL('image/jpeg', 0.88);
 }
