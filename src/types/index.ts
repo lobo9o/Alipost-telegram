@@ -4,6 +4,8 @@ export type PostStatus = 'draft' | 'scheduled' | 'published' | 'error';
 export type LayoutType = 'normal' | 'historical_low' | 'multi' | 'aliexpress' | 'aliexpress_historical_low';
 export type NavPage = 'dash' | 'search' | 'newpost' | 'queue' | 'published' | 'layout' | 'settings';
 
+export interface LinkItem { id: string; url: string; platform: Platform; }
+
 export interface Tag {
   id: string;
   name: string;
@@ -228,4 +230,13 @@ export interface AppContextType extends AppState {
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   stats: { inCoda: number; sched: number; pub: number };
   publishedCount: number;
+  // stato persistente "Nuovo Post"
+  newPostMode: 'single' | 'multi';
+  setNewPostMode: React.Dispatch<React.SetStateAction<'single' | 'multi'>>;
+  newPostLinks: LinkItem[];
+  setNewPostLinks: React.Dispatch<React.SetStateAction<LinkItem[]>>;
+  newPostMultiGroups: LinkItem[][];
+  setNewPostMultiGroups: React.Dispatch<React.SetStateAction<LinkItem[][]>>;
+  newPostGroupIdx: number;
+  setNewPostGroupIdx: React.Dispatch<React.SetStateAction<number>>;
 }

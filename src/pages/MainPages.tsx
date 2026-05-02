@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout } from '../types';
+import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout, LinkItem } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
@@ -339,19 +339,19 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 // NEW POST PAGE
 // ============================================================
-interface LinkItem { id: string; url: string; platform: Platform; }
-
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { createdPosts, queue, setQueue, layouts, keyboards, templates } = useApp();
+  const {
+    createdPosts, queue, setQueue, layouts, keyboards, templates,
+    newPostMode: mode, setNewPostMode: setMode,
+    newPostLinks: links, setNewPostLinks: setLinks,
+    newPostMultiGroups: multiGroups, setNewPostMultiGroups: setMultiGroups,
+    newPostGroupIdx: currentGroupIdx, setNewPostGroupIdx: setCurrentGroupIdx,
+  } = useApp();
 
   const [phase, setPhase] = useState<'input' | 'loading'>('input');
   const [progress, setProgress] = useState(0);
   const [loadingTotal, setLoadingTotal] = useState(0);
-  const [mode, setMode] = useState<'single' | 'multi'>('single');
   const [linkInput, setLinkInput] = useState('');
-  const [links, setLinks] = useState<LinkItem[]>([]); // solo modalità single
-  const [multiGroups, setMultiGroups] = useState<LinkItem[][]>([[]]); // gruppi modalità multi
-  const [currentGroupIdx, setCurrentGroupIdx] = useState(0);
   const [err, setErr] = useState('');
   const [feedback, setFeedback] = useState('');
 
@@ -362,7 +362,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 
   const handleModeChange = (newMode: string) => {
     setMode(newMode as 'single' | 'multi');
-    setLinks([]); setMultiGroups([[]]); setCurrentGroupIdx(0); setErr('');
+    setErr('');
   };
 
   const sendLink = () => {
@@ -467,7 +467,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 
         sessionStorage.setItem('queueJumpIdx', String(queue.length));
         setQueue(prev => [...prev, ...savedItems]);
-        setMultiGroups([[]]); setCurrentGroupIdx(0);
+        setMultiGroups([[]]); setCurrentGroupIdx(0); // reset dopo creazione riuscita
         nav('queue');
         return;
       }
