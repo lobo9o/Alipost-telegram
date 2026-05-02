@@ -159,7 +159,9 @@ export async function generateMultiPostImage(imageUrls: string[]): Promise<strin
   for (let i = 0; i < n; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const cellX = col * cellSize;
+    const itemsInRow = Math.min(cols, n - row * cols);
+    const rowOffsetX = Math.floor(((cols - itemsInRow) * cellSize) / 2);
+    const cellX = rowOffsetX + col * cellSize;
     const cellY = row * cellSize;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(cellX, cellY, cellSize, cellSize);
