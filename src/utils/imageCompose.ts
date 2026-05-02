@@ -144,26 +144,23 @@ export async function generateMultiPostImage(imageUrls: string[]): Promise<strin
   if (n === 0) return '';
   const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);
+  // Celle quadrate, canvas alto esattamente quanto la griglia (niente spazio vuoto)
+  const cellSize = Math.floor(CANVAS_SIZE / cols);
+  const canvasH = cellSize * rows;
+
   const canvas = document.createElement('canvas');
   canvas.width = CANVAS_SIZE;
-  canvas.height = CANVAS_SIZE;
+  canvas.height = canvasH;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#f8f8f8';
-  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-
-  // Celle quadrate: usa la dimensione minore tra canvas/cols e canvas/rows
-  const cellSize = Math.floor(Math.min(CANVAS_SIZE / cols, CANVAS_SIZE / rows));
-  const gridW = cellSize * cols;
-  const gridH = cellSize * rows;
-  const offsetX = Math.floor((CANVAS_SIZE - gridW) / 2);
-  const offsetY = Math.floor((CANVAS_SIZE - gridH) / 2);
+  ctx.fillRect(0, 0, CANVAS_SIZE, canvasH);
 
   const PAD = 4;
   for (let i = 0; i < n; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const cellX = offsetX + col * cellSize;
-    const cellY = offsetY + row * cellSize;
+    const cellX = col * cellSize;
+    const cellY = row * cellSize;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(cellX, cellY, cellSize, cellSize);
     if (!imageUrls[i]) continue;
