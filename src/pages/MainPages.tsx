@@ -892,9 +892,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             return resolvePostTags(template, mp, tags, cur);
           }).join('\n');
         }
-        const multiKeyboard = multiPosts
+        // Pulsanti prodotto + eventuali pulsanti extra del layout
+        const productBtns = multiPosts
           .map(mp => `🛒 ${mp.title.slice(0, 32)} - ${mp.sourceUrl}`)
           .join('\n');
+        const layoutKb = layout?.keyboardId ? keyboards.find(k => k.id === layout.keyboardId) : null;
+        const multiKeyboard = layoutKb ? `${productBtns}\n${layoutKb.contenuto}` : productBtns;
         generatedImage = (post as any).generatedImage;
         if (!generatedImage) {
           generatedImage = await generateMultiPostImage(multiPosts.map(mp => mp.image)).catch(() => undefined);

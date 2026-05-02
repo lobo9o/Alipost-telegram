@@ -78,15 +78,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (IS_DEV) return;
+    // I template vengono caricati separatamente con null come sentinella d'errore:
+    // se l'API fallisce (es. dopo restart) non settiamo templateFromDB=true e blocchiamo il salvataggio,
+    // evitando che i valori di default sovrascrivano le impostazioni reali nel DB.
+    const tmplPromise = templatesApi.list().catch(() => null as Template[] | null);
+
     Promise.all([
       tryFetch(autopostApi.list, []),
       tryFetch(tagsApi.list, INITIAL_TAGS),
       tryFetch(layoutsApi.list, INITIAL_LAYOUTS),
       tryFetch(keyboardsApi.list, INITIAL_KEYBOARDS),
-      tryFetch(templatesApi.list, INITIAL_TEMPLATES),
       tryFetch(settingsApi.get, {} as AppSettings),
       tryFetch(publishedApi.listToday, []),
-    ]).then(([q, t, l, kb, tmpl, s, pub]) => {
+      tmplPromise,
+    ]).then(([q, t, l, kb, s, pub, tmplResult]) => {
       setQueue((q as QueueItem[]).filter(x => x.status === 'draft'));
       if (t.length > 0) setTags(t);
       // Merge DB layouts with defaults: DB ha la precedenza per ID corrispondenti,
@@ -108,15 +113,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Stessa cosa per keyboards
         INITIAL_KEYBOARDS.forEach(d => { if (!kbById.has(d.id)) keyboardsApi.create(d).catch(() => {}); });
       }
-      if (tmpl.length > 0) {
-        const normalized = (tmpl as Template[]).map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
-        setTemplates(normalized);
-        templateFromDB.current = true; // confermato dal DB → salvataggio automatico abilitato
-      } else {
-        const def = makeDefaultTemplate('tpl1');
-        templatesApi.create(def).catch(() => {});
-        templateFromDB.current = true; // primo avvio — creato ora, sicuro
+      // tmplResult === null → API fallita: templateFromDB resta false, nessun salvataggio
+      // tmplResult !== null → dato reale dal DB → abilita salvataggio
+      const tmpl = tmplResult as Template[] | null;
+      if (tmpl !== null) {
+        if (tmpl.length > 0) {
+          const normalized = tmpl.map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
+          setTemplates(normalized);
+        } else {
+          const def = makeDefaultTemplate('tpl1');
+          templatesApi.create(def).catch(() => {});
+          setTemplates([def]);
+        }
+        templateFromDB.current = true;
       }
+      // else: API fallita → templateFromDB resta false, il template di default in stato è solo visivo
       const rawS = s as AppSettings & { _publishedCount?: number };
       setPublishedCount(rawS._publishedCount ?? 0);
       setSettings(mergeSettings(rawS));

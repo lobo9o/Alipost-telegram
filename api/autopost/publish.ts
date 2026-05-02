@@ -342,11 +342,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           messageText = perProductTexts.join('\n');
         }
 
+        // Pulsanti prodotto (uno per link)
         const multiButtons = (postsArr as Record<string, any>[]).map(mp => ({
           text: `🛒 ${String(mp.title ?? '').slice(0, 32)}`,
           url: String(mp.sourceUrl ?? affiliateUrl),
         }));
-        replyMarkup = { inline_keyboard: multiButtons.map(b => [b]) };
+        const multiRows: object[][] = multiButtons.map(b => [b]);
+        // Aggiunge i pulsanti del layout (se impostato) in fondo
+        if (keyboardRow?.body) {
+          const extraKb = buildKeyboard(keyboardRow.body, post, affiliateUrl);
+          if (extraKb && (extraKb as any).inline_keyboard) {
+            multiRows.push(...(extraKb as any).inline_keyboard);
+          }
+        }
+        replyMarkup = { inline_keyboard: multiRows };
       } else {
         const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato}{valuta} <s>{oldprezzo}{valuta}</s>\n🏷️ Sconto: -{sconto}%\n\n{_ {custom} _}`;
         messageText = buildMessage(
