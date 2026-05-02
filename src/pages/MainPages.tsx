@@ -538,14 +538,12 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         <>
           <div className="cbar">
             <div className="cb">
-              <div className="cbnum" style={{ color: 'var(--a3)' }}>{activeLinks.length}</div>
-              <div className="cblb">Link</div>
+              <div className="cbnum" style={{ color: 'var(--a3)' }}>{links.length}</div>
+              <div className="cblb">Singolo</div>
             </div>
             <div className="cb">
-              <div className="cbnum" style={{ color: 'var(--am2)' }}>
-                {mode === 'multi' ? multiGroups.filter(g => g.length > 0).length : createdPosts.length}
-              </div>
-              <div className="cblb">{mode === 'multi' ? 'Multipli' : 'Bozze'}</div>
+              <div className="cbnum" style={{ color: 'var(--am2)' }}>{multiGroups.filter(g => g.length > 0).length}</div>
+              <div className="cblb">Multiplo</div>
             </div>
           </div>
 
