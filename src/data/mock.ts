@@ -52,7 +52,7 @@ export const INITIAL_LAYOUTS: TextLayout[] = [
   },
   {
     id: 'l3', nome: 'Post Multiplo', tipo: 'multi',
-    contenuto: '🔥 OFFERTE DEL GIORNO 🔥\n\n{lista_prodotti}\n\n👇 Link nei pulsanti sotto',
+    contenuto: '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">APRI SU AMAZON</a>\n➿➿➿➿➿➿➿➿➿➿➿➿',
   },
   {
     id: 'l4', nome: 'AliExpress', tipo: 'aliexpress',

@@ -9,19 +9,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   if (req.method === 'GET') {
     const rows = await sql`
-      SELECT id, nome, tipo, body AS contenuto, active
+      SELECT id, nome, tipo, body AS contenuto, keyboard_id AS "keyboardId", active
       FROM layouts WHERE user_id = ${userId} ORDER BY created_at ASC
     `;
     res.json(rows);
     return;
   }
 
-  const { id, nome, tipo, contenuto = '', active = false } = req.body ?? {};
+  const { id, nome, tipo, contenuto = '', keyboardId = null, active = false } = req.body ?? {};
   if (!id || !nome || !tipo) { res.status(400).json({ error: 'id, nome and tipo required' }); return; }
   const [row] = await sql`
-    INSERT INTO layouts (id, user_id, nome, tipo, body, active)
-    VALUES (${id}, ${userId}, ${nome}, ${tipo}, ${contenuto}, ${active})
-    RETURNING id, nome, tipo, body AS contenuto, active
+    INSERT INTO layouts (id, user_id, nome, tipo, body, keyboard_id, active)
+    VALUES (${id}, ${userId}, ${nome}, ${tipo}, ${contenuto}, ${keyboardId}, ${active})
+    RETURNING id, nome, tipo, body AS contenuto, keyboard_id AS "keyboardId", active
   `;
   res.status(201).json(row);
 });

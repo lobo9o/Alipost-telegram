@@ -744,12 +744,16 @@ function DynamicTagFields({ layout, post, postTags, itemId, onUpdate }: {
 }
 
 function resolveMultiPostText(contenuto: string, posts: CreatedPost[], tags: Tag[], currency: string): string {
-  const lista = posts.map((p, i) => {
-    const cur = p.platform === 'aliexpress' ? currency : '€';
-    const title = p.title.length > 55 ? p.title.slice(0, 55) + '…' : p.title;
-    return `${i + 1}. ${p.emoji || '📦'} ${title}\n💰 ${cur}${Number(p.discountedPrice).toFixed(2)} (-${p.discountPercent}%)`;
-  }).join('\n\n');
-  return resolvePostTags(contenuto.replace('{lista_prodotti}', lista), posts[0], tags, currency);
+  if (contenuto.includes('{lista_prodotti}')) {
+    const lista = posts.map((p, i) => {
+      const cur = p.platform === 'aliexpress' ? currency : '€';
+      const title = p.title.length > 55 ? p.title.slice(0, 55) + '…' : p.title;
+      return `${i + 1}. ${p.emoji || '📦'} ${title}\n💰 ${cur}${Number(p.discountedPrice).toFixed(2)} (-${p.discountPercent}%)`;
+    }).join('\n\n');
+    return resolvePostTags(contenuto.replace('{lista_prodotti}', lista), posts[0], tags, currency);
+  }
+  // Ripeti il template per ogni prodotto
+  return posts.map(p => resolvePostTags(contenuto, p, tags, p.platform === 'aliexpress' ? currency : '€')).join('\n');
 }
 
 // ============================================================
@@ -871,13 +875,23 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       if (item.tipo === 'multi') {
         const multiPosts = item.posts as CreatedPost[];
         const multiCurrency = multiPosts[0]?.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-        const lista = multiPosts.map((mp, i) => {
-          const cur = mp.platform === 'aliexpress' ? multiCurrency : '€';
-          const title = mp.title.length > 55 ? mp.title.slice(0, 55) + '…' : mp.title;
-          return `${i + 1}. ${mp.emoji || '📦'} ${title}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${mp.discountPercent}%)`;
-        }).join('\n\n');
-        const expandedLayout = (layout?.contenuto ?? '🔥 OFFERTE DEL GIORNO 🔥\n\n{lista_prodotti}')
-          .replace('{lista_prodotti}', lista);
+        const layoutContenuto = layout?.contenuto ?? '';
+        let expandedLayout: string;
+        if (layoutContenuto.includes('{lista_prodotti}')) {
+          const lista = multiPosts.map((mp, i) => {
+            const cur = mp.platform === 'aliexpress' ? multiCurrency : '€';
+            const title = mp.title.length > 55 ? mp.title.slice(0, 55) + '…' : mp.title;
+            return `${i + 1}. ${mp.emoji || '📦'} ${title}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${mp.discountPercent}%)`;
+          }).join('\n\n');
+          expandedLayout = layoutContenuto.replace('{lista_prodotti}', lista);
+        } else {
+          const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">APRI SU AMAZON</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
+          const template = layoutContenuto || defaultMultiLayout;
+          expandedLayout = multiPosts.map(mp => {
+            const cur = mp.platform === 'aliexpress' ? multiCurrency : '€';
+            return resolvePostTags(template, mp, tags, cur);
+          }).join('\n');
+        }
         const multiKeyboard = multiPosts
           .map(mp => `🛒 ${mp.title.slice(0, 32)} - ${mp.sourceUrl}`)
           .join('\n');
@@ -920,7 +934,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           );
         } catch { /* fall back to URL */ }
       }
-      const keyboard = keyboards.find(k => k.id === post.keyboardId) ?? keyboards[0];
+      const effectiveKbId = layout?.keyboardId ?? post.keyboardId;
+      const keyboard = keyboards.find(k => k.id === effectiveKbId) ?? keyboards[0];
       const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage });
       autopostApi.delete(id).catch(() => {}); // cleanup finale, fire-and-forget OK (status già aggiornato)
       const now = new Date().toISOString();

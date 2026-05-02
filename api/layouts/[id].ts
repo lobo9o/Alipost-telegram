@@ -14,23 +14,22 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const { nome, tipo, contenuto } = req.body ?? {};
-  // active non è nel tipo TextLayout — usiamo COALESCE per preservare il valore esistente
+  const { nome, tipo, contenuto, keyboardId = null } = req.body ?? {};
   const [row] = await sql`
-    UPDATE layouts SET nome = ${nome}, tipo = ${tipo}, body = ${contenuto ?? ''}
+    UPDATE layouts SET nome = ${nome}, tipo = ${tipo}, body = ${contenuto ?? ''}, keyboard_id = ${keyboardId}
     WHERE id = ${id} AND user_id = ${userId}
-    RETURNING id, nome, tipo, body AS contenuto
+    RETURNING id, nome, tipo, body AS contenuto, keyboard_id AS "keyboardId"
   `;
   if (row) { res.json(row); return; }
 
   // Layout non esiste in DB (es. layout di default mai persistito): INSERT
   const [inserted] = await sql`
-    INSERT INTO layouts (id, user_id, nome, tipo, body, active)
-    VALUES (${id}, ${userId}, ${nome}, ${tipo}, ${contenuto ?? ''}, false)
+    INSERT INTO layouts (id, user_id, nome, tipo, body, keyboard_id, active)
+    VALUES (${id}, ${userId}, ${nome}, ${tipo}, ${contenuto ?? ''}, ${keyboardId}, false)
     ON CONFLICT (id) DO UPDATE SET
-      nome = EXCLUDED.nome, tipo = EXCLUDED.tipo, body = EXCLUDED.body
+      nome = EXCLUDED.nome, tipo = EXCLUDED.tipo, body = EXCLUDED.body, keyboard_id = EXCLUDED.keyboard_id
     WHERE layouts.user_id = ${userId}
-    RETURNING id, nome, tipo, body AS contenuto
+    RETURNING id, nome, tipo, body AS contenuto, keyboard_id AS "keyboardId"
   `;
-  res.json(inserted ?? { id, nome, tipo, contenuto: contenuto ?? '' });
+  res.json(inserted ?? { id, nome, tipo, contenuto: contenuto ?? '', keyboardId: null });
 });

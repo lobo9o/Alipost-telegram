@@ -271,14 +271,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     if (!queueItem || !post) { skipped.push(`${userId}: coda vuota o tutti i prezzi scaduti`); continue; }
 
     try {
-      // Carica layout testo
+      // Carica layout testo (con eventuale tastiera associata)
       const [layoutRow] = post.layoutId ? await sql`
-        SELECT body FROM layouts WHERE id = ${post.layoutId} AND user_id = ${userId}
+        SELECT body, keyboard_id FROM layouts WHERE id = ${post.layoutId} AND user_id = ${userId}
       ` : [null];
 
-      // Carica tastiera
-      const [keyboardRow] = post.keyboardId ? await sql`
-        SELECT body FROM keyboards WHERE id = ${post.keyboardId} AND user_id = ${userId}
+      // Tastiera: usa quella del layout se impostata, altrimenti quella del post
+      const effectiveKeyboardId = layoutRow?.keyboard_id || post.keyboardId;
+      const [keyboardRow] = effectiveKeyboardId ? await sql`
+        SELECT body FROM keyboards WHERE id = ${effectiveKeyboardId} AND user_id = ${userId}
       ` : [null];
 
       // Carica tag personalizzati dell'utente + applica eventuali override per-post
@@ -305,18 +306,42 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       let replyMarkup: object | undefined;
 
       if (isMulti) {
-        // ── Post multiplo: espandi {lista_prodotti} e costruisci N pulsanti ──
-        const lista = (postsArr as Record<string, any>[]).map((mp, i) => {
-          const cur = mp.platform === 'aliexpress'
-            ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
-            : '€';
-          const title = String(mp.title ?? '');
-          const shortTitle = title.length > 55 ? title.slice(0, 55) + '…' : title;
-          return `${i + 1}. ${mp.emoji || '📦'} ${shortTitle}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${Number(mp.discountPercent)}%)`;
-        }).join('\n\n');
-        const defaultMultiLayout = '🔥 OFFERTE DEL GIORNO 🔥\n\n{lista_prodotti}\n\n👇 Link nei pulsanti sotto';
-        const expandedLayout = (layoutRow?.body || defaultMultiLayout).replace('{lista_prodotti}', lista);
-        messageText = buildMessage(expandedLayout, post, affiliateUrl, aliCurrency, customTags);
+        // ── Post multiplo ──
+        const layoutText: string | undefined = layoutRow?.body;
+        const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">APRI SU AMAZON</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
+
+        if (layoutText?.includes('{lista_prodotti}')) {
+          // Backward compat: layout vecchio con {lista_prodotti}
+          const lista = (postsArr as Record<string, any>[]).map((mp, i) => {
+            const cur = mp.platform === 'aliexpress'
+              ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
+            const title = String(mp.title ?? '');
+            const shortTitle = title.length > 55 ? title.slice(0, 55) + '…' : title;
+            return `${i + 1}. ${mp.emoji || '📦'} ${shortTitle}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${Number(mp.discountPercent)}%)`;
+          }).join('\n\n');
+          messageText = buildMessage(layoutText.replace('{lista_prodotti}', lista), post, affiliateUrl, aliCurrency, customTags);
+        } else {
+          // Nuovo comportamento: ripeti il template per ogni prodotto
+          const template = layoutText || defaultMultiLayout;
+          const perProductTexts = (postsArr as Record<string, any>[]).map(mp => {
+            let mpUrl = String(mp.sourceUrl ?? '');
+            if (!mpUrl && mp.platform === 'amazon' && mp.productId) {
+              const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
+              const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+              mpUrl = `https://${domain}/dp/${mp.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}`;
+            }
+            const mpCurrency = mp.platform === 'aliexpress'
+              ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
+            const mpCustomTags: Record<string, string> = {};
+            for (const t of tagRows) {
+              const override = mp.tagOverrides?.[t.name as string];
+              mpCustomTags[t.name as string] = override !== undefined ? override : (t.value as string);
+            }
+            return buildMessage(template, mp, mpUrl, mpCurrency, mpCustomTags);
+          });
+          messageText = perProductTexts.join('\n');
+        }
+
         const multiButtons = (postsArr as Record<string, any>[]).map(mp => ({
           text: `🛒 ${String(mp.title ?? '').slice(0, 32)}`,
           url: String(mp.sourceUrl ?? affiliateUrl),

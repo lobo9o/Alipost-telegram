@@ -59,6 +59,7 @@ export interface TextLayout {
   nome: string;
   tipo: LayoutType;
   contenuto: string;
+  keyboardId?: string;
 }
 
 // ── Template elements ─────────────────────────────────────────

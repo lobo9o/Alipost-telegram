@@ -139,12 +139,12 @@ const TIPO_LABEL: Record<LayoutType, string> = {
 };
 
 function TextLayoutSection() {
-  const { layouts, setLayouts } = useApp();
+  const { layouts, setLayouts, keyboards } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<TextLayout, 'id'>>({ nome: '', tipo: 'normal', contenuto: '' });
+  const [form, setForm] = useState<Omit<TextLayout, 'id'>>({ nome: '', tipo: 'normal', contenuto: '', keyboardId: undefined });
 
-  const startNew = () => { setForm({ nome: '', tipo: 'normal', contenuto: '' }); setEditing('new'); };
-  const startEdit = (l: TextLayout) => { setForm({ nome: l.nome, tipo: l.tipo, contenuto: l.contenuto }); setEditing(l.id); };
+  const startNew = () => { setForm({ nome: '', tipo: 'normal', contenuto: '', keyboardId: undefined }); setEditing('new'); };
+  const startEdit = (l: TextLayout) => { setForm({ nome: l.nome, tipo: l.tipo, contenuto: l.contenuto, keyboardId: l.keyboardId }); setEditing(l.id); };
 
   const save = () => {
     if (editing === 'new') {
@@ -179,6 +179,13 @@ function TextLayoutSection() {
         <div className="fld">
           <label className="lbl">Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{custom}'}</label>
           <textarea className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={8} />
+        </div>
+        <div className="fld">
+          <label className="lbl">Tastiera associata</label>
+          <select className="sel" value={form.keyboardId ?? ''} onChange={e => setForm({ ...form, keyboardId: e.target.value || undefined })}>
+            <option value="">— Nessuna (usa quella del post) —</option>
+            {keyboards.map(kb => <option key={kb.id} value={kb.id}>{kb.nome}</option>)}
+          </select>
         </div>
         <div style={{ padding: '0 16px 16px', display: 'flex', gap: 8 }}>
           <button className="btn bs" style={{ flex: 1 }} onClick={() => setEditing(null)}>Annulla</button>

@@ -101,6 +101,8 @@ async function ensureMigrated() {
   // Aggiunge 'aliexpress' e 'aliexpress_historical_low' ai valori validi per layouts.tipo
   await sql`ALTER TABLE layouts DROP CONSTRAINT IF EXISTS layouts_tipo_check`;
   await sql`ALTER TABLE layouts ADD CONSTRAINT layouts_tipo_check CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress', 'aliexpress_historical_low'))`;
+  // Tastiera associata per layout
+  await sql`ALTER TABLE layouts ADD COLUMN IF NOT EXISTS keyboard_id TEXT`;
 
   _migrated = true;
   console.log('[DB] migrazione completata');
