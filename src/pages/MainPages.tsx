@@ -792,6 +792,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [priceWarnings, setPriceWarnings] = useState<string[]>([]);
   const [multiEditSelected, setMultiEditSelected] = useState<Set<string>>(new Set());
+  const [splittingId, setSplittingId] = useState<string | null>(null);
   const touchStartX = useRef(0);
 
   const safeIdx = Math.min(currentIdx, Math.max(0, queue.length - 1));
@@ -930,6 +931,78 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       testoCustom: currentPost.customText,
     }).then(img => { pregenImages.current[currentItem.id] = img; }).catch(() => {});
   }, [safeIdx, queue, templates]);
+
+  // Divide un post multiplo: rimuove i selezionati, rigenera l'originale, crea nuovi post
+  const splitMulti = async (sourceItem: QueueItem, selectedIds: Set<string>, mode: 'singles' | 'multi') => {
+    const allPosts = sourceItem.posts as CreatedPost[];
+    const selectedPosts = allPosts.filter(mp => selectedIds.has(mp.id));
+    const remainingPosts = allPosts.filter(mp => !selectedIds.has(mp.id));
+    if (selectedPosts.length === 0) return;
+    if (mode === 'multi' && selectedPosts.length < 2) return;
+    setSplittingId(sourceItem.id);
+    try {
+      const genSingle = async (mp: CreatedPost): Promise<CreatedPost> => {
+        const tpl = templates.find(t => t.id === mp.templateId);
+        if (!tpl) return mp;
+        const cur = mp.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const generatedImage = await generatePostImage(tpl, mp.image, mp.isHistoricalLow, mp.platform, {
+          prezzo: `${cur}${Number(mp.discountedPrice).toFixed(2)}`,
+          prezzoPrecedente: `${cur}${Number(mp.originalPrice).toFixed(2)}`,
+          sconto: `-${mp.discountPercent}%`, testoCustom: mp.customText,
+        }).catch(() => undefined);
+        return generatedImage ? { ...mp, generatedImage } : mp;
+      };
+      const genMultiComposite = async (posts: CreatedPost[]): Promise<CreatedPost[]> => {
+        const composite = await generateMultiPostImage(posts.map(p => p.image)).catch(() => '');
+        return posts.map((p, i) => i === 0 && composite ? { ...p, generatedImage: composite } : p);
+      };
+
+      // 1. Nuovi post da creare
+      const newItems: QueueItem[] = [];
+      if (mode === 'singles') {
+        const readyPosts = await Promise.all(selectedPosts.map(genSingle));
+        for (const rp of readyPosts) {
+          newItems.push({ id: genId(), tipo: 'single', posts: [rp], sched: sourceItem.sched, status: 'draft', sel: false });
+        }
+      } else {
+        const postsWithImg = await genMultiComposite(selectedPosts);
+        newItems.push({ id: genId(), tipo: 'multi', posts: postsWithImg, sched: sourceItem.sched, status: 'draft', sel: false });
+      }
+
+      // 2. Aggiorna/elimina il post originale
+      const insertAfterIdx = queue.findIndex(x => x.id === sourceItem.id);
+      if (remainingPosts.length === 0) {
+        // Elimina originale
+        autopostApi.delete(sourceItem.id).catch(() => {});
+        const newQueue = queue.filter(x => x.id !== sourceItem.id);
+        newQueue.splice(Math.max(0, insertAfterIdx), 0, ...newItems);
+        setQueue(newQueue);
+        setCurrentIdx(i => Math.min(i, newQueue.length - 1));
+      } else {
+        let updatedItem: QueueItem;
+        if (remainingPosts.length === 1) {
+          const rp = await genSingle(remainingPosts[0]);
+          updatedItem = { ...sourceItem, tipo: 'single', posts: [rp] };
+        } else {
+          const postsWithImg = await genMultiComposite(remainingPosts);
+          updatedItem = { ...sourceItem, posts: postsWithImg };
+        }
+        const newQueue = [...queue];
+        newQueue[insertAfterIdx] = updatedItem;
+        newQueue.splice(insertAfterIdx + 1, 0, ...newItems);
+        setQueue(newQueue);
+        await autopostApi.update(sourceItem.id, { posts: updatedItem.posts, tipo: updatedItem.tipo }).catch(() => {});
+      }
+
+      await Promise.all(newItems.map(ni => autopostApi.create(ni).catch(() => {})));
+      setMultiEditSelected(new Set());
+      setExpandedId(null);
+    } catch (e) {
+      setPublishErr(`Errore split: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSplittingId(null);
+    }
+  };
 
   const publish = async (id: string) => {
     if (publishingId) return;
@@ -1296,54 +1369,52 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 
               {multiEditSelected.size > 0 && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                  {/* Elimina selezionati dal multiplo */}
-                  <button className="btn bre bsm" onClick={() => {
-                    const remaining = (item.posts as CreatedPost[]).filter(mp => !multiEditSelected.has(mp.id));
-                    if (remaining.length === 0) { del(item.id); return; }
-                    const updated = { ...item, posts: remaining, tipo: remaining.length === 1 ? 'single' as const : 'multi' as const };
-                    setQueue(q => q.map(x => x.id === item.id ? updated : x));
-                    autopostApi.update(item.id, { posts: remaining, tipo: updated.tipo }).catch(() => {});
-                    setMultiEditSelected(new Set());
-                  }}>
-                    🗑️ Rimuovi {multiEditSelected.size} selezionati
-                  </button>
-
-                  {/* Crea singoli separati dai selezionati, inseriti dopo questo item */}
-                  <button className="btn bsm" style={{ background: 'var(--bg3)', color: 'var(--a1)', border: '1px solid var(--a1)' }}
+                  {/* Elimina selezionati — rigenera immagine dell'originale con i rimanenti */}
+                  <button className="btn bre bsm" disabled={!!splittingId}
                     onClick={async () => {
-                      const selectedPosts = (item.posts as CreatedPost[]).filter(mp => multiEditSelected.has(mp.id));
-                      const currentIdx2 = queue.findIndex(x => x.id === item.id);
-                      const newItems: QueueItem[] = selectedPosts.map(mp => ({
-                        id: genId(), tipo: 'single' as const,
-                        posts: [mp], sched: item.sched, status: 'draft' as const, sel: false,
-                      }));
-                      // Inserisci dopo il post corrente
-                      const newQueue = [...queue];
-                      newQueue.splice(currentIdx2 + 1, 0, ...newItems);
-                      setQueue(newQueue);
-                      await Promise.all(newItems.map(ni => autopostApi.create(ni).catch(() => {})));
-                      setMultiEditSelected(new Set());
+                      const remaining = (item.posts as CreatedPost[]).filter(mp => !multiEditSelected.has(mp.id));
+                      if (remaining.length === 0) { del(item.id); setMultiEditSelected(new Set()); return; }
+                      setSplittingId(item.id);
+                      try {
+                        let updatedPosts: CreatedPost[];
+                        if (remaining.length === 1) {
+                          const tpl = templates.find(t => t.id === remaining[0].templateId);
+                          if (tpl) {
+                            const cur = remaining[0].platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+                            const gi = await generatePostImage(tpl, remaining[0].image, remaining[0].isHistoricalLow, remaining[0].platform, {
+                              prezzo: `${cur}${Number(remaining[0].discountedPrice).toFixed(2)}`,
+                              prezzoPrecedente: `${cur}${Number(remaining[0].originalPrice).toFixed(2)}`,
+                              sconto: `-${remaining[0].discountPercent}%`, testoCustom: remaining[0].customText,
+                            }).catch(() => undefined);
+                            updatedPosts = gi ? [{ ...remaining[0], generatedImage: gi }] : remaining;
+                          } else { updatedPosts = remaining; }
+                        } else {
+                          const composite = await generateMultiPostImage(remaining.map(p => p.image)).catch(() => '');
+                          updatedPosts = remaining.map((p, i) => i === 0 && composite ? { ...p, generatedImage: composite } : p);
+                        }
+                        const tipo = remaining.length === 1 ? 'single' as const : 'multi' as const;
+                        const updated = { ...item, posts: updatedPosts, tipo };
+                        setQueue(q => q.map(x => x.id === item.id ? updated : x));
+                        autopostApi.update(item.id, { posts: updatedPosts, tipo }).catch(() => {});
+                        setMultiEditSelected(new Set());
+                      } finally { setSplittingId(null); }
                     }}>
-                    📦 Crea {multiEditSelected.size} singoli
+                    {splittingId === item.id ? '⏳' : `🗑️ Rimuovi ${multiEditSelected.size}`}
                   </button>
 
-                  {/* Crea un nuovo multiplo dai selezionati, inserito dopo */}
+                  {/* Crea singoli: rimuove i selezionati dall'originale, genera immagini per entrambi */}
+                  <button className="btn bsm" disabled={!!splittingId}
+                    style={{ background: 'var(--bg3)', color: 'var(--a1)', border: '1px solid var(--a1)' }}
+                    onClick={() => splitMulti(item, multiEditSelected, 'singles')}>
+                    {splittingId === item.id ? '⏳' : `📦 Crea ${multiEditSelected.size} singoli`}
+                  </button>
+
+                  {/* Crea multiplo: rimuove i selezionati dall'originale, genera immagini per entrambi */}
                   {multiEditSelected.size >= 2 && (
-                    <button className="btn bsm" style={{ background: 'var(--bg3)', color: 'var(--am2)', border: '1px solid var(--am2)' }}
-                      onClick={async () => {
-                        const selectedPosts = (item.posts as CreatedPost[]).filter(mp => multiEditSelected.has(mp.id));
-                        const currentIdx2 = queue.findIndex(x => x.id === item.id);
-                        const newItem: QueueItem = {
-                          id: genId(), tipo: 'multi',
-                          posts: selectedPosts, sched: item.sched, status: 'draft', sel: false,
-                        };
-                        const newQueue = [...queue];
-                        newQueue.splice(currentIdx2 + 1, 0, newItem);
-                        setQueue(newQueue);
-                        await autopostApi.create(newItem).catch(() => {});
-                        setMultiEditSelected(new Set());
-                      }}>
-                      🗂️ Crea multiplo ({multiEditSelected.size})
+                    <button className="btn bsm" disabled={!!splittingId}
+                      style={{ background: 'var(--bg3)', color: 'var(--am2)', border: '1px solid var(--am2)' }}
+                      onClick={() => splitMulti(item, multiEditSelected, 'multi')}>
+                      {splittingId === item.id ? '⏳' : `🗂️ Crea multiplo (${multiEditSelected.size})`}
                     </button>
                   )}
                 </div>
