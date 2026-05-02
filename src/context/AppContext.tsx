@@ -91,6 +91,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const merged = INITIAL_LAYOUTS.map(d => dbById.get(d.id) ?? d);
         const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => d.id === x.id));
         setLayouts([...merged, ...extra]);
+        // Persisti nel DB i layout di default non ancora presenti — così il PUT successivo li trova
+        INITIAL_LAYOUTS.forEach(d => { if (!dbById.has(d.id)) layoutsApi.create(d).catch(() => {}); });
       }
       // Merge keyboards: stessa logica dei layouts
       {
@@ -98,6 +100,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const merged = INITIAL_KEYBOARDS.map(d => kbById.get(d.id) ?? d);
         const extra = (kb as KeyboardLayout[]).filter((x: KeyboardLayout) => !INITIAL_KEYBOARDS.some(d => d.id === x.id));
         setKeyboards([...merged, ...extra]);
+        // Stessa cosa per keyboards
+        INITIAL_KEYBOARDS.forEach(d => { if (!kbById.has(d.id)) keyboardsApi.create(d).catch(() => {}); });
       }
       if (tmpl.length > 0) {
         const normalized = (tmpl as Template[]).map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
