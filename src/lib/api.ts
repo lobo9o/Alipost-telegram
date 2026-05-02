@@ -130,3 +130,7 @@ export const productApi = {
   fetchAliExpress: (payload: { url: string }) =>
     req<AliExpressProductResult>('POST', '/api/product', { platform: 'aliexpress', ...payload }),
 };
+
+export const utilsApi = {
+  resolveUrl: (url: string) => req<{ resolved: string }>('POST', '/api/resolve-url', { url }),
+};

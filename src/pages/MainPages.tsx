@@ -5,7 +5,7 @@ import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanne
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
-import { productApi, postsApi, autopostApi, publishedApi } from '../lib/api';
+import { productApi, postsApi, autopostApi, publishedApi, utilsApi } from '../lib/api';
 import { generatePostImage, generateMultiPostImage, generateTerminataImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
@@ -388,9 +388,22 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
     setErr('');
   };
 
-  const sendLink = () => {
+  const sendLink = async () => {
     if (!linkInput.trim()) return;
-    const url = linkInput.trim();
+    let url = linkInput.trim();
+
+    // Se non è un link Amazon/AliExpress riconoscibile, prova a risolvere i redirect (link shortati)
+    const isKnown = detectAmazonLink(url) || /aliexpress\.(com|us|ru)/i.test(url);
+    if (!isKnown && url.startsWith('http')) {
+      try {
+        showFeedback('🔍 Risolvo link...');
+        const { resolved } = await utilsApi.resolveUrl(url);
+        url = resolved;
+      } catch {
+        // usa url originale in caso di errore
+      }
+    }
+
     const platform: Platform = detectAmazonLink(url) ? 'amazon' : 'aliexpress';
     if (mode === 'multi') {
       if (!currentMultiItem) {
@@ -778,6 +791,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const [publishErr, setPublishErr] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [priceWarnings, setPriceWarnings] = useState<string[]>([]);
+  const [multiEditSelected, setMultiEditSelected] = useState<Set<string>>(new Set());
   const touchStartX = useRef(0);
 
   const safeIdx = Math.min(currentIdx, Math.max(0, queue.length - 1));
@@ -962,12 +976,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             return resolvePostTags(template, mp, tags, cur);
           }).join('\n');
         }
-        // Pulsanti prodotto + eventuali pulsanti extra del layout
-        const productBtns = multiPosts
-          .map(mp => `🛒 ${mp.title.slice(0, 32)} - ${mp.sourceUrl}`)
-          .join('\n');
         const layoutKb = layout?.keyboardId ? keyboards.find(k => k.id === layout.keyboardId) : null;
-        const multiKeyboard = layoutKb ? `${productBtns}\n${layoutKb.contenuto}` : productBtns;
+        const multiKeyboard = layoutKb?.contenuto;
         generatedImage = (post as any).generatedImage;
         if (!generatedImage) {
           generatedImage = await generateMultiPostImage(multiPosts.map(mp => mp.image)).catch(() => undefined);
@@ -1239,25 +1249,106 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               <TelegramPreview
                 text={previewText}
                 buttons={isMultiPost
-                  ? (item.posts as CreatedPost[]).map((mp, i) => `🛒 ${i + 1}. ${mp.title.slice(0, 25)}`)
+                  ? undefined
                   : [`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]
                 }
               />
             </div>
           ) : isMultiPost ? (
-            // ── Pannello modifica post multiplo (semplificato) ──
+            // ── Pannello modifica post multiplo ──
             <div style={{ padding: '12px 16px 28px', borderTop: '1px solid var(--bd)' }}>
               <div className="stit">POST MULTIPLO — {item.posts.length} PRODOTTI</div>
-              {(item.posts as CreatedPost[]).map((mp, idx) => (
-                <div key={mp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--bg3)' }}>
-                  <span style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 700, width: 20 }}>{idx + 1}.</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mp.title}</div>
-                    <div style={{ fontSize: 11, color: 'var(--t2)' }}>{qCurrency}{Number(mp.discountedPrice).toFixed(2)} (-{mp.discountPercent}%)</div>
+              <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 8 }}>
+                Seleziona i link per eliminarli o creare nuovi post
+              </div>
+              {(item.posts as CreatedPost[]).map((mp, idx) => {
+                const sel = multiEditSelected.has(mp.id);
+                return (
+                  <div key={mp.id}
+                    onClick={() => setMultiEditSelected(prev => {
+                      const n = new Set(prev);
+                      if (n.has(mp.id)) n.delete(mp.id); else n.add(mp.id);
+                      return n;
+                    })}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 10px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
+                      background: sel ? 'rgba(99,102,241,0.15)' : 'var(--bg3)',
+                      border: `1px solid ${sel ? 'var(--a1)' : 'transparent'}`,
+                    }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                      border: `2px solid ${sel ? 'var(--a1)' : 'var(--t3)'}`,
+                      background: sel ? 'var(--a1)' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {sel && <span style={{ fontSize: 11, color: '#fff', fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--t3)', width: 16, flexShrink: 0 }}>{idx + 1}.</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mp.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--t2)' }}>{qCurrency}{Number(mp.discountedPrice).toFixed(2)} (-{mp.discountPercent}%)</div>
+                    </div>
+                    <SourceBadge platform={mp.platform} />
                   </div>
-                  <SourceBadge platform={mp.platform} />
+                );
+              })}
+
+              {multiEditSelected.size > 0 && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                  {/* Elimina selezionati dal multiplo */}
+                  <button className="btn bre bsm" onClick={() => {
+                    const remaining = (item.posts as CreatedPost[]).filter(mp => !multiEditSelected.has(mp.id));
+                    if (remaining.length === 0) { del(item.id); return; }
+                    const updated = { ...item, posts: remaining, tipo: remaining.length === 1 ? 'single' as const : 'multi' as const };
+                    setQueue(q => q.map(x => x.id === item.id ? updated : x));
+                    autopostApi.update(item.id, { posts: remaining, tipo: updated.tipo }).catch(() => {});
+                    setMultiEditSelected(new Set());
+                  }}>
+                    🗑️ Rimuovi {multiEditSelected.size} selezionati
+                  </button>
+
+                  {/* Crea singoli separati dai selezionati, inseriti dopo questo item */}
+                  <button className="btn bsm" style={{ background: 'var(--bg3)', color: 'var(--a1)', border: '1px solid var(--a1)' }}
+                    onClick={async () => {
+                      const selectedPosts = (item.posts as CreatedPost[]).filter(mp => multiEditSelected.has(mp.id));
+                      const currentIdx2 = queue.findIndex(x => x.id === item.id);
+                      const newItems: QueueItem[] = selectedPosts.map(mp => ({
+                        id: genId(), tipo: 'single' as const,
+                        posts: [mp], sched: item.sched, status: 'draft' as const, sel: false,
+                      }));
+                      // Inserisci dopo il post corrente
+                      const newQueue = [...queue];
+                      newQueue.splice(currentIdx2 + 1, 0, ...newItems);
+                      setQueue(newQueue);
+                      await Promise.all(newItems.map(ni => autopostApi.create(ni).catch(() => {})));
+                      setMultiEditSelected(new Set());
+                    }}>
+                    📦 Crea {multiEditSelected.size} singoli
+                  </button>
+
+                  {/* Crea un nuovo multiplo dai selezionati, inserito dopo */}
+                  {multiEditSelected.size >= 2 && (
+                    <button className="btn bsm" style={{ background: 'var(--bg3)', color: 'var(--am2)', border: '1px solid var(--am2)' }}
+                      onClick={async () => {
+                        const selectedPosts = (item.posts as CreatedPost[]).filter(mp => multiEditSelected.has(mp.id));
+                        const currentIdx2 = queue.findIndex(x => x.id === item.id);
+                        const newItem: QueueItem = {
+                          id: genId(), tipo: 'multi',
+                          posts: selectedPosts, sched: item.sched, status: 'draft', sel: false,
+                        };
+                        const newQueue = [...queue];
+                        newQueue.splice(currentIdx2 + 1, 0, newItem);
+                        setQueue(newQueue);
+                        await autopostApi.create(newItem).catch(() => {});
+                        setMultiEditSelected(new Set());
+                      }}>
+                      🗂️ Crea multiplo ({multiEditSelected.size})
+                    </button>
+                  )}
                 </div>
-              ))}
+              )}
+
               <div style={{ marginTop: 12, marginBottom: 10 }}>
                 <div className="lbl">LAYOUT TESTO</div>
                 <select className="sel" value={p.layoutId} onChange={e => updateQueuePost(item.id, { layoutId: e.target.value })}>
@@ -1267,8 +1358,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               {previewText && (
                 <>
                   <div className="stit">ANTEPRIMA TESTO</div>
-                  <TelegramPreview text={previewText}
-                    buttons={(item.posts as CreatedPost[]).map((mp, i) => `🛒 ${i + 1}. ${mp.title.slice(0, 25)}`)} />
+                  <TelegramPreview text={previewText} buttons={undefined} />
                 </>
               )}
             </div>
