@@ -144,16 +144,17 @@ export async function generateMultiPostImage(imageUrls: string[]): Promise<strin
   if (n === 0) return '';
   const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);
-  // Celle quadrate, canvas alto esattamente quanto la griglia (niente spazio vuoto)
-  const cellSize = Math.floor(CANVAS_SIZE / cols);
+  // Celle quadrate, canvas esattamente cellSize*cols × cellSize*rows (niente pixel scoperti)
+  const cellSize = Math.round(CANVAS_SIZE / cols);
+  const canvasW = cellSize * cols;
   const canvasH = cellSize * rows;
 
   const canvas = document.createElement('canvas');
-  canvas.width = CANVAS_SIZE;
+  canvas.width = canvasW;
   canvas.height = canvasH;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, CANVAS_SIZE, canvasH);
+  ctx.fillRect(0, 0, canvasW, canvasH);
 
   const PAD = 4;
   for (let i = 0; i < n; i++) {
