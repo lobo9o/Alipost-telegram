@@ -713,13 +713,20 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   }, []);
 
   const updateQueuePost = (itemId: string, changes: Partial<CreatedPost>) => {
-    setQueue(q => q.map(x => x.id === itemId ? { ...x, posts: [{ ...x.posts[0], ...changes }] } : x));
+    setQueue(q => q.map(x => {
+      if (x.id !== itemId) return x;
+      if (x.tipo === 'multi') {
+        // Per multi-post aggiorna solo posts[0] (campi condivisi come layoutId) mantenendo tutti i post
+        return { ...x, posts: x.posts.map((p, i) => i === 0 ? { ...p, ...changes } : p) };
+      }
+      return { ...x, posts: [{ ...x.posts[0], ...changes }] };
+    }));
   };
 
   // Aggiorna post + persiste subito nel DB + rigenera immagine in background
   const updatePostWithImage = async (itemId: string, changes: Partial<CreatedPost>) => {
     const currentItem = queue.find(x => x.id === itemId);
-    if (!currentItem) return;
+    if (!currentItem || currentItem.tipo === 'multi') return; // multi-post: usa updateQueuePost direttamente
     const updatedPost: CreatedPost = { ...(currentItem.posts[0] as CreatedPost), ...changes };
 
     // 1. Aggiorna UI subito
