@@ -239,15 +239,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         triedIds.push(candidate.id as string);
         continue;
       }
+      const isMulti = Array.isArray(postsArr) && postsArr.length > 1;
 
-      // Verifica prezzo prima di bloccare l'item
-      const priceCheck = await checkPostPrice(candidatePost, cfg);
-      if (!priceCheck.valid) {
-        console.log(`[autopost] prezzo scaduto userId=${userId} postId=${candidatePost.id}: ${priceCheck.reason}`);
-        await sql`DELETE FROM autopost_queue WHERE id = ${candidate.id}`.catch(() => {});
-        skipped.push(`${userId}: offerta scaduta — ${String(candidatePost.title ?? '').slice(0, 40)} (${priceCheck.reason})`);
-        triedIds.push(candidate.id as string);
-        continue;
+      // Verifica prezzo prima di bloccare l'item (solo per post singoli)
+      if (!isMulti) {
+        const priceCheck = await checkPostPrice(candidatePost, cfg);
+        if (!priceCheck.valid) {
+          console.log(`[autopost] prezzo scaduto userId=${userId} postId=${candidatePost.id}: ${priceCheck.reason}`);
+          await sql`DELETE FROM autopost_queue WHERE id = ${candidate.id}`.catch(() => {});
+          skipped.push(`${userId}: offerta scaduta — ${String(candidatePost.title ?? '').slice(0, 40)} (${priceCheck.reason})`);
+          triedIds.push(candidate.id as string);
+          continue;
+        }
       }
 
       // Blocca atomicamente — evita doppia pubblicazione in caso di cron sovrapposti
@@ -284,7 +287,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         customTags[t.name as string] = override !== undefined ? override : (t.value as string);
       }
 
-      // Costruisce URL affiliato
+      // Costruisce URL affiliato (primo post)
       let affiliateUrl: string = post.sourceUrl ?? '';
       if (!affiliateUrl && post.platform === 'amazon' && post.productId) {
         const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
@@ -296,13 +299,36 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
         : '€';
 
-      const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato}{valuta} <s>{oldprezzo}{valuta}</s>\n🏷️ Sconto: -{sconto}%\n\n{_ {custom} _}`;
-      const messageText = buildMessage(
-        layoutRow?.body || defaultLayout,
-        post, affiliateUrl, aliCurrency, customTags,
-      );
-      const replyMarkup = buildKeyboard(keyboardRow?.body, post, affiliateUrl)
-        ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
+      let messageText: string;
+      let replyMarkup: object | undefined;
+
+      if (isMulti) {
+        // ── Post multiplo: espandi {lista_prodotti} e costruisci N pulsanti ──
+        const lista = (postsArr as Record<string, any>[]).map((mp, i) => {
+          const cur = mp.platform === 'aliexpress'
+            ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
+            : '€';
+          const title = String(mp.title ?? '');
+          const shortTitle = title.length > 55 ? title.slice(0, 55) + '…' : title;
+          return `${i + 1}. ${mp.emoji || '📦'} ${shortTitle}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${Number(mp.discountPercent)}%)`;
+        }).join('\n\n');
+        const defaultMultiLayout = '🔥 OFFERTE DEL GIORNO 🔥\n\n{lista_prodotti}\n\n👇 Link nei pulsanti sotto';
+        const expandedLayout = (layoutRow?.body || defaultMultiLayout).replace('{lista_prodotti}', lista);
+        messageText = buildMessage(expandedLayout, post, affiliateUrl, aliCurrency, customTags);
+        const multiButtons = (postsArr as Record<string, any>[]).map(mp => ({
+          text: `🛒 ${String(mp.title ?? '').slice(0, 32)}`,
+          url: String(mp.sourceUrl ?? affiliateUrl),
+        }));
+        replyMarkup = { inline_keyboard: multiButtons.map(b => [b]) };
+      } else {
+        const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato}{valuta} <s>{oldprezzo}{valuta}</s>\n🏷️ Sconto: -{sconto}%\n\n{_ {custom} _}`;
+        messageText = buildMessage(
+          layoutRow?.body || defaultLayout,
+          post, affiliateUrl, aliCurrency, customTags,
+        );
+        replyMarkup = buildKeyboard(keyboardRow?.body, post, affiliateUrl)
+          ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
+      }
 
       const channel = channels[0];
       const hasGeneratedImage = post.generatedImage && String(post.generatedImage).startsWith('data:image/');

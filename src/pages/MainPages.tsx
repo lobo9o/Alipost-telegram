@@ -6,7 +6,7 @@ import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi, publishedApi } from '../lib/api';
-import { generatePostImage, generateTerminataImage } from '../utils/imageCompose';
+import { generatePostImage, generateMultiPostImage, generateTerminataImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
 const CANVAS_SIZE_PREVIEW = 1024;
@@ -373,6 +373,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       const defaultNormalTpl = templates[0]?.id ?? 'tpl1';
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
       const defaultAliLay = layouts.find(l => l.tipo === 'aliexpress')?.id ?? defaultNormalLay;
+      const defaultMultiLay = layouts.find(l => l.tipo === 'multi')?.id ?? 'l3';
       const defaultKb = keyboards[0]?.id ?? 'kb1';
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
       const BATCH = 5;
@@ -390,7 +391,6 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         }
       };
 
-      // Blocchi da 10 in parallelo, 1s di pausa tra un blocco e il successivo
       const newPosts: CreatedPost[] = [];
       for (let i = 0; i < links.length; i += BATCH) {
         if (i > 0) await delay(2000);
@@ -400,6 +400,28 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         setProgress(Math.min(i + BATCH, links.length));
       }
 
+      // ── POST MULTIPLO ──────────────────────────────────────────
+      if (mode === 'multi') {
+        // Genera immagine griglia composita
+        const compositeImage = await generateMultiPostImage(newPosts.map(p => p.image)).catch(() => '');
+        // Il primo post porta layoutId=multi e generatedImage=composita
+        const multiPosts = newPosts.map((p, i) => ({
+          ...p,
+          layoutId: defaultMultiLay,
+          ...(i === 0 && compositeImage ? { generatedImage: compositeImage } : {}),
+        }));
+        const queueItem: QueueItem = {
+          id: genId(), tipo: 'multi' as const, posts: multiPosts, sched: 'Auto', status: 'draft' as const, sel: false,
+        };
+        await autopostApi.create(queueItem);
+        sessionStorage.setItem('queueJumpIdx', String(queue.length));
+        setQueue(prev => [...prev, queueItem]);
+        setLinks([]);
+        nav('queue');
+        return;
+      }
+
+      // ── POST SINGOLI ───────────────────────────────────────────
       // Genera immagini canvas per il cron autopost (browser-side, non disponibile server-side)
       const newPostsWithImages = await Promise.all(newPosts.map(async p => {
         const tpl = templates.find(t => t.id === p.templateId);
@@ -478,7 +500,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
             value={mode} onChange={v => { setMode(v as any); setLinks([]); setErr(''); }}
           />
 
-          {mode === 'multi' && <InfoBanner>📦 Modalità multipla — max 6 link. Incolla i link uno alla volta.</InfoBanner>}
+          {mode === 'multi' && <InfoBanner>📦 Post multiplo — da 2 a 6 link diventano <b>1 solo post</b> con immagine griglia e lista prodotti.</InfoBanner>}
           {err && <ErrorBanner>{err}</ErrorBanner>}
           {feedback && <div className="feedback-ok">{feedback}</div>}
 
@@ -504,7 +526,9 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
                 </div>
               ))}
               <div style={{ padding: '8px 16px 16px' }}>
-                <button className="btn bp bfull" onClick={creaPost}>🚀 Crea Post ({links.length})</button>
+                <button className="btn bp bfull" onClick={creaPost}>
+                  {mode === 'multi' ? `🗂️ Crea 1 Post Multiplo (${links.length} prodotti)` : `🚀 Crea Post (${links.length})`}
+                </button>
               </div>
             </>
           )}
@@ -648,6 +672,15 @@ function DynamicTagFields({ layout, post, postTags, itemId, onUpdate }: {
   );
 }
 
+function resolveMultiPostText(contenuto: string, posts: CreatedPost[], tags: Tag[], currency: string): string {
+  const lista = posts.map((p, i) => {
+    const cur = p.platform === 'aliexpress' ? currency : '€';
+    const title = p.title.length > 55 ? p.title.slice(0, 55) + '…' : p.title;
+    return `${i + 1}. ${p.emoji || '📦'} ${title}\n💰 ${cur}${Number(p.discountedPrice).toFixed(2)} (-${p.discountPercent}%)`;
+  }).join('\n\n');
+  return resolvePostTags(contenuto.replace('{lista_prodotti}', lista), posts[0], tags, currency);
+}
+
 // ============================================================
 // QUEUE PAGE
 // ============================================================
@@ -755,6 +788,47 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 
     try {
       let generatedImage: string | undefined;
+
+      // ── Post multiplo: usa la griglia composita + testo/tastiera espansi ──
+      if (item.tipo === 'multi') {
+        const multiPosts = item.posts as CreatedPost[];
+        const multiCurrency = multiPosts[0]?.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const lista = multiPosts.map((mp, i) => {
+          const cur = mp.platform === 'aliexpress' ? multiCurrency : '€';
+          const title = mp.title.length > 55 ? mp.title.slice(0, 55) + '…' : mp.title;
+          return `${i + 1}. ${mp.emoji || '📦'} ${title}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${mp.discountPercent}%)`;
+        }).join('\n\n');
+        const expandedLayout = (layout?.contenuto ?? '🔥 OFFERTE DEL GIORNO 🔥\n\n{lista_prodotti}')
+          .replace('{lista_prodotti}', lista);
+        const multiKeyboard = multiPosts
+          .map(mp => `🛒 ${mp.title.slice(0, 32)} - ${mp.sourceUrl}`)
+          .join('\n');
+        generatedImage = (post as any).generatedImage;
+        if (!generatedImage) {
+          generatedImage = await generateMultiPostImage(multiPosts.map(mp => mp.image)).catch(() => undefined);
+        }
+        const pubResult = await postsApi.publish(post.id, {
+          post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard, generatedImage,
+        });
+        autopostApi.delete(id).catch(() => {});
+        const now = new Date().toISOString();
+        const pubRecord = {
+          id: post.id, emoji: '🗂️', title: `Post multiplo (${multiPosts.length} prodotti)`,
+          price: '0.00', originalPrice: 0, discountPercent: 0,
+          platform: post.platform, image: post.image,
+          sourceUrl: post.sourceUrl, productId: post.productId,
+          customText: post.customText, layoutId: post.layoutId,
+          isHistoricalLow: false,
+          chatId: pubResult.chatId ?? '', messageId: pubResult.messageId ?? 0,
+          publishedAt: now, ts: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+        };
+        setPublished(prev => [pubRecord, ...prev]);
+        publishedApi.save(pubRecord).catch(() => {});
+        setPublishingId(null);
+        return;
+      }
+
+      // ── Post singolo ───────────────────────────────────────────────────────
       if (template) {
         try {
           // Usa l'immagine pre-generata se disponibile (pronta in background da quando il post era visibile)
@@ -830,11 +904,16 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   }
 
   const item = queue[safeIdx];
+  const isMultiPost = item?.tipo === 'multi';
   const p = item?.posts[0] as CreatedPost | undefined;
   const template = p ? templates.find(t => t.id === p.templateId) : undefined;
   const layout = p ? layouts.find(l => l.id === p.layoutId) : undefined;
   const qCurrency = p?.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-  const previewText = (layout && p) ? resolvePostTags(layout.contenuto, p, tags, qCurrency) : '';
+  const previewText = layout && p
+    ? (isMultiPost
+        ? resolveMultiPostText(layout.contenuto, item.posts as CreatedPost[], tags, qCurrency)
+        : resolvePostTags(layout.contenuto, p, tags, qCurrency))
+    : '';
   const isEditing = expandedId === item?.id;
 
   // Post in coda già pubblicati oggi (con posizione aggiornata dinamicamente)
@@ -957,18 +1036,73 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             <button className="btn bre bsm" style={{ flexShrink: 0 }} onClick={() => del(item.id)}>🗑️</button>
           </div>
 
-          {/* Anteprima immagine template */}
-          <TemplateImagePreview post={p} template={template} />
+          {/* Anteprima immagine */}
+          {isMultiPost ? (
+            <div style={{ margin: '0 16px 8px', borderRadius: 12, overflow: 'hidden', background: 'var(--bg3)' }}>
+              {(p as any).generatedImage
+                ? <img src={(p as any).generatedImage} alt="multi" style={{ width: '100%', display: 'block' }} />
+                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 8 }}>
+                    {(item.posts as CreatedPost[]).slice(0, 6).map(mp => (
+                      <img key={mp.id} src={`/api/posts?img=${encodeURIComponent(mp.image)}`}
+                        alt="" style={{ width: 'calc(33% - 4px)', aspectRatio: '1', objectFit: 'contain', background: '#fff', borderRadius: 6 }} />
+                    ))}
+                  </div>
+              }
+            </div>
+          ) : (
+            <TemplateImagePreview post={p} template={template} />
+          )}
 
           {/* Testo completo OPPURE form modifica */}
           {!isEditing ? (
             <div style={{ padding: '0 16px 24px' }}>
+              {isMultiPost && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {(item.posts as CreatedPost[]).map((mp, idx) => (
+                    <span key={mp.id} style={{ fontSize: 11, background: 'var(--bg3)', borderRadius: 6, padding: '2px 8px', color: 'var(--t2)' }}>
+                      {idx + 1}. {mp.title.slice(0, 28)}{mp.title.length > 28 ? '…' : ''}
+                    </span>
+                  ))}
+                </div>
+              )}
               <TelegramPreview
                 text={previewText}
-                buttons={[`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]}
+                buttons={isMultiPost
+                  ? (item.posts as CreatedPost[]).map((mp, i) => `🛒 ${i + 1}. ${mp.title.slice(0, 25)}`)
+                  : [`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]
+                }
               />
             </div>
+          ) : isMultiPost ? (
+            // ── Pannello modifica post multiplo (semplificato) ──
+            <div style={{ padding: '12px 16px 28px', borderTop: '1px solid var(--bd)' }}>
+              <div className="stit">POST MULTIPLO — {item.posts.length} PRODOTTI</div>
+              {(item.posts as CreatedPost[]).map((mp, idx) => (
+                <div key={mp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--bg3)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 700, width: 20 }}>{idx + 1}.</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mp.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)' }}>{qCurrency}{Number(mp.discountedPrice).toFixed(2)} (-{mp.discountPercent}%)</div>
+                  </div>
+                  <SourceBadge platform={mp.platform} />
+                </div>
+              ))}
+              <div style={{ marginTop: 12, marginBottom: 10 }}>
+                <div className="lbl">LAYOUT TESTO</div>
+                <select className="sel" value={p.layoutId} onChange={e => updateQueuePost(item.id, { layoutId: e.target.value })}>
+                  {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                </select>
+              </div>
+              {previewText && (
+                <>
+                  <div className="stit">ANTEPRIMA TESTO</div>
+                  <TelegramPreview text={previewText}
+                    buttons={(item.posts as CreatedPost[]).map((mp, i) => `🛒 ${i + 1}. ${mp.title.slice(0, 25)}`)} />
+                </>
+              )}
+            </div>
           ) : (
+            // ── Pannello modifica post singolo ──
             <div style={{ padding: '12px 16px 28px', borderTop: '1px solid var(--bd)' }}>
               <div style={{ marginBottom: 10 }}>
                 <div className="lbl">TITOLO</div>

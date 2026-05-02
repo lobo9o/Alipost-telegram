@@ -139,6 +139,53 @@ export async function generatePostImage(
   return canvas.toDataURL('image/jpeg', 0.88);
 }
 
+export async function generateMultiPostImage(imageUrls: string[]): Promise<string> {
+  const n = imageUrls.length;
+  if (n === 0) return '';
+  const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
+  const rows = Math.ceil(n / cols);
+  const canvas = document.createElement('canvas');
+  canvas.width = CANVAS_SIZE;
+  canvas.height = CANVAS_SIZE;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#f8f8f8';
+  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  const cellW = Math.floor(CANVAS_SIZE / cols);
+  const cellH = Math.floor(CANVAS_SIZE / rows);
+  const PAD = 8;
+  for (let i = 0; i < n; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const cellX = col * cellW;
+    const cellY = row * cellH;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cellX + 1, cellY + 1, cellW - 2, cellH - 2);
+    if (!imageUrls[i]) continue;
+    try {
+      const proxyUrl = imageUrls[i].startsWith('http')
+        ? `/api/posts?img=${encodeURIComponent(imageUrls[i])}`
+        : imageUrls[i];
+      const img = await loadImage(proxyUrl);
+      const availW = cellW - PAD * 2;
+      const availH = cellH - PAD * 2;
+      const ratio = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
+      const dw = img.naturalWidth * ratio;
+      const dh = img.naturalHeight * ratio;
+      ctx.drawImage(img, cellX + PAD + (availW - dw) / 2, cellY + PAD + (availH - dh) / 2, dw, dh);
+    } catch { /* skip */ }
+  }
+  // Separator lines
+  ctx.strokeStyle = '#e5e5e5';
+  ctx.lineWidth = 1;
+  for (let c = 1; c < cols; c++) {
+    ctx.beginPath(); ctx.moveTo(c * cellW, 0); ctx.lineTo(c * cellW, CANVAS_SIZE); ctx.stroke();
+  }
+  for (let r = 1; r < rows; r++) {
+    ctx.beginPath(); ctx.moveTo(0, r * cellH); ctx.lineTo(CANVAS_SIZE, r * cellH); ctx.stroke();
+  }
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
 export async function generateTerminataImage(
   template: Template,
   productImageUrl: string,
