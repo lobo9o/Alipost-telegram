@@ -152,7 +152,7 @@ export async function generateMultiPostImage(imageUrls: string[]): Promise<strin
   canvas.width = CANVAS_SIZE;
   canvas.height = canvasH;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#f8f8f8';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, CANVAS_SIZE, canvasH);
 
   const PAD = 4;
