@@ -21,10 +21,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       FROM autopost_queue WHERE user_id = ${userId} ORDER BY created_at ASC
     `;
     // Handle legacy rows where posts was stored as JSON string instead of JSONB array
-    const parsed = rows.map((r: any) => ({
-      ...r,
-      posts: typeof r.posts === 'string' ? JSON.parse(r.posts) : r.posts,
-    }));
+    const parsed = rows.map((r: any) => {
+      const posts = typeof r.posts === 'string' ? JSON.parse(r.posts) : r.posts;
+      return {
+        ...r,
+        posts,
+        tipo: Array.isArray(posts) && posts.length > 1 ? 'multi' : 'single',
+        sched: r.scheduled ?? 'Auto',
+        sel: false,
+      };
+    });
     res.json(parsed);
     return;
   }
