@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout, LinkItem } from '../types';
+import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout, LinkItem, NewPostItem } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
@@ -341,11 +341,10 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const {
-    createdPosts, queue, setQueue, layouts, keyboards, templates,
+    createdPosts, queue, setQueue, layouts, keyboards, templates, tags,
     newPostMode: mode, setNewPostMode: setMode,
-    newPostLinks: links, setNewPostLinks: setLinks,
-    newPostMultiGroups: multiGroups, setNewPostMultiGroups: setMultiGroups,
-    newPostGroupIdx: currentGroupIdx, setNewPostGroupIdx: setCurrentGroupIdx,
+    newPostItems, setNewPostItems,
+    newPostEditingMultiId, setNewPostEditingMultiId,
   } = useApp();
 
   const [phase, setPhase] = useState<'input' | 'loading'>('input');
@@ -355,13 +354,37 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const [err, setErr] = useState('');
   const [feedback, setFeedback] = useState('');
 
-  const activeLinks = mode === 'multi' ? (multiGroups[currentGroupIdx] ?? []) : links;
-  const validGroups = multiGroups.filter(g => g.length >= 2);
+  const singleItems = newPostItems.filter((i): i is { id: string; type: 'single'; link: LinkItem } => i.type === 'single');
+  const multiItems = newPostItems.filter((i): i is { id: string; type: 'multi'; links: LinkItem[] } => i.type === 'multi');
+
+  // Current multi item being edited
+  const currentMultiItem = multiItems.find(i => i.id === newPostEditingMultiId) ?? multiItems[multiItems.length - 1] ?? null;
+  const currentMultiIdx = currentMultiItem ? multiItems.findIndex(i => i.id === currentMultiItem.id) : -1;
+
+  const activeLinks: LinkItem[] = mode === 'multi'
+    ? (currentMultiItem?.links ?? [])
+    : singleItems.map(i => i.link);
+
+  // Items that will actually be created
+  const itemsToCreate = newPostItems.filter(item =>
+    item.type === 'single' || (item.type === 'multi' && item.links.length >= 2)
+  );
+  const canCreate = itemsToCreate.length > 0;
 
   const showFeedback = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(''), 2500); };
 
   const handleModeChange = (newMode: string) => {
-    setMode(newMode as 'single' | 'multi');
+    const m = newMode as 'single' | 'multi';
+    setMode(m);
+    if (m === 'multi') {
+      if (multiItems.length === 0) {
+        const newId = genId();
+        setNewPostItems(prev => [...prev, { id: newId, type: 'multi', links: [] }]);
+        setNewPostEditingMultiId(newId);
+      } else if (!newPostEditingMultiId || !multiItems.some(i => i.id === newPostEditingMultiId)) {
+        setNewPostEditingMultiId(multiItems[0].id);
+      }
+    }
     setErr('');
   };
 
@@ -370,40 +393,49 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
     const url = linkInput.trim();
     const platform: Platform = detectAmazonLink(url) ? 'amazon' : 'aliexpress';
     if (mode === 'multi') {
-      if (activeLinks.length >= 6) { setErr('Massimo 6 link per post multiplo.'); return; }
-      setMultiGroups(prev => {
-        const updated = prev.map(g => [...g]);
-        updated[currentGroupIdx] = [...updated[currentGroupIdx], { id: genId(), url, platform }];
-        return updated;
-      });
+      if (!currentMultiItem) {
+        const newId = genId();
+        setNewPostItems(prev => [...prev, { id: newId, type: 'multi', links: [{ id: genId(), url, platform }] }]);
+        setNewPostEditingMultiId(newId);
+      } else if (activeLinks.length >= 6) {
+        setErr('Massimo 6 link per post multiplo.'); return;
+      } else {
+        setNewPostItems(prev => prev.map(item =>
+          item.id === currentMultiItem.id
+            ? { ...item, links: [...(item as { id: string; type: 'multi'; links: LinkItem[] }).links, { id: genId(), url, platform }] }
+            : item
+        ));
+      }
     } else {
-      setLinks(prev => [...prev, { id: genId(), url, platform }]);
+      setNewPostItems(prev => [...prev, { id: genId(), type: 'single', link: { id: genId(), url, platform } }]);
     }
     setLinkInput(''); setErr('');
     showFeedback(`✅ Link ${platform === 'amazon' ? 'Amazon' : 'AliExpress'} rilevato`);
   };
 
   const removeActiveLink = (id: string) => {
-    if (mode === 'multi') {
-      setMultiGroups(prev => {
-        const updated = prev.map(g => [...g]);
-        updated[currentGroupIdx] = updated[currentGroupIdx].filter(x => x.id !== id);
-        return updated;
-      });
+    if (mode === 'multi' && currentMultiItem) {
+      const updatedLinks = currentMultiItem.links.filter(l => l.id !== id);
+      setNewPostItems(prev => prev.map(item =>
+        item.id === currentMultiItem.id ? { ...item, links: updatedLinks } : item
+      ));
     } else {
-      setLinks(prev => prev.filter(x => x.id !== id));
+      setNewPostItems(prev => prev.filter(item => !(item.type === 'single' && item.link.id === id)));
     }
   };
 
   const goToNextGroup = () => {
-    if (currentGroupIdx < multiGroups.length - 1) {
-      setCurrentGroupIdx(prev => prev + 1);
+    if (currentMultiIdx < multiItems.length - 1) {
+      setNewPostEditingMultiId(multiItems[currentMultiIdx + 1].id);
     } else {
-      setMultiGroups(prev => [...prev, []]);
-      setCurrentGroupIdx(prev => prev + 1);
+      const newId = genId();
+      setNewPostItems(prev => [...prev, { id: newId, type: 'multi', links: [] }]);
+      setNewPostEditingMultiId(newId);
     }
   };
-  const goToPrevGroup = () => { if (currentGroupIdx > 0) setCurrentGroupIdx(prev => prev - 1); };
+  const goToPrevGroup = () => {
+    if (currentMultiIdx > 0) setNewPostEditingMultiId(multiItems[currentMultiIdx - 1].id);
+  };
 
   const creaPost = async () => {
     setErr('');
@@ -415,8 +447,8 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       const defaultKb = keyboards[0]?.id ?? 'kb1';
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
       const BATCH = 5;
-
       const priceWarnings: string[] = [];
+
       const fetchOne = async (l: LinkItem): Promise<CreatedPost> => {
         const newId = genId();
         if (l.platform === 'amazon') {
@@ -429,27 +461,52 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         }
       };
 
-      // ── POST MULTIPLO: processa tutti i gruppi validi ──────────
-      if (mode === 'multi') {
-        const groups = multiGroups.filter(g => g.length >= 2);
-        if (!groups.length) { setErr('Ogni gruppo deve avere almeno 2 link.'); return; }
-        const allLinks = groups.flat();
-        setLoadingTotal(allLinks.length);
-        setPhase('loading'); setProgress(0);
+      if (!itemsToCreate.length) {
+        setErr('Aggiungi almeno un link singolo o un gruppo multiplo con almeno 2 link.');
+        return;
+      }
 
-        const allPosts: CreatedPost[] = [];
-        for (let i = 0; i < allLinks.length; i += BATCH) {
-          if (i > 0) await delay(2000);
-          const results = await Promise.all(allLinks.slice(i, i + BATCH).map(fetchOne));
-          allPosts.push(...results);
-          setProgress(allPosts.length);
-        }
+      // Flatten all links in order
+      const allLinks: LinkItem[] = itemsToCreate.flatMap(item =>
+        item.type === 'single' ? [item.link] : item.links
+      );
+      setLoadingTotal(allLinks.length);
+      setPhase('loading');
+      setProgress(0);
 
-        let offset = 0;
-        const queueItems: QueueItem[] = [];
-        for (const group of groups) {
-          const groupPosts = allPosts.slice(offset, offset + group.length);
-          offset += group.length;
+      const allFetched: CreatedPost[] = [];
+      for (let i = 0; i < allLinks.length; i += BATCH) {
+        if (i > 0) await delay(2000);
+        const results = await Promise.all(allLinks.slice(i, i + BATCH).map(fetchOne));
+        allFetched.push(...results);
+        setProgress(allFetched.length);
+      }
+
+      let offset = 0;
+      const queueItems: QueueItem[] = [];
+      const singlePostsToSave: CreatedPost[] = [];
+
+      for (const item of itemsToCreate) {
+        if (item.type === 'single') {
+          const post = allFetched[offset++];
+          const tpl = templates.find(t => t.id === post.templateId);
+          let finalPost = post;
+          if (tpl) {
+            try {
+              const generatedImage = await generatePostImage(tpl, post.image, post.isHistoricalLow, post.platform, {
+                prezzo: `€${Number(post.discountedPrice).toFixed(2)}`,
+                prezzoPrecedente: `€${Number(post.originalPrice).toFixed(2)}`,
+                sconto: `-${post.discountPercent}%`, testoCustom: post.customText,
+              });
+              finalPost = { ...post, generatedImage };
+            } catch {}
+          }
+          singlePostsToSave.push(finalPost);
+          queueItems.push({ id: genId(), tipo: 'single' as const, posts: [finalPost], sched: 'Auto', status: 'draft' as const, sel: false });
+        } else {
+          const groupLinks = item.links;
+          const groupPosts = allFetched.slice(offset, offset + groupLinks.length);
+          offset += groupLinks.length;
           const compositeImage = await generateMultiPostImage(groupPosts.map(p => p.image)).catch(() => '');
           const multiPosts = groupPosts.map((p, i) => ({
             ...p, layoutId: defaultMultiLay,
@@ -457,67 +514,24 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
           }));
           queueItems.push({ id: genId(), tipo: 'multi' as const, posts: multiPosts, sched: 'Auto', status: 'draft' as const, sel: false });
         }
-
-        const savedItems: QueueItem[] = [];
-        for (const item of queueItems) {
-          try { await autopostApi.create(item); savedItems.push(item); }
-          catch (e) { console.error('[creaPost multi]', e); }
-        }
-        if (!savedItems.length) throw new Error('Nessun post multiplo salvato nel DB.');
-
-        sessionStorage.setItem('queueJumpIdx', String(queue.length));
-        setQueue(prev => [...prev, ...savedItems]);
-        setMultiGroups([[]]); setCurrentGroupIdx(0); // reset dopo creazione riuscita
-        nav('queue');
-        return;
       }
 
-      // ── POST SINGOLI ───────────────────────────────────────────
-      if (!links.length) return;
-      setLoadingTotal(links.length);
-      setPhase('loading'); setProgress(0);
+      singlePostsToSave.forEach(p => postsApi.create(p).catch(() => {}));
 
-      const newPosts: CreatedPost[] = [];
-      for (let i = 0; i < links.length; i += BATCH) {
-        if (i > 0) await delay(2000);
-        const results = await Promise.all(links.slice(i, i + BATCH).map(fetchOne));
-        newPosts.push(...results);
-        setProgress(Math.min(i + BATCH, links.length));
-      }
-
-      const newPostsWithImages = await Promise.all(newPosts.map(async p => {
-        const tpl = templates.find(t => t.id === p.templateId);
-        if (!tpl) return p;
-        try {
-          const generatedImage = await generatePostImage(
-            tpl, p.image, p.isHistoricalLow, p.platform, {
-              prezzo: `€${Number(p.discountedPrice).toFixed(2)}`,
-              prezzoPrecedente: `€${Number(p.originalPrice).toFixed(2)}`,
-              sconto: `-${p.discountPercent}%`, testoCustom: p.customText,
-            }
-          );
-          return { ...p, generatedImage };
-        } catch { return p; }
-      }));
-
-      newPostsWithImages.forEach(p => postsApi.create(p).catch(() => {}));
-
-      const queueItems: QueueItem[] = newPostsWithImages.map(p => ({
-        id: genId(), tipo: 'single' as const, posts: [p], sched: 'Auto', status: 'draft' as const, sel: false,
-      }));
       const saved: QueueItem[] = [];
-      for (const item of queueItems) {
-        try { await autopostApi.create(item); saved.push(item); }
-        catch (e) { console.error('[creaPost] insert fallita:', e); }
+      for (const qi of queueItems) {
+        try { await autopostApi.create(qi); saved.push(qi); }
+        catch (e) { console.error('[creaPost]', e); }
       }
 
-      if (saved.length === 0) throw new Error('Nessun post salvato nel DB. Riprova.');
+      if (!saved.length) throw new Error('Nessun post salvato nel DB. Riprova.');
 
       const firstNewIdx = queue.length;
       sessionStorage.setItem('queueJumpIdx', String(firstNewIdx));
       if (priceWarnings.length > 0) sessionStorage.setItem('queuePriceWarnings', JSON.stringify(priceWarnings));
       setQueue(prev => [...prev, ...saved]);
-      setLinks([]);
+      setNewPostItems([]);
+      setNewPostEditingMultiId(null);
       nav('queue');
     } catch (err) {
       setErr(err instanceof Error ? err.message : 'Errore durante l\'analisi dei link. Riprova.');
@@ -525,24 +539,21 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
     }
   };
 
-  const canCreate = mode === 'multi' ? validGroups.length > 0 : links.length > 0;
-
   return (
     <div className="pg">
       <PageHeader title="Nuovo Post" onBack={() => nav('dash')}
         badge={createdPosts.length > 0 ? createdPosts.length : undefined} badgeVariant="purple"
       />
 
-      {/* ── INPUT PHASE ── */}
       {phase === 'input' && (
         <>
           <div className="cbar">
             <div className="cb">
-              <div className="cbnum" style={{ color: 'var(--a3)' }}>{links.length}</div>
+              <div className="cbnum" style={{ color: 'var(--a3)' }}>{singleItems.length}</div>
               <div className="cblb">Singolo</div>
             </div>
             <div className="cb">
-              <div className="cbnum" style={{ color: 'var(--am2)' }}>{multiGroups.filter(g => g.length > 0).length}</div>
+              <div className="cbnum" style={{ color: 'var(--am2)' }}>{multiItems.filter(i => i.links.length > 0).length}</div>
               <div className="cblb">Multiplo</div>
             </div>
           </div>
@@ -552,13 +563,12 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
             value={mode} onChange={handleModeChange}
           />
 
-          {/* Navigazione gruppi multipli */}
           {mode === 'multi' && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 2px' }}>
-              <button className="btn bgh" onClick={goToPrevGroup} disabled={currentGroupIdx === 0}
-                style={{ width: 44, height: 40, fontSize: 20, opacity: currentGroupIdx === 0 ? 0.25 : 1 }}>←</button>
+              <button className="btn bgh" onClick={goToPrevGroup} disabled={currentMultiIdx <= 0}
+                style={{ width: 44, height: 40, fontSize: 20, opacity: currentMultiIdx <= 0 ? 0.25 : 1 }}>←</button>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>Multiplo {currentGroupIdx + 1} / {multiGroups.length}</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>Multiplo {currentMultiIdx + 1} / {multiItems.length}</div>
                 <div style={{ fontSize: 11, color: 'var(--t3)' }}>{activeLinks.length} link in questo gruppo</div>
               </div>
               <button className="btn bgh" onClick={goToNextGroup}
@@ -597,37 +607,39 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
           {canCreate && (
             <div style={{ padding: '8px 16px 16px' }}>
               <button className="btn bp bfull" onClick={creaPost}>
-                {mode === 'multi'
-                  ? `🗂️ Crea ${validGroups.length} Post ${validGroups.length === 1 ? 'Multiplo' : 'Multipli'}`
-                  : `🚀 Crea Post (${links.length})`}
+                🚀 Crea Post ({itemsToCreate.length})
               </button>
             </div>
           )}
 
-          {mode === 'single' && createdPosts.length > 0 && (
-            <div style={{ padding: links.length > 0 ? '0 16px 16px' : '8px 16px 16px' }}>
+          {createdPosts.length > 0 && (
+            <div style={{ padding: canCreate ? '0 16px 16px' : '8px 16px 16px' }}>
               <button className="btn bs bfull" onClick={() => nav('queue')}>
-                📋 Vai alla coda ({createdPosts.length})
+                📋 Vedi coda ({createdPosts.length} bozze)
               </button>
             </div>
           )}
+
+          <div style={{ padding: '4px 16px 8px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {newPostItems.map(item => (
+              item.type === 'single'
+                ? <SourceBadge key={item.id} platform={item.link.platform} />
+                : item.links.map(l => <SourceBadge key={l.id} platform={l.platform} />)
+            ))}
+          </div>
         </>
       )}
 
-      {/* ── LOADING PHASE ── */}
       {phase === 'loading' && (
-        <div className="loading-phase">
-          <div style={{ fontSize: 44 }}>⏳</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Analisi in corso...</div>
-          <div style={{ fontSize: 13, color: 'var(--t2)', textAlign: 'center' }}>
-            {progress}/{loadingTotal} link elaborati
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {(mode === 'multi' ? multiGroups.flat() : links).map(l => <SourceBadge key={l.id} platform={l.platform} />)}
+        <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 16 }}>⏳</div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Analisi in corso...</div>
+          <div style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 20 }}>{progress} / {loadingTotal} prodotti</div>
+          <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', background: 'var(--a1)', borderRadius: 3, width: `${loadingTotal > 0 ? (progress / loadingTotal) * 100 : 0}%`, transition: 'width 0.3s' }} />
           </div>
         </div>
       )}
-
     </div>
   );
 }
@@ -829,6 +841,64 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 
   // Cache immagini pre-generate: key = queue item id, value = base64 jpeg
   const pregenImages = React.useRef<Record<string, string>>({});
+
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+
+  const regenerate = async (itemId: string) => {
+    const item = queue.find(x => x.id === itemId);
+    if (!item || regeneratingId) return;
+    setRegeneratingId(itemId);
+    try {
+      const posts = item.posts as CreatedPost[];
+      const freshPosts = await Promise.all(posts.map(async post => {
+        try {
+          const freshData = post.platform === 'amazon'
+            ? await productApi.fetchAmazon({ url: post.sourceUrl })
+            : await productApi.fetchAliExpress({ url: post.sourceUrl });
+          return {
+            ...post,
+            title: freshData.title,
+            image: freshData.image,
+            originalPrice: freshData.originalPrice,
+            discountedPrice: freshData.discountedPrice,
+            discountPercent: freshData.discountPercent,
+            sourceUrl: (freshData as any).affiliateUrl || post.sourceUrl,
+            stelle: (freshData as any).stelle ?? post.stelle,
+            recensioni: (freshData as any).recensioni ?? post.recensioni,
+            cat: (freshData as any).cat ?? post.cat,
+            author: (freshData as any).author ?? post.author,
+            coupon: (freshData as any).coupon ?? post.coupon,
+          } as CreatedPost;
+        } catch { return post; }
+      }));
+      let finalPosts = freshPosts;
+      if (item.tipo === 'single') {
+        const post = freshPosts[0];
+        const tpl = templates.find(t => t.id === post.templateId);
+        if (tpl) {
+          try {
+            const cur = post.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+            const generatedImage = await generatePostImage(tpl, post.image, post.isHistoricalLow, post.platform, {
+              prezzo: `${cur}${Number(post.discountedPrice).toFixed(2)}`,
+              prezzoPrecedente: `${cur}${Number(post.originalPrice).toFixed(2)}`,
+              sconto: `-${post.discountPercent}%`, testoCustom: post.customText,
+            });
+            finalPosts = [{ ...post, generatedImage }];
+            pregenImages.current[itemId] = generatedImage;
+          } catch {}
+        }
+      } else {
+        const compositeImage = await generateMultiPostImage(freshPosts.map(p => p.image)).catch(() => '');
+        finalPosts = freshPosts.map((p, i) => i === 0 && compositeImage ? { ...p, generatedImage: compositeImage } : p);
+      }
+      setQueue(q => q.map(x => x.id === itemId ? { ...x, posts: finalPosts } : x));
+      await autopostApi.update(itemId, { posts: finalPosts, status: item.status }).catch(() => {});
+    } catch (e) {
+      setPublishErr(`Rigenera: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRegeneratingId(null);
+    }
+  };
 
   // Pre-genera l'immagine del post corrente non appena viene visualizzato
   React.useEffect(() => {
@@ -1120,6 +1190,11 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             <button className="btn bsm bgh" style={{ flexShrink: 0 }}
               onClick={() => setExpandedId(isEditing ? null : item.id)}>
               {isEditing ? '✕ Chiudi' : '✏️ Modifica'}
+            </button>
+            <button className="btn bgh bsm" style={{ flexShrink: 0 }}
+              onClick={() => regenerate(item.id)}
+              disabled={!!regeneratingId}>
+              {regeneratingId === item.id ? '⏳' : '🔄'}
             </button>
             <button
               className="btn bgr bsm"

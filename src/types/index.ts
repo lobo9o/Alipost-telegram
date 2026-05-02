@@ -6,6 +6,10 @@ export type NavPage = 'dash' | 'search' | 'newpost' | 'queue' | 'published' | 'l
 
 export interface LinkItem { id: string; url: string; platform: Platform; }
 
+export type NewPostItem =
+  | { id: string; type: 'single'; link: LinkItem }
+  | { id: string; type: 'multi'; links: LinkItem[] }
+
 export interface Tag {
   id: string;
   name: string;
@@ -235,10 +239,8 @@ export interface AppContextType extends AppState {
   // stato persistente "Nuovo Post"
   newPostMode: 'single' | 'multi';
   setNewPostMode: React.Dispatch<React.SetStateAction<'single' | 'multi'>>;
-  newPostLinks: LinkItem[];
-  setNewPostLinks: React.Dispatch<React.SetStateAction<LinkItem[]>>;
-  newPostMultiGroups: LinkItem[][];
-  setNewPostMultiGroups: React.Dispatch<React.SetStateAction<LinkItem[][]>>;
-  newPostGroupIdx: number;
-  setNewPostGroupIdx: React.Dispatch<React.SetStateAction<number>>;
+  newPostItems: NewPostItem[];
+  setNewPostItems: React.Dispatch<React.SetStateAction<NewPostItem[]>>;
+  newPostEditingMultiId: string | null;
+  setNewPostEditingMultiId: React.Dispatch<React.SetStateAction<string | null>>;
 }

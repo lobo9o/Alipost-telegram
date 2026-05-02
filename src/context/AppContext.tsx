@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { AppContextType, QueueItem, PublishedPost, TextLayout, KeyboardLayout, Template, AppSettings, Tag, CreatedPost, makeDefaultTemplate, LinkItem } from '../types';
+import { AppContextType, QueueItem, PublishedPost, TextLayout, KeyboardLayout, Template, AppSettings, Tag, CreatedPost, makeDefaultTemplate, LinkItem, NewPostItem } from '../types';
 import {
   INITIAL_TAGS, INITIAL_LAYOUTS, INITIAL_KEYBOARDS, INITIAL_TEMPLATES, INITIAL_SETTINGS,
 } from '../data/mock';
@@ -64,9 +64,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [published, setPublished] = useState<PublishedPost[]>([]);
   const [newPostMode, setNewPostMode] = useState<'single' | 'multi'>('single');
-  const [newPostLinks, setNewPostLinks] = useState<LinkItem[]>([]);
-  const [newPostMultiGroups, setNewPostMultiGroups] = useState<LinkItem[][]>([[]]);
-  const [newPostGroupIdx, setNewPostGroupIdx] = useState(0);
+  const [newPostItems, setNewPostItems] = useState<NewPostItem[]>([]);
+  const [newPostEditingMultiId, setNewPostEditingMultiId] = useState<string | null>(null);
   const [tags, setTags] = useState<Tag[]>(INITIAL_TAGS);
   const [layouts, setLayouts] = useState<TextLayout[]>(INITIAL_LAYOUTS);
   const [keyboards, setKeyboards] = useState<KeyboardLayout[]>(INITIAL_KEYBOARDS);
@@ -187,9 +186,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       publishedCount,
       templateFromDB,
       newPostMode, setNewPostMode,
-      newPostLinks, setNewPostLinks,
-      newPostMultiGroups, setNewPostMultiGroups,
-      newPostGroupIdx, setNewPostGroupIdx,
+      newPostItems, setNewPostItems,
+      newPostEditingMultiId, setNewPostEditingMultiId,
     }}>
       {children}
     </AppCtx.Provider>
