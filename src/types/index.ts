@@ -230,6 +230,7 @@ export interface AppContextType extends AppState {
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   stats: { inCoda: number; sched: number; pub: number };
   publishedCount: number;
+  templateFromDB: React.MutableRefObject<boolean>;
   // stato persistente "Nuovo Post"
   newPostMode: 'single' | 'multi';
   setNewPostMode: React.Dispatch<React.SetStateAction<'single' | 'multi'>>;

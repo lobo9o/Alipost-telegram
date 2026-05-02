@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { AppContextType, QueueItem, PublishedPost, TextLayout, KeyboardLayout, Template, AppSettings, Tag, CreatedPost, makeDefaultTemplate, LinkItem } from '../types';
 import {
   INITIAL_TAGS, INITIAL_LAYOUTS, INITIAL_KEYBOARDS, INITIAL_TEMPLATES, INITIAL_SETTINGS,
@@ -74,6 +74,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   const [publishedCount, setPublishedCount] = useState(0);
   const [loaded, setLoaded] = useState(IS_DEV);
+  const templateFromDB = useRef(IS_DEV); // true = template caricato dal DB, sicuro da salvare
 
   useEffect(() => {
     if (IS_DEV) return;
@@ -110,9 +111,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (tmpl.length > 0) {
         const normalized = (tmpl as Template[]).map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
         setTemplates(normalized);
+        templateFromDB.current = true; // confermato dal DB → salvataggio automatico abilitato
       } else {
         const def = makeDefaultTemplate('tpl1');
         templatesApi.create(def).catch(() => {});
+        templateFromDB.current = true; // primo avvio — creato ora, sicuro
       }
       const rawS = s as AppSettings & { _publishedCount?: number };
       setPublishedCount(rawS._publishedCount ?? 0);
@@ -171,6 +174,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       settings, setSettings,
       stats,
       publishedCount,
+      templateFromDB,
       newPostMode, setNewPostMode,
       newPostLinks, setNewPostLinks,
       newPostMultiGroups, setNewPostMultiGroups,

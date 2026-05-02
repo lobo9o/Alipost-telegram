@@ -763,13 +763,14 @@ function getElEnabled(id: ComponentKey, tpl: Template): boolean {
 }
 
 function TemplateSection() {
-  const { templates, setTemplates } = useApp();
+  const { templates, setTemplates, templateFromDB } = useApp();
   const [activePanel, setActivePanel] = useState<ComponentKey | null>(null);
   const [showInfo, setShowInfo] = useState(false);
 
   const tpl = templates[0] ?? makeDefaultTemplate('tpl1');
 
   const saveTpl = (t: Template) => {
+    if (!templateFromDB.current) return; // blocca salvataggio se template non confermato dal DB
     templatesApi.update(t.id, t).catch(e => {
       if (String(e?.message).includes('Not found')) templatesApi.create(t).catch(() => {});
     });
