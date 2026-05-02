@@ -26,7 +26,7 @@ async function ensureMigrated() {
     id         TEXT PRIMARY KEY,
     user_id    TEXT NOT NULL DEFAULT 'legacy',
     nome       TEXT NOT NULL,
-    tipo       TEXT NOT NULL CHECK (tipo IN ('normal', 'historical_low', 'multi')),
+    tipo       TEXT NOT NULL CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress')),
     body       TEXT NOT NULL DEFAULT '',
     active     BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
@@ -97,6 +97,10 @@ async function ensureMigrated() {
   await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS config JSONB`;
+
+  // Aggiunge 'aliexpress' ai valori validi per layouts.tipo
+  await sql`ALTER TABLE layouts DROP CONSTRAINT IF EXISTS layouts_tipo_check`;
+  await sql`ALTER TABLE layouts ADD CONSTRAINT layouts_tipo_check CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress'))`;
 
   _migrated = true;
   console.log('[DB] migrazione completata');

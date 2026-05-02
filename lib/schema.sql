@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS tags (
 CREATE TABLE IF NOT EXISTS layouts (
   id         TEXT PRIMARY KEY,
   nome       TEXT NOT NULL,
-  tipo       TEXT NOT NULL CHECK (tipo IN ('normal', 'historical_low', 'multi')),
+  tipo       TEXT NOT NULL CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress')),
   body       TEXT NOT NULL DEFAULT '',
   active     BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
