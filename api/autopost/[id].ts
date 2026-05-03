@@ -16,10 +16,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   const body = req.body ?? {};
   const hasPosts = body.posts !== undefined;
+  // Strip generatedImage before saving — prevents JSONB bloat
+  const postsForDb = hasPosts
+    ? (body.posts as any[]).map(({ generatedImage: _g, ...p }: any) => p)
+    : undefined;
   const [row] = hasPosts
     ? await sql`
         UPDATE autopost_queue
-        SET posts = ${sql.json(body.posts)}, status = ${body.status}, scheduled = ${body.scheduled ?? null}
+        SET posts = ${sql.json(postsForDb!)}, status = ${body.status}, scheduled = ${body.scheduled ?? null}
         WHERE id = ${id} AND user_id = ${userId}
         RETURNING id, posts, status, scheduled, created_at AS "createdAt"
       `

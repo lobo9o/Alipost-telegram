@@ -21,11 +21,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       FROM autopost_queue WHERE user_id = ${userId} ORDER BY created_at ASC
     `;
     // Handle legacy rows where posts was stored as JSON string instead of JSONB array
+    // Strip generatedImage from GET response — kept client-side only (too heavy for polling)
     const parsed = rows.map((r: any) => {
       const posts = typeof r.posts === 'string' ? JSON.parse(r.posts) : r.posts;
+      const postsStripped = Array.isArray(posts)
+        ? posts.map(({ generatedImage: _g, ...p }: any) => p)
+        : posts;
       return {
         ...r,
-        posts,
+        posts: postsStripped,
         tipo: Array.isArray(posts) && posts.length > 1 ? 'multi' : 'single',
         sched: r.scheduled ?? 'Auto',
         sel: false,
@@ -35,11 +39,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
+  // Strip generatedImage before saving to DB — prevents JSONB bloat on polling
   const { id, posts = [], status = 'draft', scheduled = null } = req.body ?? {};
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
+  const postsForDb = (posts as any[]).map(({ generatedImage: _g, ...p }) => p);
   const [row] = await sql`
     INSERT INTO autopost_queue (id, user_id, posts, status, scheduled)
-    VALUES (${id}, ${userId}, ${sql.json(posts)}, ${status}, ${scheduled})
+    VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled})
     RETURNING id, posts, status, scheduled, created_at AS "createdAt"
   `;
   res.status(201).json(row);
