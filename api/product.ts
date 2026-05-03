@@ -345,8 +345,28 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // Dati extra (resiliente: non fallisce se non presenti)
     // customerReviews è sul singolo item, non sulla root della risposta
     const reviews = pick(item, 'customerReviews', 'CustomerReviews') as any;
-    const stelle = reviews ? String(pick(reviews, 'starRating', 'StarRating') ?? '') : '';
-    const recensioni = reviews ? String(pick(reviews, 'count', 'Count') ?? '') : '';
+    console.log('[product] reviews raw:', JSON.stringify(reviews));
+
+    // starRating può essere number diretto oppure oggetto { value, displayValue }
+    const starRatingRaw = reviews ? pick(reviews, 'starRating', 'StarRating') : null;
+    let stelle = '';
+    if (starRatingRaw !== null && starRatingRaw !== undefined) {
+      if (typeof starRatingRaw === 'object') {
+        stelle = String(pick(starRatingRaw as any, 'displayValue', 'DisplayValue', 'value', 'Value') ?? '');
+      } else {
+        stelle = String(starRatingRaw);
+      }
+    }
+
+    const countRaw = reviews ? pick(reviews, 'count', 'Count') : null;
+    let recensioni = '';
+    if (countRaw !== null && countRaw !== undefined) {
+      if (typeof countRaw === 'object') {
+        recensioni = String(pick(countRaw as any, 'displayValue', 'DisplayValue', 'value', 'Value') ?? '');
+      } else {
+        recensioni = String(countRaw);
+      }
+    }
 
     const byLine = pick(pick(item, 'itemInfo', 'ItemInfo'), 'byLineInfo', 'ByLineInfo') as any;
     const contributors = pick(byLine, 'contributors', 'Contributors') as any[] ?? [];

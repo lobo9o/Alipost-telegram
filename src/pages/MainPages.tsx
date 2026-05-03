@@ -126,7 +126,7 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
   onQueue: () => void;
   onPublish: () => void;
 }) {
-  const { createdPosts, setCreatedPosts, layouts, templates, tags, settings } = useApp();
+  const { createdPosts, setCreatedPosts, layouts, keyboards, templates, tags, settings } = useApp();
   const post = createdPosts.find(p => p.id === postId);
   if (!post) return null;
 
@@ -169,21 +169,21 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
           <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--t3)' }}>prodotto da link</span>
         </div>
 
-        {/* Title */}
+        {/* 1. Titolo */}
         <div style={{ marginBottom: 10 }}>
           <div className="lbl">TITOLO</div>
           <input className="inp" value={post.title} onChange={e => update({ title: e.target.value })} />
         </div>
 
-        {/* Prices */}
+        {/* 2. Prezzi */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 4, alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
-            <div className="lbl">PREZZO ORIG. → {'{prezzo}'}</div>
+            <div className="lbl">PREZZO ORIG.</div>
             <input className="inp" type="number" step="0.01" value={post.originalPrice}
               onChange={e => handlePrice('originalPrice', e.target.value)} />
           </div>
           <div style={{ flex: 1 }}>
-            <div className="lbl">PREZZO SCONT. → {'{prezzo_scontato}'}</div>
+            <div className="lbl">PREZZO SCONTATO</div>
             <input className="inp" type="number" step="0.01" value={post.discountedPrice}
               onChange={e => handlePrice('discountedPrice', e.target.value)} />
           </div>
@@ -193,21 +193,28 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
           <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--am2)', fontFamily: 'Syne, sans-serif' }}>-{post.discountPercent}%</span>
         </div>
 
-        {/* Historical Low toggle */}
+        {/* 3. Minimo storico */}
         <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
           <ToggleRow label="Minimo Storico" sub="Cambia template e layout automaticamente"
             value={post.isHistoricalLow} onChange={handleHistoricalLow} />
         </div>
 
-        {/* Template selector — single template, show as static label */}
+        {/* 4. Coupon */}
         <div style={{ marginBottom: 8 }}>
-          <div className="lbl">TEMPLATE IMMAGINE</div>
-          <div style={{ padding: '8px 12px', background: 'var(--bg3)', borderRadius: 8, fontSize: 13, color: 'var(--t2)' }}>
-            {templates[0] ? `Template (ID: ${templates[0].id})` : 'Nessun template — configura in Layout'}
-          </div>
+          <div className="lbl">COUPON <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{coupon}'}</span></div>
+          <input className="inp" value={post.coupon || ''} onChange={e => update({ coupon: e.target.value })}
+            placeholder="Codice sconto (es. PROMO20)..." />
         </div>
 
-        {/* Layout selector */}
+        {/* 5. Custom text */}
+        <div style={{ marginBottom: 10 }}>
+          <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
+          <textarea className="txta" rows={2} value={post.customText}
+            onChange={e => update({ customText: e.target.value })}
+            placeholder="Testo aggiuntivo..." />
+        </div>
+
+        {/* 6. Layout testo */}
         <div style={{ marginBottom: 8 }}>
           <div className="lbl">LAYOUT TESTO</div>
           <select className="sel" value={post.layoutId} onChange={e => update({ layoutId: e.target.value })}>
@@ -215,26 +222,21 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
           </select>
         </div>
 
-        {/* Custom text */}
-        <div style={{ marginBottom: 10 }}>
-          <div className="lbl">TESTO PERSONALIZZATO → {'{custom}'}</div>
-          <textarea className="txta" rows={2} value={post.customText}
-            onChange={e => update({ customText: e.target.value })}
-            placeholder="Inserisci un testo aggiuntivo..." />
+        {/* 7. Tastiera */}
+        <div style={{ marginBottom: 4 }}>
+          <div className="lbl">TASTIERA BOTTONI</div>
+          <select className="sel" value={post.keyboardId ?? keyboards[0]?.id ?? ''}
+            onChange={e => update({ keyboardId: e.target.value })}>
+            {keyboards.map(k => <option key={k.id} value={k.id}>{k.nome}</option>)}
+          </select>
         </div>
       </div>
 
-      {/* Dynamic tag fields (stelle, recensioni, coupon, etc.) if present in layout */}
-      <DynamicTagFields
-        layout={currentLayout}
-        post={post}
-        postTags={tags}
-        itemId={post.id}
-        onUpdate={(_id, ch) => update(ch)}
-      />
+      {/* 8. Tag editabili presenti nel layout (stelle, recensioni, cat, author…) */}
+      <TagEditButtons layout={currentLayout} post={post} onUpdate={update} />
 
-      {/* Live text preview */}
-      <div className="stit">ANTEPRIMA TESTO (aggiornamento in tempo reale)</div>
+      {/* Preview */}
+      <div className="stit">ANTEPRIMA TESTO</div>
       <TelegramPreview
         text={previewText}
         buttons={[`🛒 Compra su ${post.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]}
@@ -703,6 +705,82 @@ const EDITABLE_SYSTEM_TAG_MAP: Record<string, EditableSystemTag> = {
 function extractLayoutTags(contenuto: string): string[] {
   const matches = contenuto.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) ?? [];
   return [...new Set(matches)];
+}
+
+// Tag sempre gestiti da campi dedicati sopra — non li ripetiamo nei bottoni
+const DEDICATED_TAG_FIELDS = new Set(['{coupon}', '{boxcoupon}', '{custom}', '{checkout}']);
+
+function TagEditButtons({ layout, post, onUpdate }: {
+  layout: { contenuto: string } | undefined;
+  post: CreatedPost;
+  onUpdate: (ch: Partial<CreatedPost>) => void;
+}) {
+  const [activeField, setActiveField] = React.useState<string | null>(null);
+  const [tempVal, setTempVal] = React.useState('');
+
+  if (!layout) return null;
+
+  const layoutTags = extractLayoutTags(layout.contenuto);
+  const seen = new Set<string>();
+  const fields: Array<EditableSystemTag & { tag: string }> = [];
+  for (const tag of layoutTags) {
+    const m = EDITABLE_SYSTEM_TAG_MAP[tag];
+    if (m && !DEDICATED_TAG_FIELDS.has(tag) && !seen.has(m.field as string)) {
+      seen.add(m.field as string);
+      fields.push({ tag, ...m });
+    }
+  }
+  if (fields.length === 0) return null;
+
+  const save = (field: string, val: string) => {
+    onUpdate({ [field]: val } as Partial<CreatedPost>);
+    setActiveField(null);
+  };
+
+  return (
+    <div style={{ padding: '0 16px 10px' }}>
+      <div className="stit" style={{ padding: '8px 0 6px', margin: 0 }}>TAG NEL LAYOUT</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: activeField ? 8 : 0 }}>
+        {fields.map(f => {
+          const val = String((post as any)[f.field] || '');
+          const active = activeField === f.field;
+          return (
+            <button key={f.field}
+              onClick={() => { setActiveField(active ? null : f.field as string); setTempVal(val); }}
+              style={{
+                padding: '5px 11px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                border: `1px solid ${active ? 'var(--a1)' : val ? 'var(--am2)' : 'var(--bg4)'}`,
+                background: active ? 'var(--bg4)' : val ? '#1a1200' : 'var(--bg3)',
+                color: active ? 'var(--a1)' : val ? 'var(--am2)' : 'var(--t3)',
+              }}>
+              {f.label}{val ? `: ${val.length > 12 ? val.slice(0, 12) + '…' : val}` : ''}
+            </button>
+          );
+        })}
+      </div>
+      {activeField && (() => {
+        const f = fields.find(x => x.field === activeField)!;
+        return (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input className="inp" style={{ flex: 1 }} autoFocus
+              value={tempVal}
+              placeholder={f.placeholder}
+              onChange={e => setTempVal(e.target.value)}
+              onBlur={() => save(f.field as string, tempVal)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') save(f.field as string, tempVal);
+                if (e.key === 'Escape') setActiveField(null);
+              }}
+            />
+            <button className="btn bgr bsm" style={{ padding: '6px 12px', flexShrink: 0 }}
+              onMouseDown={e => { e.preventDefault(); save(f.field as string, tempVal); }}>
+              ✓
+            </button>
+          </div>
+        );
+      })()}
+    </div>
+  );
 }
 
 function DynamicTagFields({ layout, post, postTags, itemId, onUpdate }: {
