@@ -179,18 +179,31 @@ function extractAliId(url: string): string | null {
   return null;
 }
 
-async function resolveAliUrl(url: string): Promise<string> {
-  if (!/s\.click\.aliexpress|a\.aliexpress\.com|ali\.ski|aliexpress\.page\.link/i.test(url)) return url;
+async function resolveShortUrl(url: string): Promise<string> {
   try {
-    // GET con redirect:follow — r.url è l'URL finale dopo tutti i redirect, il body non viene letto
-    const r = await fetch(url, { redirect: 'follow' });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot/1.0)' },
+    });
+    clearTimeout(timer);
     const final = r.url || url;
-    console.log('[ali] redirect', url.slice(0, 60), '→', final.slice(0, 100));
+    console.log('[resolve] shortlink', url.slice(0, 60), '→', final.slice(0, 100));
     return final;
-  } catch (e) {
-    console.warn('[ali] resolveAliUrl failed:', e);
+  } catch {
     return url;
   }
+}
+
+const AMAZON_SHORT_DOMAINS = /^https?:\/\/(amzn\.to|amzn\.eu|amzlink\.to|a\.co|amazon\.soy)\//i;
+const ALI_SHORT_DOMAINS = /s\.click\.aliexpress|a\.aliexpress\.com|ali\.ski|aliexpress\.page\.link/i;
+
+async function resolveAliUrl(url: string): Promise<string> {
+  if (!ALI_SHORT_DOMAINS.test(url)) return url;
+  return resolveShortUrl(url);
 }
 
 // ── AliExpress API helpers ────────────────────────────────────────────────────
@@ -314,7 +327,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   console.log('[product] cfg.amazon version:', cfg.amazon?.version, 'marketplace:', cfg.amazon?.marketplace);
 
   if (platform === 'amazon') {
-    const resolvedAsin = (asin ?? extractAsin(url) ?? '').toUpperCase();
+    // Risolvi link corti Amazon (amzlink.to, amzn.to, ecc.) prima di estrarre l'ASIN
+    const resolvedUrl = AMAZON_SHORT_DOMAINS.test(url) ? await resolveShortUrl(url) : url;
+    const resolvedAsin = (asin ?? extractAsin(resolvedUrl) ?? extractAsin(url) ?? '').toUpperCase();
     if (!resolvedAsin) { res.status(400).json({ error: 'Impossibile estrarre ASIN dal link' }); return; }
 
     const userHasCreds = !!(cfg.amazon?.credentialId && cfg.amazon?.credentialSecret);
