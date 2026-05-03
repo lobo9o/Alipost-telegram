@@ -1758,11 +1758,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           ) : (
             // ── Pannello modifica post singolo ──
             <div style={{ padding: '12px 16px 28px', borderTop: '1px solid var(--bd)' }}>
+              {/* 1. Titolo */}
               <div style={{ marginBottom: 10 }}>
                 <div className="lbl">TITOLO</div>
                 <input className="inp" defaultValue={p.title} key={item.id + '-title'}
                   onBlur={e => updatePostWithImage(item.id, { title: e.target.value })} />
               </div>
+              {/* 2. Prezzi */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <div style={{ flex: 1 }}>
                   <div className="lbl">PREZZO ORIG.</div>
@@ -1789,6 +1791,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                 <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1 }}>Sconto calcolato</span>
                 <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--am2)' }}>-{p.discountPercent}%</span>
               </div>
+              {/* 3. Minimo storico */}
               <div style={{ background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
                 <ToggleRow label="Minimo Storico" value={p.isHistoricalLow}
                   onChange={v => {
@@ -1799,31 +1802,45 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                     updatePostWithImage(item.id, { isHistoricalLow: v, layoutId: layId });
                   }} />
               </div>
+              {/* 4. Custom text — solo se {custom} è nel layout */}
+              {layout?.contenuto.includes('{custom}') && (
+                <div style={{ marginBottom: 10 }}>
+                  <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
+                  <textarea className="txta" rows={2} key={item.id + '-custom'}
+                    defaultValue={p.customText}
+                    onBlur={e => updatePostWithImage(item.id, { customText: e.target.value })}
+                    placeholder="Testo aggiuntivo..." />
+                </div>
+              )}
+              {/* 5. Coupon — solo se {coupon}/{boxcoupon} è nel layout */}
+              {(layout?.contenuto.includes('{coupon}') || layout?.contenuto.includes('{boxcoupon}')) && (
+                <div style={{ marginBottom: 10 }}>
+                  <div className="lbl">COUPON <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{coupon}'}</span></div>
+                  <input className="inp" key={item.id + '-coupon'} defaultValue={p.coupon || ''}
+                    onBlur={e => updatePostWithImage(item.id, { coupon: e.target.value })}
+                    placeholder="Codice sconto (es. PROMO20)..." />
+                </div>
+              )}
+              {/* 6. Layout testo */}
               <div style={{ marginBottom: 10 }}>
                 <div className="lbl">LAYOUT TESTO</div>
                 <select className="sel" value={p.layoutId} onChange={e => updateQueuePost(item.id, { layoutId: e.target.value })}>
                   {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
                 </select>
               </div>
-              <div style={{ marginBottom: 10 }}>
+              {/* 7. Tastiera */}
+              <div style={{ marginBottom: 4 }}>
                 <div className="lbl">TASTIERA BOTTONI</div>
                 <select className="sel" value={p.keyboardId ?? keyboards[0]?.id ?? ''} onChange={e => updateQueuePost(item.id, { keyboardId: e.target.value })}>
                   {keyboards.map(k => <option key={k.id} value={k.id}>{k.nome}</option>)}
                 </select>
               </div>
-              <div style={{ marginBottom: 10 }}>
-                <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
-                <textarea className="txta" rows={2} key={item.id + '-custom'}
-                  defaultValue={p.customText}
-                  onBlur={e => updatePostWithImage(item.id, { customText: e.target.value })}
-                  placeholder="Testo aggiuntivo..." />
-              </div>
-              <DynamicTagFields
+              {/* 8. Pill tag: tutti i tag non auto-calcolati nel layout */}
+              <TagEditButtons
                 layout={layout}
                 post={p}
                 postTags={tags}
-                itemId={item.id}
-                onUpdate={updatePostWithImage}
+                onUpdate={ch => updatePostWithImage(item.id, ch)}
               />
               {previewText && (
                 <>
