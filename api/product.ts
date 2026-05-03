@@ -149,7 +149,6 @@ async function scrapeAmazonReviews(asin: string, domain: string): Promise<{ stel
       if (numM) recensioni = numM[0];
     }
 
-    console.log('[product] scrape reviews:', { stelle, recensioni });
     return { stelle, recensioni };
   } catch {
     return { stelle: '', recensioni: '' };
