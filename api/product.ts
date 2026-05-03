@@ -116,11 +116,28 @@ async function creatorsGetItem(
   }
 }
 
-async function scrapeAmazonReviews(asin: string, domain: string): Promise<{ stelle: string; recensioni: string }> {
+function parsePriceStr(s: string): number {
+  // Rimuove simboli valuta, spazi, &nbsp; poi normalizza separatore decimale
+  const clean = s.replace(/[€£$ \s]/g, '').trim();
+  // Formato europeo "29,99" → "29.99", formato USA "29.99" già ok
+  // Se ci sono sia punto che virgola (1.234,56) rimuove il punto migliaia
+  const normalized = /\d\.\d{3},\d{2}/.test(clean)
+    ? clean.replace('.', '').replace(',', '.')
+    : clean.replace(',', '.');
+  return parseFloat(normalized) || 0;
+}
+
+async function scrapeAmazonPage(asin: string, domain: string): Promise<{
+  stelle: string;
+  recensioni: string;
+  scrapedPrice: number;
+  scrapedOrigPrice: number;
+}> {
+  const empty = { stelle: '', recensioni: '', scrapedPrice: 0, scrapedOrigPrice: 0 };
   try {
     const url = `https://${domain}/dp/${asin}`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+    const timer = setTimeout(() => controller.abort(), 8000);
     const r = await fetch(url, {
       signal: controller.signal,
       headers: {
@@ -130,7 +147,7 @@ async function scrapeAmazonReviews(asin: string, domain: string): Promise<{ stel
       },
     });
     clearTimeout(timer);
-    if (!r.ok) return { stelle: '', recensioni: '' };
+    if (!r.ok) return empty;
     const html = await r.text();
 
     // stelle — target elemento a-icon-alt: "4,5 su 5 stelle" / "4.5 out of 5 stars"
@@ -149,9 +166,37 @@ async function scrapeAmazonReviews(asin: string, domain: string): Promise<{ stel
       if (numM) recensioni = numM[0];
     }
 
-    return { stelle, recensioni };
+    // prezzi — strategia multi-livello
+    let scrapedPrice = 0;
+    let scrapedOrigPrice = 0;
+
+    // 1. JSON-LD offers (più affidabile)
+    const ldM = html.match(/"@type"\s*:\s*"Offer"[^}]*?"price"\s*:\s*"?([\d]+(?:[.,][\d]+)?)"?/);
+    if (ldM) scrapedPrice = parsePriceStr(ldM[1]);
+
+    // 2. .a-offscreen — span accessibili dentro .a-price (primo=scontato, secondo=originale)
+    if (scrapedPrice === 0) {
+      const offscreenAll = [...html.matchAll(/class="a-offscreen">([^<]+)</g)];
+      if (offscreenAll[0]) scrapedPrice = parsePriceStr(offscreenAll[0][1]);
+      if (offscreenAll[1]) scrapedOrigPrice = parsePriceStr(offscreenAll[1][1]);
+    }
+
+    // 3. priceblock legacy (id="priceblock_ourprice" o priceblock_dealprice)
+    if (scrapedPrice === 0) {
+      const pbM = html.match(/id="priceblock_(?:ourprice|dealprice|saleprice)"[^>]*>([^<]+)</i);
+      if (pbM) scrapedPrice = parsePriceStr(pbM[1]);
+    }
+
+    // 4. "corePrice" dal JSON inline di Amazon
+    if (scrapedPrice === 0) {
+      const cpM = html.match(/"priceAmount"\s*:\s*([\d]+(?:\.\d+)?)/);
+      if (cpM) scrapedPrice = parseFloat(cpM[1]) || 0;
+    }
+
+    console.log('[product] scrape page', asin, '| stelle:', stelle, '| rec:', recensioni, '| price:', scrapedPrice, '| origPrice:', scrapedOrigPrice);
+    return { stelle, recensioni, scrapedPrice, scrapedOrigPrice };
   } catch {
-    return { stelle: '', recensioni: '' };
+    return empty;
   }
 }
 
@@ -204,6 +249,45 @@ const ALI_SHORT_DOMAINS = /s\.click\.aliexpress|a\.aliexpress\.com|ali\.ski|alie
 async function resolveAliUrl(url: string): Promise<string> {
   if (!ALI_SHORT_DOMAINS.test(url)) return url;
   return resolveShortUrl(url);
+}
+
+async function scrapeAliPrice(productId: string): Promise<{ price: number; origPrice: number }> {
+  try {
+    const url = `https://www.aliexpress.com/item/${productId}.html`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'it-IT,it;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+    });
+    clearTimeout(timer);
+    if (!r.ok) return { price: 0, origPrice: 0 };
+    const html = await r.text();
+
+    // JSON inline di AliExpress: "salePrice":{"minPrice":12.99,...}
+    let price = 0;
+    let origPrice = 0;
+    const salePriceM = html.match(/"salePrice"\s*:\s*\{[^}]*"minPrice"\s*:\s*([\d.]+)/);
+    if (salePriceM) price = parseFloat(salePriceM[1]) || 0;
+    const origPriceM = html.match(/"originalPrice"\s*:\s*\{[^}]*"minPrice"\s*:\s*([\d.]+)/)
+      ?? html.match(/"originalPrice"\s*:\s*([\d.]+)/);
+    if (origPriceM) origPrice = parseFloat(origPriceM[1]) || 0;
+
+    // Fallback: cerca "US $12.99" o "€12,99" nel testo
+    if (price === 0) {
+      const priceM = html.match(/(?:US \$|€|EUR\s*)([\d]+[.,][\d]{2})/i);
+      if (priceM) price = parsePriceStr(priceM[1]);
+    }
+
+    console.log('[ali] scrape price', productId, '→', price, origPrice);
+    return { price, origPrice };
+  } catch {
+    return { price: 0, origPrice: 0 };
+  }
 }
 
 // ── AliExpress API helpers ────────────────────────────────────────────────────
@@ -390,13 +474,24 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       : originalPrice > discountedPrice
         ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
 
-    if (discountedPrice === 0) {
-      console.warn('[product] prezzo zero per ASIN', resolvedAsin, '| listings count:', allListings.length, '| offersV2:', JSON.stringify(offersV2).slice(0, 300));
-    }
-
-    // Dati extra (resiliente: non fallisce se non presenti)
     // customerReviews non è supportato dall'API Creators — scraping pagina prodotto
-    const { stelle, recensioni } = await scrapeAmazonReviews(resolvedAsin, marketplaceDomain);
+    // Se il prezzo dall'API è 0, lo scraping prova a recuperarlo dalla pagina HTML
+    const { stelle, recensioni, scrapedPrice, scrapedOrigPrice } = await scrapeAmazonPage(resolvedAsin, marketplaceDomain);
+
+    let finalDiscountedPrice = discountedPrice;
+    let finalOriginalPrice   = originalPrice;
+    let priceWarning: string | undefined;
+
+    if (discountedPrice === 0) {
+      console.warn('[product] prezzo zero da API per ASIN', resolvedAsin, '| listings count:', allListings.length);
+      if (scrapedPrice > 0) {
+        finalDiscountedPrice = scrapedPrice;
+        finalOriginalPrice   = scrapedOrigPrice > scrapedPrice ? scrapedOrigPrice : scrapedPrice;
+        console.log('[product] prezzo da scraping:', finalDiscountedPrice, '| orig:', finalOriginalPrice);
+      } else {
+        priceWarning = 'Prezzo non trovato (prodotto non disponibile o offerta scaduta). Inseriscilo manualmente.';
+      }
+    }
 
     const byLine = pick(pick(item, 'itemInfo', 'ItemInfo'), 'byLineInfo', 'ByLineInfo') as any;
     const contributors = pick(byLine, 'contributors', 'Contributors') as any[] ?? [];
@@ -419,20 +514,25 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       console.log('[product] dealDetails:', JSON.stringify(dealDetails).slice(0, 200));
     }
 
+    const finalDiscountPercent = savingsPct > 0
+      ? Math.round(savingsPct)
+      : finalOriginalPrice > finalDiscountedPrice
+        ? Math.round((1 - finalDiscountedPrice / finalOriginalPrice) * 100) : 0;
+
     res.json({
       asin: resolvedAsin,
       title: titleObj ?? '',
       image: imageUrl ?? '',
-      originalPrice,
-      discountedPrice,
-      discountPercent,
+      originalPrice: finalOriginalPrice,
+      discountedPrice: finalDiscountedPrice,
+      discountPercent: finalDiscountPercent,
       affiliateUrl: `https://${marketplaceDomain}/dp/${resolvedAsin}?tag=${affiliateTag}`,
       stelle: stelle || undefined,
       recensioni: recensioni || undefined,
       author: author || undefined,
       cat: cat || undefined,
       coupon: coupon || undefined,
-      priceWarning: discountedPrice === 0 ? 'Prezzo non trovato (prodotto non disponibile o offerta scaduta). Inseriscilo manualmente.' : undefined,
+      priceWarning,
     });
 
   } else if (platform === 'aliexpress') {
@@ -461,9 +561,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     await new Promise(r => setTimeout(r, 600));
     const affiliateUrl = await aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId);
 
-    const salePrice = parseFloat(String(product.target_sale_price ?? 0)) || 0;
-    const origPrice = parseFloat(String(product.target_original_price ?? 0)) || 0;
+    let salePrice = parseFloat(String(product.target_sale_price ?? 0)) || 0;
+    let origPrice = parseFloat(String(product.target_original_price ?? 0)) || 0;
     const discountStr = String(product.discount ?? '').replace('%', '');
+
+    // Fallback scraping se il prezzo non arriva dall'API
+    if (salePrice === 0) {
+      console.warn('[ali] prezzo zero da API per', productId, '— provo scraping');
+      const scraped = await scrapeAliPrice(productId);
+      if (scraped.price > 0) {
+        salePrice = scraped.price;
+        origPrice = scraped.origPrice > scraped.price ? scraped.origPrice : origPrice;
+        console.log('[ali] prezzo da scraping:', salePrice, '| orig:', origPrice);
+      }
+    }
+
     const discountPercent = parseInt(discountStr) || (origPrice > salePrice ? Math.round((1 - salePrice / origPrice) * 100) : 0);
 
     res.json({
@@ -474,6 +586,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       discountedPrice: salePrice,
       discountPercent,
       affiliateUrl,
+      priceWarning: salePrice === 0 ? 'Prezzo non trovato. Inseriscilo manualmente.' : undefined,
     });
 
   } else {
