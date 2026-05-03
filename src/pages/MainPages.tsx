@@ -798,6 +798,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const [priceWarnings, setPriceWarnings] = useState<string[]>([]);
   const [multiEditSelected, setMultiEditSelected] = useState<Set<string>>(new Set());
   const [splittingId, setSplittingId] = useState<string | null>(null);
+  const [mergeMode, setMergeMode] = useState(false);
+  const [mergeSelected, setMergeSelected] = useState<Set<string>>(new Set());
+  const [mergingId, setMergingId] = useState(false);
   const touchStartX = useRef(0);
 
   const safeIdx = Math.min(currentIdx, Math.max(0, queue.length - 1));
@@ -1021,6 +1024,42 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     }
   };
 
+  // Unisce i post selezionati in un unico post multiplo
+  const mergeIntoMulti = async () => {
+    const selectedItems = queue.filter(x => mergeSelected.has(x.id));
+    if (selectedItems.length < 2) return;
+    const allPosts: CreatedPost[] = selectedItems.flatMap(qi => qi.posts as CreatedPost[]);
+    if (allPosts.length > 6) { setPublishErr('Troppi prodotti: massimo 6 per post multiplo'); return; }
+    setMergingId(true);
+    try {
+      const composite = await generateMultiPostImage(allPosts.map(p => p.image)).catch(() => '');
+      const mergedPosts: CreatedPost[] = allPosts.map((p, i) =>
+        i === 0 && composite ? { ...p, generatedImage: composite } : p
+      );
+      const firstIdx = queue.findIndex(x => mergeSelected.has(x.id));
+      const newItem: QueueItem = {
+        id: genId(), tipo: 'multi',
+        posts: mergedPosts,
+        sched: selectedItems[0].sched,
+        status: 'draft', sel: false,
+      };
+      // DB: crea nuovo, cancella selezionati
+      await autopostApi.create(newItem).catch(() => {});
+      await Promise.all(selectedItems.map(x => autopostApi.delete(x.id).catch(() => {})));
+      // UI: inserisci nuovo al posto del primo selezionato, rimuovi gli altri
+      const newQueue = queue.filter(x => !mergeSelected.has(x.id));
+      newQueue.splice(firstIdx, 0, newItem);
+      setQueue(newQueue);
+      setCurrentIdx(Math.max(0, Math.min(firstIdx, newQueue.length - 1)));
+      setMergeSelected(new Set());
+      setMergeMode(false);
+    } catch (e) {
+      setPublishErr(`Errore unione: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setMergingId(false);
+    }
+  };
+
   const publish = async (id: string) => {
     if (publishingId) return;
     const item = queue.find(x => x.id === id);
@@ -1195,9 +1234,15 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     <div className="pg">
       <PageHeader title="Coda AutoPost" onBack={() => nav('dash')} badge={queue.length}
         right={
-          <button className="btn bre bsm" onClick={() => { if (window.confirm('Svuotare tutta la coda?')) clearAll(); }}>
-            🗑️ Svuota
-          </button>
+          <div style={{ display: 'flex', gap: 5 }}>
+            <button className="btn bsm" style={{ background: mergeMode ? 'var(--a1)' : 'var(--bg3)', color: mergeMode ? '#fff' : 'var(--t1)', border: '1px solid var(--bd)' }}
+              onClick={() => { setMergeMode(m => !m); setMergeSelected(new Set()); }}>
+              ☑️ Combina
+            </button>
+            <button className="btn bre bsm" onClick={() => { if (window.confirm('Svuotare tutta la coda?')) clearAll(); }}>
+              🗑️ Svuota
+            </button>
+          </div>
         }
       />
 
@@ -1273,6 +1318,77 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       )}
 
       {publishErr && <ErrorBanner>{publishErr}</ErrorBanner>}
+
+      {/* Pannello Combina — modalità selezione multipla */}
+      {mergeMode && (
+        <div style={{ margin: '0 16px 8px', background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--a1)', overflow: 'hidden' }}>
+          <div style={{ padding: '8px 12px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--a1)' }}>
+              ☑️ COMBINA IN MULTIPLO
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--t3)' }}>
+              {mergeSelected.size > 0 ? `${mergeSelected.size} selezionati` : 'Seleziona ≥ 2 post'}
+            </div>
+          </div>
+          <div style={{ maxHeight: 280, overflowY: 'auto', padding: '4px 8px' }}>
+            {queue.map((qi, idx) => {
+              const qp = qi.posts[0] as CreatedPost;
+              const sel = mergeSelected.has(qi.id);
+              const totalPosts = (() => {
+                const curSelected = [...mergeSelected].filter(id => id !== qi.id);
+                const totalIfAdded = [...curSelected, qi.id].reduce((sum, id) => {
+                  const qx = queue.find(x => x.id === id);
+                  return sum + (qx ? qx.posts.length : 0);
+                }, 0);
+                return totalIfAdded;
+              })();
+              const wouldExceed = !sel && totalPosts > 6;
+              return (
+                <div key={qi.id}
+                  onClick={() => {
+                    if (wouldExceed) { setPublishErr('Massimo 6 prodotti per post multiplo'); return; }
+                    setMergeSelected(prev => { const n = new Set(prev); if (n.has(qi.id)) n.delete(qi.id); else n.add(qi.id); return n; });
+                    setPublishErr(null);
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+                    borderRadius: 8, marginBottom: 3, cursor: wouldExceed ? 'not-allowed' : 'pointer',
+                    background: sel ? 'rgba(99,102,241,0.15)' : 'var(--bg3)',
+                    border: `1px solid ${sel ? 'var(--a1)' : 'transparent'}`,
+                    opacity: wouldExceed ? 0.4 : 1,
+                  }}>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                    border: `2px solid ${sel ? 'var(--a1)' : 'var(--t3)'}`,
+                    background: sel ? 'var(--a1)' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {sel && <span style={{ fontSize: 10, color: '#fff', fontWeight: 700 }}>✓</span>}
+                  </div>
+                  <span style={{ fontSize: 10, color: 'var(--t3)', width: 18, flexShrink: 0 }}>#{idx + 1}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {qi.tipo === 'multi' ? `🗂️ Multiplo (${qi.posts.length}) — ` : ''}{qp.title.slice(0, 40)}{qp.title.length > 40 ? '…' : ''}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--t2)' }}>
+                      {qi.tipo === 'multi' ? `${qi.posts.length} prodotti` : `${qCurrency}${Number(qp.discountedPrice).toFixed(2)} -${qp.discountPercent}%`}
+                    </div>
+                  </div>
+                  <SourceBadge platform={qp.platform} />
+                </div>
+              );
+            })}
+          </div>
+          {mergeSelected.size >= 2 && (
+            <div style={{ padding: '8px 12px' }}>
+              <button className="btn bp bfull" disabled={mergingId}
+                onClick={mergeIntoMulti}>
+                {mergingId ? '⏳ Elaborazione...' : `🗂️ Crea 1 multiplo da ${[...mergeSelected].reduce((sum, id) => { const qi = queue.find(x => x.id === id); return sum + (qi ? qi.posts.length : 0); }, 0)} prodotti`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Post corrente — area swipeable */}
       {item && p && (
@@ -1411,6 +1527,16 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                             }} />
                         </div>
                       </div>
+                      <div className="lbl" style={{ fontSize: 10, marginTop: 6 }}>TESTO PERSONALIZZATO ({'{custom}'})</div>
+                      <input className="inp" style={{ marginBottom: 6, fontSize: 12 }}
+                        key={item.id + '-' + mp.id + '-custom'} defaultValue={mp.customText}
+                        placeholder="Testo personalizzato..."
+                        onBlur={e => updateMultiPostProduct(item.id, mp.id, { customText: e.target.value })} />
+                      <div className="lbl" style={{ fontSize: 10 }}>COUPON ({'{coupon}'})</div>
+                      <input className="inp" style={{ fontSize: 12 }}
+                        key={item.id + '-' + mp.id + '-coupon'} defaultValue={mp.coupon ?? ''}
+                        placeholder="es. SCONTO10"
+                        onBlur={e => updateMultiPostProduct(item.id, mp.id, { coupon: e.target.value || undefined })} />
                     </div>
                   </div>
                 );
