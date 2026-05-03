@@ -142,6 +142,11 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{checkout}':        '',
   };
 
+  const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;
+  for (const [tagName, val] of Object.entries(tagOverrides)) {
+    if (!(tagName in tags)) tags[tagName] = val || '';
+  }
+
   const SENTINEL = '\x01';
   const knownTagNames = new Set(Object.keys(tags));
   let t = contenuto;

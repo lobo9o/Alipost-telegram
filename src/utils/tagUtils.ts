@@ -101,6 +101,14 @@ export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]
       ? { ...t, value: post.tagOverrides![t.name] }
       : t
   );
+  // Aggiungi in effectiveTags anche i tagOverrides per tag non presenti nell'array globale
+  if (post.tagOverrides) {
+    for (const [tagName, val] of Object.entries(post.tagOverrides)) {
+      if (!builtIn[tagName] && !effectiveTags.some(t => t.name === tagName)) {
+        effectiveTags.push({ id: tagName, name: tagName, value: val });
+      }
+    }
+  }
   const knownTags = new Set([...Object.keys(builtIn), ...effectiveTags.map(t => t.name)]);
 
   // Blocchi condizionali annidati {_ ... _}: elabora dall'interno verso l'esterno
