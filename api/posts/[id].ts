@@ -245,6 +245,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   // ── POST — publish to Telegram ───────────────────────────────
   const { post, layoutContenuto, keyboardContenuto, generatedImage, disableNotification = true } = req.body ?? {};
+  console.log('[publish] disableNotification from body:', req.body?.disableNotification, '→ resolved:', disableNotification);
   if (!post) { res.status(400).json({ error: 'post required' }); return; }
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -285,8 +286,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   let tgRes: Response;
   const hasImage = post.image && post.image !== 'placeholder.jpg' && post.image.startsWith('http');
 
+  // disable_notification: lo includiamo SOLO quando true (silenzioso).
+  // Se false o omesso, Telegram notifica per default — "false" in multipart viene ignorato da alcuni client.
+  console.log('[publish] disable_notification final:', disableNotification);
+
   if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {
-    // Send template-generated image as file upload
     const base64 = generatedImage.replace(/^data:image\/\w+;base64,/, '');
     const imgBuffer = Buffer.from(base64, 'base64');
     const form = new FormData();
@@ -294,7 +298,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'post.jpg');
     form.append('caption', messageText.slice(0, 1024));
     form.append('parse_mode', 'HTML');
-    form.append('disable_notification', String(disableNotification));
+    if (disableNotification) form.append('disable_notification', 'true');
     if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
     tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
   } else {
@@ -307,7 +311,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           photo: post.image,
           caption: messageText.slice(0, 1024),
           parse_mode: 'HTML',
-          disable_notification: disableNotification,
+          ...(disableNotification ? { disable_notification: true } : {}),
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         }),
       });
@@ -319,7 +323,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           chat_id: channel,
           text: messageText,
           parse_mode: 'HTML',
-          disable_notification: disableNotification,
+          ...(disableNotification ? { disable_notification: true } : {}),
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         }),
       });

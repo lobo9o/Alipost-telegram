@@ -388,9 +388,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const hasGeneratedImage = post.generatedImage && String(post.generatedImage).startsWith('data:image/');
       const hasUrlImage = !hasGeneratedImage && post.image && post.image !== 'placeholder.jpg' && String(post.image).startsWith('http');
 
+      // disable_notification: incluso SOLO quando true — omesso = Telegram notifica per default
+      console.log(`[autopost] disable_notification: ${disableNotification} (sil=${silenzioso} disc=${post.discountPercent} threshold=${notifThreshold})`);
+
       let tgRes: Response;
       if (hasGeneratedImage) {
-        // Immagine con overlay generata dal browser — upload multipart
         const base64Data = String(post.generatedImage).replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
         const formData = new FormData();
@@ -398,7 +400,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
         formData.append('caption', messageText.slice(0, 1024));
         formData.append('parse_mode', 'HTML');
-        formData.append('disable_notification', String(disableNotification));
+        if (disableNotification) formData.append('disable_notification', 'true');
         if (replyMarkup) formData.append('reply_markup', JSON.stringify(replyMarkup));
         tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
       } else if (hasUrlImage) {
@@ -410,7 +412,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             photo: post.image,
             caption: messageText.slice(0, 1024),
             parse_mode: 'HTML',
-            disable_notification: disableNotification,
+            ...(disableNotification ? { disable_notification: true } : {}),
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
@@ -422,7 +424,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             chat_id: channel,
             text: messageText.slice(0, 4096),
             parse_mode: 'HTML',
-            disable_notification: disableNotification,
+            ...(disableNotification ? { disable_notification: true } : {}),
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
