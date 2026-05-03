@@ -786,6 +786,19 @@ function resolveMultiPostText(contenuto: string, posts: CreatedPost[], tags: Tag
   return posts.map(p => resolvePostTags(contenuto, p, tags, p.platform === 'aliexpress' ? currency : '€')).join('\n');
 }
 
+// Estrae le etichette dei pulsanti dal testo di un layout tastiera
+function parseKbButtons(contenuto: string | undefined): string[] {
+  if (!contenuto?.trim()) return [];
+  return contenuto.trim().split('\n')
+    .filter(r => r.trim())
+    .flatMap(row => row.split('&&').map(btn => {
+      const clean = btn.trim().replace(/^#[grb]\s+/, '');
+      const lastDash = clean.lastIndexOf(' - ');
+      if (lastDash === -1) return null;
+      return clean.slice(0, lastDash).trim();
+    }).filter((x): x is string => x !== null && x !== ''));
+}
+
 // ============================================================
 // QUEUE PAGE
 // ============================================================
@@ -961,15 +974,20 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     setSplittingId(sourceItem.id);
     try {
       const genSingle = async (mp: CreatedPost): Promise<CreatedPost> => {
-        const tpl = templates.find(t => t.id === mp.templateId);
-        if (!tpl) return mp;
-        const cur = mp.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-        const generatedImage = await generatePostImage(tpl, mp.image, mp.isHistoricalLow, mp.platform, {
-          prezzo: `${cur}${Number(mp.discountedPrice).toFixed(2)}`,
-          prezzoPrecedente: `${cur}${Number(mp.originalPrice).toFixed(2)}`,
-          sconto: `-${mp.discountPercent}%`, testoCustom: mp.customText,
+        // Assegna il layout/keyboard standard per post singolo (non quello del multiplo)
+        const defaultLay = layouts.find(l => l.tipo === (mp.platform === 'aliexpress' ? 'aliexpress' : 'normal'));
+        const layoutId = defaultLay?.id ?? mp.layoutId;
+        const keyboardId = defaultLay?.keyboardId ?? keyboards[0]?.id ?? mp.keyboardId;
+        const mpWithLayout: CreatedPost = { ...mp, layoutId, keyboardId };
+        const tpl = templates.find(t => t.id === mpWithLayout.templateId);
+        if (!tpl) return mpWithLayout;
+        const cur = mpWithLayout.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const generatedImage = await generatePostImage(tpl, mpWithLayout.image, mpWithLayout.isHistoricalLow, mpWithLayout.platform, {
+          prezzo: `${cur}${Number(mpWithLayout.discountedPrice).toFixed(2)}`,
+          prezzoPrecedente: `${cur}${Number(mpWithLayout.originalPrice).toFixed(2)}`,
+          sconto: `-${mpWithLayout.discountPercent}%`, testoCustom: mpWithLayout.customText,
         }).catch(() => undefined);
-        return generatedImage ? { ...mp, generatedImage } : mp;
+        return generatedImage ? { ...mpWithLayout, generatedImage } : mpWithLayout;
       };
       const genMultiComposite = async (posts: CreatedPost[]): Promise<CreatedPost[]> => {
         const composite = await generateMultiPostImage(posts.map(p => p.image)).catch(() => '');
@@ -1219,6 +1237,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         ? resolveMultiPostText(layout.contenuto, item.posts as CreatedPost[], tags, qCurrency)
         : resolvePostTags(layout.contenuto, p, tags, qCurrency))
     : '';
+  // Bottoni tastiera reale per la preview
+  const effectiveKbId = layout?.keyboardId ?? (isMultiPost ? undefined : p?.keyboardId);
+  const effectiveKb = keyboards.find(k => k.id === effectiveKbId);
+  const kbButtons: string[] | undefined = effectiveKb
+    ? parseKbButtons(effectiveKb.contenuto)
+    : (isMultiPost ? undefined : [`🛒 Compra su ${p?.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]);
   const isEditing = expandedId === item?.id;
 
   // Post in coda già pubblicati oggi (con posizione aggiornata dinamicamente)
@@ -1443,22 +1467,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           {/* Testo completo OPPURE form modifica */}
           {!isEditing ? (
             <div style={{ padding: '0 16px 24px' }}>
-              {isMultiPost && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                  {(item.posts as CreatedPost[]).map((mp, idx) => (
-                    <span key={mp.id} style={{ fontSize: 11, background: 'var(--bg3)', borderRadius: 6, padding: '2px 8px', color: 'var(--t2)' }}>
-                      {idx + 1}. {mp.title.slice(0, 28)}{mp.title.length > 28 ? '…' : ''}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <TelegramPreview
-                text={previewText}
-                buttons={isMultiPost
-                  ? undefined
-                  : [`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]
-                }
-              />
+              <TelegramPreview text={previewText} buttons={kbButtons} />
             </div>
           ) : isMultiPost ? (
             // ── Pannello modifica post multiplo ──
@@ -1605,7 +1614,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               {previewText && (
                 <>
                   <div className="stit">ANTEPRIMA TESTO</div>
-                  <TelegramPreview text={previewText} buttons={undefined} />
+                  <TelegramPreview text={previewText} buttons={kbButtons} />
                 </>
               )}
             </div>
@@ -1682,7 +1691,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               {previewText && (
                 <>
                   <div className="stit">ANTEPRIMA TESTO</div>
-                  <TelegramPreview text={previewText} buttons={[`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]} />
+                  <TelegramPreview text={previewText} buttons={kbButtons} />
                 </>
               )}
             </div>
