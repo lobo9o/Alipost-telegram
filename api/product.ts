@@ -343,7 +343,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
 
     // Dati extra (resiliente: non fallisce se non presenti)
-    const reviews = pick(data, 'customerReviews', 'CustomerReviews') as any;
+    // customerReviews è sul singolo item, non sulla root della risposta
+    const reviews = pick(item, 'customerReviews', 'CustomerReviews') as any;
     const stelle = reviews ? String(pick(reviews, 'starRating', 'StarRating') ?? '') : '';
     const recensioni = reviews ? String(pick(reviews, 'count', 'Count') ?? '') : '';
 

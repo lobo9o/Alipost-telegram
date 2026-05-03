@@ -599,6 +599,11 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
               <input className="inp" value={linkInput} onChange={e => setLinkInput(e.target.value)}
                 placeholder="https://amazon.it/... oppure aliexpress.com/..."
                 onKeyDown={e => e.key === 'Enter' && sendLink()} />
+              <button className="btn bgh" title="Incolla dagli appunti"
+                style={{ width: 44, padding: 0, flexShrink: 0, fontSize: 18 }}
+                onClick={() => navigator.clipboard.readText().then(t => setLinkInput(t.trim())).catch(() => {})}>
+                📋
+              </button>
               <button className="btn bp" onClick={sendLink} style={{ width: 44, padding: 0, flexShrink: 0 }}>+</button>
             </div>
           </div>
@@ -825,6 +830,17 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     }));
   };
 
+  // Aggiorna un singolo prodotto dentro un post multiplo + persiste nel DB
+  const updateMultiPostProduct = async (itemId: string, postId: string, changes: Partial<CreatedPost>) => {
+    const qItem = queue.find(x => x.id === itemId);
+    if (!qItem) return;
+    const updatedPosts = (qItem.posts as CreatedPost[]).map(p =>
+      p.id === postId ? { ...p, ...changes } : p
+    );
+    setQueue(q => q.map(x => x.id === itemId ? { ...x, posts: updatedPosts } : x));
+    await autopostApi.update(itemId, { posts: updatedPosts, status: qItem.status }).catch(() => {});
+  };
+
   // Aggiorna post + persiste subito nel DB + rigenera immagine in background
   const updatePostWithImage = async (itemId: string, changes: Partial<CreatedPost>) => {
     const currentItem = queue.find(x => x.id === itemId);
@@ -987,11 +1003,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           const postsWithImg = await genMultiComposite(remainingPosts);
           updatedItem = { ...sourceItem, posts: postsWithImg };
         }
+        // Aggiorna DB prima di aggiornare UI, così il polling non sovrascrive
+        await autopostApi.update(sourceItem.id, { posts: updatedItem.posts, status: sourceItem.status }).catch(() => {});
         const newQueue = [...queue];
         newQueue[insertAfterIdx] = updatedItem;
         newQueue.splice(insertAfterIdx + 1, 0, ...newItems);
         setQueue(newQueue);
-        await autopostApi.update(sourceItem.id, { posts: updatedItem.posts, tipo: updatedItem.tipo }).catch(() => {});
       }
 
       await Promise.all(newItems.map(ni => autopostApi.create(ni).catch(() => {})));
@@ -1332,37 +1349,69 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             <div style={{ padding: '12px 16px 28px', borderTop: '1px solid var(--bd)' }}>
               <div className="stit">POST MULTIPLO — {item.posts.length} PRODOTTI</div>
               <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 8 }}>
-                Seleziona i link per eliminarli o creare nuovi post
+                Tocca la riga per selezionare · modifica titolo e prezzi nei campi sotto
               </div>
               {(item.posts as CreatedPost[]).map((mp, idx) => {
                 const sel = multiEditSelected.has(mp.id);
                 return (
-                  <div key={mp.id}
-                    onClick={() => setMultiEditSelected(prev => {
-                      const n = new Set(prev);
-                      if (n.has(mp.id)) n.delete(mp.id); else n.add(mp.id);
-                      return n;
-                    })}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '8px 10px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
-                      background: sel ? 'rgba(99,102,241,0.15)' : 'var(--bg3)',
-                      border: `1px solid ${sel ? 'var(--a1)' : 'transparent'}`,
-                    }}>
-                    <div style={{
-                      width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-                      border: `2px solid ${sel ? 'var(--a1)' : 'var(--t3)'}`,
-                      background: sel ? 'var(--a1)' : 'transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {sel && <span style={{ fontSize: 11, color: '#fff', fontWeight: 700 }}>✓</span>}
+                  <div key={mp.id} style={{ marginBottom: 8 }}>
+                    {/* Header selezionabile */}
+                    <div
+                      onClick={() => setMultiEditSelected(prev => {
+                        const n = new Set(prev);
+                        if (n.has(mp.id)) n.delete(mp.id); else n.add(mp.id);
+                        return n;
+                      })}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '6px 10px', borderRadius: sel ? '8px 8px 0 0' : 8, cursor: 'pointer',
+                        background: sel ? 'rgba(99,102,241,0.15)' : 'var(--bg3)',
+                        border: `1px solid ${sel ? 'var(--a1)' : 'transparent'}`,
+                      }}>
+                      <div style={{
+                        width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                        border: `2px solid ${sel ? 'var(--a1)' : 'var(--t3)'}`,
+                        background: sel ? 'var(--a1)' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {sel && <span style={{ fontSize: 11, color: '#fff', fontWeight: 700 }}>✓</span>}
+                      </div>
+                      <span style={{ fontSize: 12, color: 'var(--t3)', width: 16, flexShrink: 0 }}>{idx + 1}.</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mp.title}</div>
+                        <div style={{ fontSize: 11, color: 'var(--t2)' }}>{qCurrency}{Number(mp.discountedPrice).toFixed(2)} (-{mp.discountPercent}%)</div>
+                      </div>
+                      <SourceBadge platform={mp.platform} />
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--t3)', width: 16, flexShrink: 0 }}>{idx + 1}.</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mp.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--t2)' }}>{qCurrency}{Number(mp.discountedPrice).toFixed(2)} (-{mp.discountPercent}%)</div>
+                    {/* Campi modifica sempre visibili */}
+                    <div style={{ background: 'var(--bg2)', border: '1px solid var(--bd)', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '8px 10px' }}>
+                      <input className="inp" style={{ marginBottom: 6, fontSize: 12 }}
+                        key={item.id + '-' + mp.id + '-title'} defaultValue={mp.title}
+                        placeholder="Titolo"
+                        onBlur={e => updateMultiPostProduct(item.id, mp.id, { title: e.target.value })} />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ flex: 1 }}>
+                          <div className="lbl" style={{ fontSize: 10 }}>PREZZO ORIG.</div>
+                          <input className="inp" type="text" inputMode="decimal" style={{ fontSize: 12 }}
+                            key={item.id + '-' + mp.id + '-orig'} defaultValue={mp.originalPrice}
+                            onBlur={e => {
+                              const orig = parseFloat(e.target.value.replace(',', '.')) || 0;
+                              const pct = orig > 0 ? Math.round((1 - mp.discountedPrice / orig) * 100) : 0;
+                              updateMultiPostProduct(item.id, mp.id, { originalPrice: orig, discountPercent: Math.max(0, pct) });
+                            }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div className="lbl" style={{ fontSize: 10 }}>PREZZO SCONT.</div>
+                          <input className="inp" type="text" inputMode="decimal" style={{ fontSize: 12 }}
+                            key={item.id + '-' + mp.id + '-disc'} defaultValue={mp.discountedPrice}
+                            onBlur={e => {
+                              const disc = parseFloat(e.target.value.replace(',', '.')) || 0;
+                              const pct = mp.originalPrice > 0 ? Math.round((1 - disc / mp.originalPrice) * 100) : 0;
+                              updateMultiPostProduct(item.id, mp.id, { discountedPrice: disc, discountPercent: Math.max(0, pct) });
+                            }} />
+                        </div>
+                      </div>
                     </div>
-                    <SourceBadge platform={mp.platform} />
                   </div>
                 );
               })}
@@ -1394,8 +1443,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                         }
                         const tipo = remaining.length === 1 ? 'single' as const : 'multi' as const;
                         const updated = { ...item, posts: updatedPosts, tipo };
+                        // Aggiorna DB prima di aggiornare UI — evita il reset dal polling
+                        await autopostApi.update(item.id, { posts: updatedPosts, status: item.status }).catch(() => {});
                         setQueue(q => q.map(x => x.id === item.id ? updated : x));
-                        autopostApi.update(item.id, { posts: updatedPosts, tipo }).catch(() => {});
                         setMultiEditSelected(new Set());
                       } finally { setSplittingId(null); }
                     }}>
