@@ -168,11 +168,18 @@ function nowMinutesRome(): number {
   return h * 60 + m;
 }
 
+let migrationDone = false;
+
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   // Vercel invia CRON_SECRET come Bearer token nell'header Authorization
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && req.headers['authorization'] !== `Bearer ${cronSecret}`) {
     res.status(401).json({ error: 'unauthorized' }); return;
+  }
+
+  if (!migrationDone) {
+    await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS silenzioso boolean`.catch(() => {});
+    migrationDone = true;
   }
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;

@@ -1233,6 +1233,21 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         <div className="fld" style={{ margin: 0 }}><label className="lbl">Ora fine</label><input type="time" className="inp" value={s.oraF} onChange={e => setS({ ...s, oraF: e.target.value })} /></div>
       </div>
       <div className="fld">
+        <label className="lbl">Intervallo tra i post</label>
+        <select className="sel" value={(() => {
+          const opts = [5,10,15,20,25,30,40,45,60,75,90,120,150,180,240,300,360,480,720,1440];
+          return opts.includes(s.interv) ? s.interv : s.interv;
+        })()} onChange={e => setS({ ...s, interv: parseInt(e.target.value) })}>
+          {[5,10,15,20,25,30,40,45,60,75,90,120,150,180,240,300,360,480,720,1440]
+            .concat(![5,10,15,20,25,30,40,45,60,75,90,120,150,180,240,300,360,480,720,1440].includes(s.interv) ? [s.interv] : [])
+            .sort((a,b) => a - b)
+            .map(m => {
+              const label = m < 60 ? `${m} minuti` : m % 60 === 0 ? `${m/60} ${m/60===1?'ora':'ore'}` : `${Math.floor(m/60)}h ${m%60}min`;
+              return <option key={m} value={m}>{label}</option>;
+            })}
+        </select>
+      </div>
+      <div className="fld">
         <label className="lbl">Pubblica con notifica se sconto ≥</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
@@ -1253,24 +1268,9 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
         <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>
           {s.notifThreshold !== undefined && s.notifThreshold > 0
-            ? `Post con sconto ≥ ${s.notifThreshold}% → 🔔 notifica · sotto → 🔕 silenzioso`
-            : 'Vuoto = tutti i post silenziosissimi per default'}
+            ? `Sconto ≥ ${s.notifThreshold}% → 🔔 notifica · sotto soglia → 🔕 silenzioso`
+            : 'Vuoto = tutti i post silenziosissimi (usa il toggle per-post per forzare notifica)'}
         </div>
-      </div>
-      <div className="fld">
-        <label className="lbl">Intervallo tra i post</label>
-        <select className="sel" value={(() => {
-          const opts = [5,10,15,20,25,30,40,45,60,75,90,120,150,180,240,300,360,480,720,1440];
-          return opts.includes(s.interv) ? s.interv : s.interv;
-        })()} onChange={e => setS({ ...s, interv: parseInt(e.target.value) })}>
-          {[5,10,15,20,25,30,40,45,60,75,90,120,150,180,240,300,360,480,720,1440]
-            .concat(![5,10,15,20,25,30,40,45,60,75,90,120,150,180,240,300,360,480,720,1440].includes(s.interv) ? [s.interv] : [])
-            .sort((a,b) => a - b)
-            .map(m => {
-              const label = m < 60 ? `${m} minuti` : m % 60 === 0 ? `${m/60} ${m/60===1?'ora':'ore'}` : `${Math.floor(m/60)}h ${m%60}min`;
-              return <option key={m} value={m}>{label}</option>;
-            })}
-        </select>
       </div>
       <div className="fld">
         <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>
