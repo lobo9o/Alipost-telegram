@@ -224,6 +224,15 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
         </div>
       </div>
 
+      {/* Dynamic tag fields (stelle, recensioni, coupon, etc.) if present in layout */}
+      <DynamicTagFields
+        layout={currentLayout}
+        post={post}
+        postTags={tags}
+        itemId={post.id}
+        onUpdate={(_id, ch) => update(ch)}
+      />
+
       {/* Live text preview */}
       <div className="stit">ANTEPRIMA TESTO (aggiornamento in tempo reale)</div>
       <TelegramPreview
