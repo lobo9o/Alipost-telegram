@@ -1033,7 +1033,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState('');
-  const [openAmz, setOpenAmz] = useState(true);
+  const [openAmz, setOpenAmz] = useState(false);
   const [openAli, setOpenAli] = useState(false);
 
   React.useEffect(() => { setS(settings); }, [settings]);

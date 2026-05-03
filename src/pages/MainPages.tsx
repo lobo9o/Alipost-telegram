@@ -576,22 +576,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
             value={mode} onChange={handleModeChange}
           />
 
-          {mode === 'multi' && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 2px' }}>
-              <button className="btn bgh" onClick={goToPrevGroup} disabled={currentMultiIdx <= 0}
-                style={{ width: 44, height: 40, fontSize: 20, opacity: currentMultiIdx <= 0 ? 0.25 : 1 }}>←</button>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>Multiplo {currentMultiIdx + 1} / {multiItems.length}</div>
-                <div style={{ fontSize: 11, color: 'var(--t3)' }}>{activeLinks.length} link in questo gruppo</div>
-              </div>
-              <button className="btn bgh" onClick={goToNextGroup}
-                style={{ width: 44, height: 40, fontSize: 20 }}>→</button>
-            </div>
-          )}
-
-          {mode === 'multi' && <InfoBanner>Da 2 a 6 link per gruppo → 1 post multiplo per gruppo. Usa ← → per creare e navigare tra i gruppi.</InfoBanner>}
           {err && <ErrorBanner>{err}</ErrorBanner>}
-          {feedback && <div className="feedback-ok">{feedback}</div>}
 
           <div className="stit">INSERISCI LINK</div>
           <div style={{ padding: '0 16px 10px' }}>
@@ -599,11 +584,6 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
               <input className="inp" value={linkInput} onChange={e => setLinkInput(e.target.value)}
                 placeholder="https://amazon.it/... oppure aliexpress.com/..."
                 onKeyDown={e => e.key === 'Enter' && sendLink()} />
-              <button className="btn bgh" title="Incolla dagli appunti"
-                style={{ width: 44, padding: 0, flexShrink: 0, fontSize: 18 }}
-                onClick={() => navigator.clipboard.readText().then(t => setLinkInput(t.trim())).catch(() => {})}>
-                📋
-              </button>
               <button className="btn bp" onClick={sendLink} style={{ width: 44, padding: 0, flexShrink: 0 }}>+</button>
             </div>
           </div>
@@ -620,6 +600,29 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
                 </div>
               ))}
             </>
+          )}
+
+          {mode === 'multi' && (
+            <div style={{ margin: '4px 16px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
+                <button className="hbk" onClick={goToPrevGroup} disabled={currentMultiIdx <= 0}
+                  style={{ opacity: currentMultiIdx <= 0 ? 0.25 : 1 }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
+                    <path d="M19 12H5M12 5l-7 7 7 7" />
+                  </svg>
+                </button>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Multiplo {currentMultiIdx + 1} / {multiItems.length}</div>
+                  <div style={{ fontSize: 11, color: 'var(--t3)' }}>{activeLinks.length} link in questo gruppo</div>
+                </div>
+                <button className="hbk" onClick={goToNextGroup}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+              <InfoBanner>Da 2 a 6 link per gruppo → 1 post multiplo. Usa le frecce per creare o cambiare gruppo.</InfoBanner>
+            </div>
           )}
 
           {canCreate && (
@@ -1313,8 +1316,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 
       {/* Contatore + navigazione frecce */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 4px', gap: 8 }}>
-        <button className="btn bgh bsm" disabled={safeIdx === 0}
-          onClick={() => { setCurrentIdx(i => i - 1); setExpandedId(null); }}>←</button>
+        <button className="hbk" disabled={safeIdx === 0} style={{ opacity: safeIdx === 0 ? 0.25 : 1 }}
+          onClick={() => { setCurrentIdx(i => i - 1); setExpandedId(null); }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
+            <path d="M19 12H5M12 5l-7 7 7 7" />
+          </svg>
+        </button>
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--a1)' }}>{safeIdx + 1}</span>
           <span style={{ fontSize: 13, color: 'var(--t3)' }}> / {queue.length}</span>
@@ -1325,8 +1332,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             </span>
           )}
         </div>
-        <button className="btn bgh bsm" disabled={safeIdx === queue.length - 1}
-          onClick={() => { setCurrentIdx(i => i + 1); setExpandedId(null); }}>→</button>
+        <button className="hbk" disabled={safeIdx === queue.length - 1} style={{ opacity: safeIdx === queue.length - 1 ? 0.25 : 1 }}
+          onClick={() => { setCurrentIdx(i => i + 1); setExpandedId(null); }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
 
       {/* Dot indicator */}
