@@ -578,6 +578,26 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 
           {err && <ErrorBanner>{err}</ErrorBanner>}
 
+          {mode === 'multi' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 16px 2px' }}>
+              <button className="hbk" onClick={goToPrevGroup} disabled={currentMultiIdx <= 0}
+                style={{ opacity: currentMultiIdx <= 0 ? 0.25 : 1 }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
+                  <path d="M19 12H5M12 5l-7 7 7 7" />
+                </svg>
+              </button>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>Multiplo {currentMultiIdx + 1} / {multiItems.length}</div>
+                <div style={{ fontSize: 11, color: 'var(--t3)' }}>{activeLinks.length} link in questo gruppo</div>
+              </div>
+              <button className="hbk" onClick={goToNextGroup}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           <div className="stit">INSERISCI LINK</div>
           <div style={{ padding: '0 16px 10px' }}>
             <div className="irow">
@@ -603,26 +623,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
           )}
 
           {mode === 'multi' && (
-            <div style={{ margin: '4px 16px 0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
-                <button className="hbk" onClick={goToPrevGroup} disabled={currentMultiIdx <= 0}
-                  style={{ opacity: currentMultiIdx <= 0 ? 0.25 : 1 }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
-                    <path d="M19 12H5M12 5l-7 7 7 7" />
-                  </svg>
-                </button>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>Multiplo {currentMultiIdx + 1} / {multiItems.length}</div>
-                  <div style={{ fontSize: 11, color: 'var(--t3)' }}>{activeLinks.length} link in questo gruppo</div>
-                </div>
-                <button className="hbk" onClick={goToNextGroup}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
-                    <path d="M5 12h14M12 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-              <InfoBanner>Da 2 a 6 link per gruppo → 1 post multiplo. Usa le frecce per creare o cambiare gruppo.</InfoBanner>
-            </div>
+            <InfoBanner>Da 2 a 6 link per gruppo → 1 post multiplo. Usa le frecce per creare o cambiare gruppo.</InfoBanner>
           )}
 
           {canCreate && (
