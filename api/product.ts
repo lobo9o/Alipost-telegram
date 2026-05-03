@@ -133,17 +133,21 @@ async function scrapeAmazonReviews(asin: string, domain: string): Promise<{ stel
     if (!r.ok) return { stelle: '', recensioni: '' };
     const html = await r.text();
 
-    // stelle: "4,5 su 5 stelle"  oppure  "4.5 out of 5"
+    // stelle — target elemento a-icon-alt: "4,5 su 5 stelle" / "4.5 out of 5 stars"
     let stelle = '';
-    const starM = html.match(/(\d[,\.]\d)\s*(?:su|out of)\s*5\s*stel/i)
-      ?? html.match(/class="[^"]*a-icon-alt[^"]*"[^>]*>\s*([\d,\.]+)\s*(?:su|out of)/i)
-      ?? html.match(/"ratingValue"\s*:\s*"([\d,\.]+)"/);
+    const starM = html.match(/class="a-icon-alt">\s*([\d,\.]+)\s*(?:su|out of)/i)
+      ?? html.match(/"ratingValue"\s*:\s*"([\d,\.]+)"/)
+      ?? html.match(/(\d[,\.]\d)\s*(?:su|out of)\s*5\s*stel/i);
     if (starM) stelle = starM[1].replace(',', '.');
 
-    // recensioni: "1.234 valutazioni"  oppure  "1,234 ratings"
+    // recensioni — target id="acrCustomerReviewText" o data-hook="total-review-count"
     let recensioni = '';
-    const revM = html.match(/([\d\.\,]+)\s*(?:valutazion|recension|rating|review)/i);
-    if (revM) recensioni = revM[1];
+    const revSpanM = html.match(/id="acrCustomerReviewText"[^>]*>([^<]+)/i)
+      ?? html.match(/data-hook="total-review-count"[^>]*>([^<]+)/i);
+    if (revSpanM) {
+      const numM = revSpanM[1].match(/[\d\.,]+/);
+      if (numM) recensioni = numM[0];
+    }
 
     console.log('[product] scrape reviews:', { stelle, recensioni });
     return { stelle, recensioni };
