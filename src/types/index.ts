@@ -149,6 +149,7 @@ export interface QueueItem {
   sched: string;
   status: PostStatus;
   sel: boolean;
+  silenzioso?: boolean; // undefined=usa soglia impostazioni, true=forza silenzioso, false=forza notifica
 }
 
 export interface PublishedPost {
@@ -208,6 +209,7 @@ export interface AppSettings {
   interv: number;
   attivo: boolean;
   channels: string[];
+  notifThreshold?: number; // sconto minimo % per pubblicare con notifica; undefined=sempre silenzioso
   amazon: AmazonSettings;
   aliexpress: AliExpressSettings;
   terminata: TerminataConfig;

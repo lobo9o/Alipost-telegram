@@ -1223,6 +1223,14 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 
     setPublishingId(id);
 
+    // Calcola disable_notification in base a silenzioso per-post e soglia globale
+    const sil = item.silenzioso;
+    const threshold = settings.notifThreshold;
+    let disableNotification: boolean;
+    if (sil === true) disableNotification = true;
+    else if (sil === false) disableNotification = false;
+    else disableNotification = threshold === undefined || (post.discountPercent ?? 0) < threshold;
+
     // Rimuovi subito dalla UI + marca come published nel DB (fire-and-forget — non blocca la UI)
     setQueue(q => q.filter(x => x.id !== id));
     setCurrentIdx(i => Math.max(0, Math.min(i, queue.length - 2)));
@@ -1259,7 +1267,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           generatedImage = await generateMultiPostImage(multiPosts.map(mp => mp.image)).catch(() => undefined);
         }
         const pubResult = await postsApi.publish(post.id, {
-          post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard, generatedImage,
+          post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard, generatedImage, disableNotification,
         });
         autopostApi.delete(id).catch(() => {});
         const now = new Date().toISOString();
@@ -1295,7 +1303,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       }
       const effectiveKbId = layout?.keyboardId ?? post.keyboardId;
       const keyboard = keyboards.find(k => k.id === effectiveKbId) ?? keyboards[0];
-      const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage });
+      const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage, disableNotification });
       autopostApi.delete(id).catch(() => {}); // cleanup finale, fire-and-forget OK (status già aggiornato)
       const now = new Date().toISOString();
       const pubRecord = {
@@ -1556,33 +1564,51 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
 
           {/* Azioni SOPRA l'immagine */}
-          <div style={{ display: 'flex', gap: 5, padding: '2px 16px 8px', overflowX: 'auto', alignItems: 'center' }}>
-            <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060', flexShrink: 0 }}
-              onClick={() => { move(item.id, 'up'); setCurrentIdx(i => Math.max(0, i - 1)); }}
-              disabled={safeIdx === 0}>↑ Su</button>
-            <button className="btn bsm" style={{ background: '#071a38', color: '#60a5fa', border: '1px solid #0e3060', flexShrink: 0 }}
-              onClick={() => { move(item.id, 'down'); setCurrentIdx(i => Math.min(queue.length - 1, i + 1)); }}
-              disabled={safeIdx === queue.length - 1}>↓ Giù</button>
-            <div style={{ flex: 1 }} />
-            <button className="btn bsm bgh" style={{ flexShrink: 0 }}
-              onClick={() => setExpandedId(isEditing ? null : item.id)}>
-              {isEditing ? '✕ Chiudi' : '✏️ Modifica'}
-            </button>
-            <button className="btn bgh bsm" style={{ flexShrink: 0 }}
-              onClick={() => regenerate(item.id)}
-              disabled={!!regeneratingId}>
-              {regeneratingId === item.id ? '⏳' : '🔄'}
-            </button>
-            <button
-              className="btn bgr bsm"
-              style={{ flexShrink: 0, minWidth: 90, opacity: publishingId ? 0.6 : 1 }}
-              onClick={() => publish(item.id)}
-              disabled={!!publishingId}
-            >
-              {publishingId === item.id ? '⏳ Invio...' : '⚡ Pubblica'}
-            </button>
-            <button className="btn bre bsm" style={{ flexShrink: 0 }} onClick={() => del(item.id)}>🗑️</button>
-          </div>
+          {(() => {
+            const sil = item.silenzioso;
+            const notifLabel = sil === false ? '🔔 Notif.' : sil === true ? '🔕 Silen.' : '🔔 Auto';
+            const notifBg = sil === false ? 'rgba(74,222,128,0.15)' : sil === true ? 'rgba(100,100,100,0.15)' : 'var(--bg3)';
+            const notifColor = sil === false ? '#4ade80' : sil === true ? 'var(--t3)' : 'var(--t2)';
+            const notifBorder = sil === false ? '1px solid #4ade80' : sil === true ? '1px solid var(--bd)' : '1px solid var(--bd)';
+            const btnBase: React.CSSProperties = { height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--t2)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '0 10px', gap: 4, flexShrink: 0 };
+            const toggleSil = () => {
+              const next = sil === undefined ? false : sil === false ? true : undefined;
+              setQueue(q => q.map(x => x.id === item.id ? { ...x, silenzioso: next } : x));
+              autopostApi.update(item.id, { silenzioso: next ?? null } as any).catch(() => {});
+            };
+            return (
+              <div style={{ padding: '4px 16px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {/* Riga secondaria: posizione + notifica + modifica + refresh + elimina */}
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button style={{ ...btnBase, opacity: safeIdx === 0 ? 0.3 : 1 }}
+                    onClick={() => { move(item.id, 'up'); setCurrentIdx(i => Math.max(0, i - 1)); }}
+                    disabled={safeIdx === 0}>↑ Su</button>
+                  <button style={{ ...btnBase, opacity: safeIdx === queue.length - 1 ? 0.3 : 1 }}
+                    onClick={() => { move(item.id, 'down'); setCurrentIdx(i => Math.min(queue.length - 1, i + 1)); }}
+                    disabled={safeIdx === queue.length - 1}>↓ Giù</button>
+                  <button style={{ ...btnBase, background: notifBg, color: notifColor, border: notifBorder }} onClick={toggleSil}>
+                    {notifLabel}
+                  </button>
+                  <div style={{ flex: 1 }} />
+                  <button style={{ ...btnBase }} onClick={() => setExpandedId(isEditing ? null : item.id)}>
+                    {isEditing ? '✕' : '✏️'}
+                  </button>
+                  <button style={{ ...btnBase, opacity: regeneratingId ? 0.5 : 1 }}
+                    onClick={() => regenerate(item.id)} disabled={!!regeneratingId}>
+                    {regeneratingId === item.id ? '⏳' : '🔄'}
+                  </button>
+                  <button style={{ ...btnBase, background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                    onClick={() => del(item.id)}>🗑️</button>
+                </div>
+                {/* Riga primaria: pubblica (full width, prominente) */}
+                <button
+                  style={{ height: 42, borderRadius: 10, border: 'none', background: publishingId ? 'var(--bg3)' : 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', fontSize: 15, fontWeight: 800, cursor: publishingId ? 'not-allowed' : 'pointer', opacity: publishingId ? 0.6 : 1, letterSpacing: 0.3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  onClick={() => publish(item.id)} disabled={!!publishingId}>
+                  {publishingId === item.id ? '⏳ Invio...' : '⚡ Pubblica ora'}
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Anteprima immagine */}
           {isMultiPost ? (

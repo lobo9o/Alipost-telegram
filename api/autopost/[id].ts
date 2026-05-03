@@ -16,22 +16,27 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   const body = req.body ?? {};
   const hasPosts = body.posts !== undefined;
+  const hasSilenzioso = body.silenzioso !== undefined;
   // Strip generatedImage before saving — prevents JSONB bloat
   const postsForDb = hasPosts
     ? (body.posts as any[]).map(({ generatedImage: _g, ...p }: any) => p)
     : undefined;
+  // silenzioso: null → rimetti a NULL (auto), true/false → valore esplicito
+  const silenziosoVal = hasSilenzioso ? (body.silenzioso === null ? null : Boolean(body.silenzioso)) : undefined;
   const [row] = hasPosts
     ? await sql`
         UPDATE autopost_queue
         SET posts = ${sql.json(postsForDb!)}, status = ${body.status}, scheduled = ${body.scheduled ?? null}
+            ${hasSilenzioso ? sql`, silenzioso = ${silenziosoVal}` : sql``}
         WHERE id = ${id} AND user_id = ${userId}
-        RETURNING id, posts, status, scheduled, created_at AS "createdAt"
+        RETURNING id, posts, status, scheduled, silenzioso, created_at AS "createdAt"
       `
     : await sql`
         UPDATE autopost_queue
         SET status = ${body.status}
+            ${hasSilenzioso ? sql`, silenzioso = ${silenziosoVal}` : sql``}
         WHERE id = ${id} AND user_id = ${userId}
-        RETURNING id, posts, status, scheduled, created_at AS "createdAt"
+        RETURNING id, posts, status, scheduled, silenzioso, created_at AS "createdAt"
       `;
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
   const r = row as any;

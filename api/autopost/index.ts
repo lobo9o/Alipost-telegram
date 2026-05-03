@@ -17,7 +17,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   if (req.method === 'GET') {
     const rows = await sql`
-      SELECT id, posts, status, scheduled, created_at AS "createdAt"
+      SELECT id, posts, status, scheduled, silenzioso, created_at AS "createdAt"
       FROM autopost_queue WHERE user_id = ${userId} ORDER BY created_at ASC
     `;
     // Handle legacy rows where posts was stored as JSON string instead of JSONB array
@@ -33,6 +33,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         tipo: Array.isArray(posts) && posts.length > 1 ? 'multi' : 'single',
         sched: r.scheduled ?? 'Auto',
         sel: false,
+        silenzioso: r.silenzioso ?? undefined,
       };
     });
     res.json(parsed);
@@ -40,13 +41,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // Strip generatedImage before saving to DB — prevents JSONB bloat on polling
-  const { id, posts = [], status = 'draft', scheduled = null } = req.body ?? {};
+  const { id, posts = [], status = 'draft', scheduled = null, silenzioso = null } = req.body ?? {};
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
   const postsForDb = (posts as any[]).map(({ generatedImage: _g, ...p }) => p);
   const [row] = await sql`
-    INSERT INTO autopost_queue (id, user_id, posts, status, scheduled)
-    VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled})
-    RETURNING id, posts, status, scheduled, created_at AS "createdAt"
+    INSERT INTO autopost_queue (id, user_id, posts, status, scheduled, silenzioso)
+    VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled}, ${silenzioso})
+    RETURNING id, posts, status, scheduled, silenzioso, created_at AS "createdAt"
   `;
   res.status(201).json(row);
 });

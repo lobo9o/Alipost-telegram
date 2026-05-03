@@ -244,7 +244,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // ── POST — publish to Telegram ───────────────────────────────
-  const { post, layoutContenuto, keyboardContenuto, generatedImage } = req.body ?? {};
+  const { post, layoutContenuto, keyboardContenuto, generatedImage, disableNotification = true } = req.body ?? {};
   if (!post) { res.status(400).json({ error: 'post required' }); return; }
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -294,6 +294,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'post.jpg');
     form.append('caption', messageText.slice(0, 1024));
     form.append('parse_mode', 'HTML');
+    form.append('disable_notification', String(disableNotification));
     if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
     tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
   } else {
@@ -306,6 +307,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           photo: post.image,
           caption: messageText.slice(0, 1024),
           parse_mode: 'HTML',
+          disable_notification: disableNotification,
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         }),
       });
@@ -317,6 +319,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           chat_id: channel,
           text: messageText,
           parse_mode: 'HTML',
+          disable_notification: disableNotification,
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         }),
       });

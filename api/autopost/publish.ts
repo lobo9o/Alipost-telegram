@@ -233,7 +233,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         : sql``;
 
       const [candidate] = await sql`
-        SELECT id, posts FROM autopost_queue
+        SELECT id, posts, silenzioso FROM autopost_queue
         WHERE user_id = ${userId} AND status = 'draft' ${excludeClause}
         ORDER BY created_at ASC LIMIT 1
       `;
@@ -274,6 +274,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
 
     if (!queueItem || !post) { skipped.push(`${userId}: coda vuota o tutti i prezzi scaduti`); continue; }
+
+    // Determina disable_notification:
+    // silenzioso=true → sempre silenzioso; false → sempre notifica; null/undefined → usa soglia settings
+    const silenzioso = (queueItem as any).silenzioso;
+    const notifThreshold = typeof cfg.notifThreshold === 'number' ? cfg.notifThreshold : null;
+    let disableNotification: boolean;
+    if (silenzioso === true) {
+      disableNotification = true;
+    } else if (silenzioso === false) {
+      disableNotification = false;
+    } else {
+      // Auto: notifica solo se lo sconto supera la soglia configurata
+      disableNotification = notifThreshold === null || Number(post.discountPercent ?? 0) < notifThreshold;
+    }
+    console.log(`[autopost] notifica: sil=${silenzioso} threshold=${notifThreshold} disc=${post.discountPercent} → disableNotif=${disableNotification}`);
 
     try {
       // Carica layout testo (con eventuale tastiera associata)
@@ -376,6 +391,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
         formData.append('caption', messageText.slice(0, 1024));
         formData.append('parse_mode', 'HTML');
+        formData.append('disable_notification', String(disableNotification));
         if (replyMarkup) formData.append('reply_markup', JSON.stringify(replyMarkup));
         tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
       } else if (hasUrlImage) {
@@ -387,6 +403,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             photo: post.image,
             caption: messageText.slice(0, 1024),
             parse_mode: 'HTML',
+            disable_notification: disableNotification,
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
@@ -398,6 +415,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             chat_id: channel,
             text: messageText.slice(0, 4096),
             parse_mode: 'HTML',
+            disable_notification: disableNotification,
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });

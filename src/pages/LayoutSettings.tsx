@@ -1233,6 +1233,31 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         <div className="fld" style={{ margin: 0 }}><label className="lbl">Ora fine</label><input type="time" className="inp" value={s.oraF} onChange={e => setS({ ...s, oraF: e.target.value })} /></div>
       </div>
       <div className="fld">
+        <label className="lbl">Pubblica con notifica se sconto ≥</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            className="inp"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={100}
+            style={{ width: 80 }}
+            value={s.notifThreshold ?? ''}
+            placeholder="es. 80"
+            onChange={e => {
+              const v = e.target.value === '' ? undefined : Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+              setS(prev => ({ ...prev, notifThreshold: v }));
+            }}
+          />
+          <span style={{ fontSize: 13, color: 'var(--t2)' }}>%</span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>
+          {s.notifThreshold !== undefined && s.notifThreshold > 0
+            ? `Post con sconto ≥ ${s.notifThreshold}% → 🔔 notifica · sotto → 🔕 silenzioso`
+            : 'Vuoto = tutti i post silenziosissimi per default'}
+        </div>
+      </div>
+      <div className="fld">
         <label className="lbl">Intervallo tra i post</label>
         <select className="sel" value={(() => {
           const opts = [5,10,15,20,25,30,40,45,60,75,90,120,150,180,240,300,360,480,720,1440];
