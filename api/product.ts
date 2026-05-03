@@ -116,6 +116,42 @@ async function creatorsGetItem(
   }
 }
 
+async function scrapeAmazonReviews(asin: string, domain: string): Promise<{ stelle: string; recensioni: string }> {
+  try {
+    const url = `https://${domain}/dp/${asin}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const r = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+    });
+    clearTimeout(timer);
+    if (!r.ok) return { stelle: '', recensioni: '' };
+    const html = await r.text();
+
+    // stelle: "4,5 su 5 stelle"  oppure  "4.5 out of 5"
+    let stelle = '';
+    const starM = html.match(/(\d[,\.]\d)\s*(?:su|out of)\s*5\s*stel/i)
+      ?? html.match(/class="[^"]*a-icon-alt[^"]*"[^>]*>\s*([\d,\.]+)\s*(?:su|out of)/i)
+      ?? html.match(/"ratingValue"\s*:\s*"([\d,\.]+)"/);
+    if (starM) stelle = starM[1].replace(',', '.');
+
+    // recensioni: "1.234 valutazioni"  oppure  "1,234 ratings"
+    let recensioni = '';
+    const revM = html.match(/([\d\.\,]+)\s*(?:valutazion|recension|rating|review)/i);
+    if (revM) recensioni = revM[1];
+
+    console.log('[product] scrape reviews:', { stelle, recensioni });
+    return { stelle, recensioni };
+  } catch {
+    return { stelle: '', recensioni: '' };
+  }
+}
+
 function extractAsin(url: string): string | null {
   for (const p of [/\/dp\/([A-Z0-9]{10})/i, /\/gp\/product\/([A-Z0-9]{10})/i, /\/ASIN\/([A-Z0-9]{10})/i, /[?&]asin=([A-Z0-9]{10})/i]) {
     const m = url.match(p);
@@ -341,9 +377,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
 
     // Dati extra (resiliente: non fallisce se non presenti)
-    // customerReviews non è supportato dall'API Creators — inserimento manuale via tag buttons
-    const stelle = '';
-    const recensioni = '';
+    // customerReviews non è supportato dall'API Creators — scraping pagina prodotto
+    const { stelle, recensioni } = await scrapeAmazonReviews(resolvedAsin, marketplaceDomain);
 
     const byLine = pick(pick(item, 'itemInfo', 'ItemInfo'), 'byLineInfo', 'ByLineInfo') as any;
     const contributors = pick(byLine, 'contributors', 'Contributors') as any[] ?? [];
