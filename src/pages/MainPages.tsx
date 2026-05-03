@@ -408,7 +408,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
     let url = linkInput.trim();
 
     // Se non è un link Amazon/AliExpress riconoscibile, prova a risolvere i redirect (link shortati)
-    const isKnown = detectAmazonLink(url) || /aliexpress\.(com|us|ru)/i.test(url);
+    const isKnown = detectAmazonLink(url) || /aliexpress\.(com|us|ru)/i.test(url) || /s\.click\.aliexpress|a\.aliexpress\.com|ali\.ski|aliexpress\.page\.link/i.test(url);
     if (!isKnown && url.startsWith('http')) {
       try {
         showFeedback('🔍 Risolvo link...');

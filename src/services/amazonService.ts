@@ -16,7 +16,8 @@ const MOCK_CATALOG: Record<string, AmazonProduct> = {
 };
 
 export function detectAmazonLink(url: string): boolean {
-  return /amazon\.(it|com|de|fr|es|co\.uk|co\.jp)/i.test(url);
+  return /amazon\.(it|com|de|fr|es|co\.uk|co\.jp)/i.test(url)
+    || /^https?:\/\/(amzn\.to|amzn\.eu|amzlink\.to|a\.co|amazon\.soy)\//i.test(url);
 }
 
 export function extractASIN(url: string): string | null {
