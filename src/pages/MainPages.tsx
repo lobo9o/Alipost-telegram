@@ -199,20 +199,24 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
             value={post.isHistoricalLow} onChange={handleHistoricalLow} />
         </div>
 
-        {/* 4. Coupon */}
-        <div style={{ marginBottom: 8 }}>
-          <div className="lbl">COUPON <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{coupon}'}</span></div>
-          <input className="inp" value={post.coupon || ''} onChange={e => update({ coupon: e.target.value })}
-            placeholder="Codice sconto (es. PROMO20)..." />
-        </div>
+        {/* 4. Custom text — solo se {custom} è nel layout */}
+        {currentLayout?.contenuto.includes('{custom}') && (
+          <div style={{ marginBottom: 10 }}>
+            <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
+            <textarea className="txta" rows={2} value={post.customText}
+              onChange={e => update({ customText: e.target.value })}
+              placeholder="Testo aggiuntivo..." />
+          </div>
+        )}
 
-        {/* 5. Custom text */}
-        <div style={{ marginBottom: 10 }}>
-          <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
-          <textarea className="txta" rows={2} value={post.customText}
-            onChange={e => update({ customText: e.target.value })}
-            placeholder="Testo aggiuntivo..." />
-        </div>
+        {/* 5. Coupon — solo se {coupon}/{boxcoupon} è nel layout */}
+        {(currentLayout?.contenuto.includes('{coupon}') || currentLayout?.contenuto.includes('{boxcoupon}')) && (
+          <div style={{ marginBottom: 10 }}>
+            <div className="lbl">COUPON <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{coupon}'}</span></div>
+            <input className="inp" value={post.coupon || ''} onChange={e => update({ coupon: e.target.value })}
+              placeholder="Codice sconto (es. PROMO20)..." />
+          </div>
+        )}
 
         {/* 6. Layout testo */}
         <div style={{ marginBottom: 8 }}>
@@ -232,8 +236,8 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
         </div>
       </div>
 
-      {/* 8. Tag editabili presenti nel layout (stelle, recensioni, cat, author…) */}
-      <TagEditButtons layout={currentLayout} post={post} onUpdate={update} />
+      {/* 8. Tag pill: tutti i tag non auto-calcolati presenti nel layout (stelle, recensioni, cat, custom6…) */}
+      <TagEditButtons layout={currentLayout} post={post} postTags={tags} onUpdate={update} />
 
       {/* Preview */}
       <div className="stit">ANTEPRIMA TESTO</div>
@@ -707,78 +711,112 @@ function extractLayoutTags(contenuto: string): string[] {
   return [...new Set(matches)];
 }
 
-// Tag sempre gestiti da campi dedicati sopra — non li ripetiamo nei bottoni
-const DEDICATED_TAG_FIELDS = new Set(['{coupon}', '{boxcoupon}', '{custom}', '{checkout}']);
+// Tag auto-calcolati — non mostrati come pill (non ha senso editarli)
+const AUTO_COMPUTED_TAGS = new Set([
+  '{titolo}', '{titoloup}', '{titoloshort}',
+  '{prezzo}', '{prezzo_scontato}', '{oldprezzo}',
+  '{sconto}', '{perc}', '{valuta}',
+  '{link_affiliato}', '{link}',
+  '{minimo_storico}',
+  '{store}', '{storeup}', '{countryflag}',
+  '{giorno}', '{ora}', '{data}',
+  '{checkout}',
+  // gestiti da campi dedicati nel PostCard:
+  '{custom}', '{coupon}', '{boxcoupon}',
+]);
 
-function TagEditButtons({ layout, post, onUpdate }: {
+type TagPill =
+  | { kind: 'system'; tag: string; label: string; field: keyof CreatedPost; placeholder: string }
+  | { kind: 'custom'; tag: string; label: string; globalValue: string };
+
+function TagEditButtons({ layout, post, postTags, onUpdate }: {
   layout: { contenuto: string } | undefined;
   post: CreatedPost;
+  postTags: Tag[];
   onUpdate: (ch: Partial<CreatedPost>) => void;
 }) {
-  const [activeField, setActiveField] = React.useState<string | null>(null);
+  const [activeTag, setActiveTag] = React.useState<string | null>(null);
   const [tempVal, setTempVal] = React.useState('');
 
   if (!layout) return null;
 
   const layoutTags = extractLayoutTags(layout.contenuto);
-  const seen = new Set<string>();
-  const fields: Array<EditableSystemTag & { tag: string }> = [];
+  const seenFields = new Set<string>();
+  const pills: TagPill[] = [];
+
   for (const tag of layoutTags) {
-    const m = EDITABLE_SYSTEM_TAG_MAP[tag];
-    if (m && !DEDICATED_TAG_FIELDS.has(tag) && !seen.has(m.field as string)) {
-      seen.add(m.field as string);
-      fields.push({ tag, ...m });
+    if (AUTO_COMPUTED_TAGS.has(tag)) continue;
+    const sys = EDITABLE_SYSTEM_TAG_MAP[tag];
+    if (sys) {
+      if (!seenFields.has(sys.field as string)) {
+        seenFields.add(sys.field as string);
+        pills.push({ kind: 'system', tag, label: sys.label, field: sys.field, placeholder: sys.placeholder });
+      }
+      continue;
+    }
+    // tag personalizzato
+    if (!seenFields.has(tag)) {
+      seenFields.add(tag);
+      const globalTag = postTags.find(t => t.name === tag);
+      pills.push({ kind: 'custom', tag, label: tag.replace(/[{}]/g, ''), globalValue: globalTag?.value ?? '' });
     }
   }
-  if (fields.length === 0) return null;
 
-  const save = (field: string, val: string) => {
-    onUpdate({ [field]: val } as Partial<CreatedPost>);
-    setActiveField(null);
+  if (pills.length === 0) return null;
+
+  const getCurrentVal = (p: TagPill) => {
+    if (p.kind === 'system') return String((post as any)[p.field] || '');
+    return post.tagOverrides?.[p.tag] ?? p.globalValue;
   };
+
+  const save = (p: TagPill, val: string) => {
+    if (p.kind === 'system') {
+      onUpdate({ [p.field]: val } as Partial<CreatedPost>);
+    } else {
+      onUpdate({ tagOverrides: { ...post.tagOverrides, [p.tag]: val } });
+    }
+    setActiveTag(null);
+  };
+
+  const activePill = pills.find(p => p.tag === activeTag);
 
   return (
     <div style={{ padding: '0 16px 10px' }}>
       <div className="stit" style={{ padding: '8px 0 6px', margin: 0 }}>TAG NEL LAYOUT</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: activeField ? 8 : 0 }}>
-        {fields.map(f => {
-          const val = String((post as any)[f.field] || '');
-          const active = activeField === f.field;
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: activePill ? 8 : 0 }}>
+        {pills.map(p => {
+          const val = getCurrentVal(p);
+          const active = activeTag === p.tag;
           return (
-            <button key={f.field}
-              onClick={() => { setActiveField(active ? null : f.field as string); setTempVal(val); }}
+            <button key={p.tag}
+              onClick={() => { setActiveTag(active ? null : p.tag); setTempVal(getCurrentVal(p)); }}
               style={{
                 padding: '5px 11px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 border: `1px solid ${active ? 'var(--a1)' : val ? 'var(--am2)' : 'var(--bg4)'}`,
                 background: active ? 'var(--bg4)' : val ? '#1a1200' : 'var(--bg3)',
                 color: active ? 'var(--a1)' : val ? 'var(--am2)' : 'var(--t3)',
               }}>
-              {f.label}{val ? `: ${val.length > 12 ? val.slice(0, 12) + '…' : val}` : ''}
+              {p.label}{val ? `: ${val.length > 14 ? val.slice(0, 14) + '…' : val}` : ''}
             </button>
           );
         })}
       </div>
-      {activeField && (() => {
-        const f = fields.find(x => x.field === activeField)!;
-        return (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input className="inp" style={{ flex: 1 }} autoFocus
-              value={tempVal}
-              placeholder={f.placeholder}
-              onChange={e => setTempVal(e.target.value)}
-              onBlur={() => save(f.field as string, tempVal)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') save(f.field as string, tempVal);
-                if (e.key === 'Escape') setActiveField(null);
-              }}
-            />
-            <button className="btn bgr bsm" style={{ padding: '6px 12px', flexShrink: 0 }}
-              onMouseDown={e => { e.preventDefault(); save(f.field as string, tempVal); }}>
-              ✓
-            </button>
-          </div>
-        );
-      })()}
+      {activePill && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input className="inp" style={{ flex: 1 }} autoFocus
+            value={tempVal}
+            placeholder={activePill.kind === 'system' ? activePill.placeholder : `Valore per ${activePill.label}...`}
+            onChange={e => setTempVal(e.target.value)}
+            onBlur={() => save(activePill, tempVal)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') save(activePill, tempVal);
+              if (e.key === 'Escape') setActiveTag(null);
+            }}
+          />
+          <button className="btn bgr bsm" style={{ padding: '6px 12px', flexShrink: 0 }}
+            onMouseDown={e => { e.preventDefault(); save(activePill, tempVal); }}>✓</button>
+        </div>
+      )}
     </div>
   );
 }
