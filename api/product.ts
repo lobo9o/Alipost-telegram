@@ -402,8 +402,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const userId = requireUserId(req, res);
   if (!userId) return;
 
-  const { platform, url, asin } = req.body ?? {};
+  let { platform, url, asin } = req.body ?? {};
   if (!platform || !url) { res.status(400).json({ error: 'platform e url sono richiesti' }); return; }
+
+  // Auto-correzione: se il frontend manda platform=aliexpress ma l'URL è un link corto Amazon, correggi qui
+  if (platform === 'aliexpress' && AMAZON_SHORT_DOMAINS.test(url)) {
+    console.log('[product] auto-fix platform: aliexpress→amazon per URL', url.slice(0, 60));
+    platform = 'amazon';
+  }
 
   const [settingsRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
   const rawData = settingsRow?.data ?? {};
