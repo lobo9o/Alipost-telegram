@@ -2,10 +2,22 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 
+// Aggiunge la colonna silenzioso se non esiste ancora (migrazione automatica)
+async function ensureSilenziosoColumn() {
+  await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS silenzioso boolean`.catch(() => {});
+}
+
+let migrationDone = false;
+
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['GET', 'POST', 'DELETE'], req, res)) return;
   const userId = requireUserId(req, res);
   if (!userId) return;
+
+  if (!migrationDone) {
+    await ensureSilenziosoColumn();
+    migrationDone = true;
+  }
 
   // DELETE all — clear entire queue for this user
   if (req.method === 'DELETE') {
