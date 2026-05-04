@@ -525,6 +525,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       : finalOriginalPrice > finalDiscountedPrice
         ? Math.round((1 - finalDiscountedPrice / finalOriginalPrice) * 100) : 0;
 
+    // Controlla minimo storico e registra prezzo
+    let isHistoricalLowAmazon = false;
+    if (resolvedAsin && finalDiscountedPrice > 0) {
+      const [histRow] = await sql`
+        SELECT MIN(price)::float AS min_price, COUNT(*)::int AS cnt
+        FROM price_history WHERE product_id = ${resolvedAsin} AND platform = 'amazon'
+      `.catch(() => [null]);
+      if (histRow && Number(histRow.cnt) > 0 && finalDiscountedPrice <= Number(histRow.min_price)) {
+        isHistoricalLowAmazon = true;
+      }
+      sql`INSERT INTO price_history (product_id, platform, price)
+          VALUES (${resolvedAsin}, 'amazon', ${finalDiscountedPrice})`.catch(() => {});
+    }
+
     res.json({
       asin: resolvedAsin,
       title: titleObj ?? '',
@@ -539,6 +553,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       cat: cat || undefined,
       coupon: coupon || undefined,
       priceWarning,
+      isHistoricalLow: isHistoricalLowAmazon || undefined,
     });
 
   } else if (platform === 'aliexpress') {
@@ -584,6 +599,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     const discountPercent = parseInt(discountStr) || (origPrice > salePrice ? Math.round((1 - salePrice / origPrice) * 100) : 0);
 
+    // Controlla minimo storico e registra prezzo
+    let isHistoricalLowAli = false;
+    if (productId && salePrice > 0) {
+      const [histRow] = await sql`
+        SELECT MIN(price)::float AS min_price, COUNT(*)::int AS cnt
+        FROM price_history WHERE product_id = ${productId} AND platform = 'aliexpress'
+      `.catch(() => [null]);
+      if (histRow && Number(histRow.cnt) > 0 && salePrice <= Number(histRow.min_price)) {
+        isHistoricalLowAli = true;
+      }
+      sql`INSERT INTO price_history (product_id, platform, price)
+          VALUES (${productId}, 'aliexpress', ${salePrice})`.catch(() => {});
+    }
+
     res.json({
       productId,
       title: product.product_title ?? '',
@@ -593,6 +622,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       discountPercent,
       affiliateUrl,
       priceWarning: salePrice === 0 ? 'Prezzo non trovato. Inseriscilo manualmente.' : undefined,
+      isHistoricalLow: isHistoricalLowAli || undefined,
     });
 
   } else {

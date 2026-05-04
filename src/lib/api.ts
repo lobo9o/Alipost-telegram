@@ -113,6 +113,7 @@ export interface AmazonProductResult {
   cat?: string;
   coupon?: string;
   priceWarning?: string;
+  isHistoricalLow?: boolean;
 }
 export interface AliExpressProductResult {
   productId: string;
@@ -122,6 +123,7 @@ export interface AliExpressProductResult {
   discountedPrice: number;
   discountPercent: number;
   affiliateUrl: string;
+  isHistoricalLow?: boolean;
 }
 
 export const productApi = {

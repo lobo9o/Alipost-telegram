@@ -60,6 +60,53 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Genera immagine terminata server-side: grayscale + testo overlay (usa sharp)
+async function generateTerminataImageServer(
+  imageUrl: string,
+  config: Record<string, any>,
+): Promise<Buffer> {
+  const sharpMod = await import('sharp').catch(() => null) as any;
+  if (!sharpMod) throw new Error('sharp non installato — esegui: npm install sharp');
+  const sharp = (sharpMod.default ?? sharpMod) as any;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10_000);
+  let imgBuf: Buffer;
+  try {
+    const r = await fetch(imageUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' } });
+    clearTimeout(timer);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    imgBuf = Buffer.from(await r.arrayBuffer());
+  } catch (e) { clearTimeout(timer); throw e; }
+
+  const SIZE = 1024;
+
+  // Step 1: resize + grayscale → buffer intermedio (JPEG RGB)
+  let pipeline = sharp(imgBuf).resize(SIZE, SIZE, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } });
+  if (config.grayscale !== false) pipeline = pipeline.grayscale();
+  const step1 = await pipeline.jpeg({ quality: 95 }).toBuffer();
+
+  // Step 2: composita testo SVG sopra l'immagine in scala di grigi
+  if (!config.overlayText) return step1;
+
+  const fs  = Math.round(((Number(config.overlayTextSize) || 7) / 100) * SIZE);
+  const tx  = Math.round(((Number(config.overlayTextX)    || 50) / 100) * SIZE);
+  const ty  = Math.round(((Number(config.overlayTextY)    || 50) / 100) * SIZE);
+  const sw  = Math.round(fs * 0.08);
+  const col = String(config.overlayTextColor ?? '#ff0000');
+  const txt = String(config.overlayText).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const svg = Buffer.from(
+    `<svg width="${SIZE}" height="${SIZE}">` +
+    `<text x="${tx}" y="${ty}" font-family="Impact,Arial Black,sans-serif"` +
+    ` font-size="${fs}" font-weight="bold" fill="${col}"` +
+    ` stroke="#000" stroke-width="${sw}" stroke-linejoin="round" paint-order="stroke fill"` +
+    ` text-anchor="middle" dominant-baseline="middle">${txt}</text>` +
+    `</svg>`,
+  );
+
+  return sharp(step1).composite([{ input: svg, blend: 'over' }]).jpeg({ quality: 88 }).toBuffer();
+}
+
 function safeCaption(html: string, maxLen: number): string {
   if (html.length <= maxLen) return html;
   const stack: string[] = [];
@@ -251,6 +298,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   if (!migrationDone) {
     await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS silenzioso boolean`.catch(() => {});
+    await sql`
+      CREATE TABLE IF NOT EXISTS price_history (
+        id        BIGSERIAL PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        platform   TEXT NOT NULL,
+        price      NUMERIC(10,2) NOT NULL,
+        recorded_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `.catch(() => {});
+    await sql`CREATE INDEX IF NOT EXISTS price_history_lookup ON price_history (product_id, platform)`.catch(() => {});
+    await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ`.catch(() => {});
+    await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS terminata BOOLEAN DEFAULT false`.catch(() => {});
+    // Pulizia storico prezzi oltre 180 giorni (fire-and-forget)
+    sql`DELETE FROM price_history WHERE recorded_at < now() - interval '180 days'`.catch(() => {});
     migrationDone = true;
   }
 
@@ -417,7 +478,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
-    if (!queueItem || !post) { skipped.push(`${userId}: coda vuota o tutti i prezzi scaduti`); continue; }
+    if (!queueItem || !post) {
+      skipped.push(`${userId}: coda vuota o tutti i prezzi scaduti`);
+    } else {
+
+    // ── Controlla minimo storico ──────────────────────────────────────────────
+    if (post.productId && Number(post.discountedPrice ?? 0) > 0) {
+      const [histRow] = await sql`
+        SELECT MIN(price)::float AS min_price, COUNT(*)::int AS cnt
+        FROM price_history WHERE product_id = ${post.productId} AND platform = ${post.platform}
+      `.catch(() => [null]);
+      if (histRow && Number(histRow.cnt) > 0 && Number(post.discountedPrice) <= Number(histRow.min_price)) {
+        post = { ...post, isHistoricalLow: true };
+      }
+    }
 
     // Determina disable_notification:
     // silenzioso=true → sempre silenzioso; false → sempre notifica; null/undefined → usa soglia settings
@@ -600,6 +674,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           message_id = EXCLUDED.message_id
       `.catch(() => {});
 
+      // Registra prezzo in storico (fire-and-forget)
+      if (post.productId && Number(post.discountedPrice ?? 0) > 0) {
+        sql`INSERT INTO price_history (product_id, platform, price)
+            VALUES (${post.productId}, ${String(post.platform ?? 'amazon')}, ${post.discountedPrice})
+        `.catch(() => {});
+      }
+
       // Rimuove dalla coda
       await sql`DELETE FROM autopost_queue WHERE id = ${queueItem.id}`.catch(() => {});
 
@@ -612,6 +693,96 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       console.error(`[autopost] errore userId=${userId}:`, msg);
       // Ripristina a draft per il prossimo ciclo
       await sql`UPDATE autopost_queue SET status = 'draft' WHERE id = ${queueItem.id}`.catch(() => {});
+    }
+
+    } // ← chiude: else (queueItem && post)
+
+    // ── Controlla offerte scadute (max 3 per run, anche con coda vuota) ────────
+    try {
+      const toCheck = await sql`
+        SELECT id, product_id AS "productId", platform,
+               discounted_price::float AS "discountedPrice",
+               source_url AS "sourceUrl", image,
+               chat_id AS "chatId", message_id AS "messageId",
+               title, original_price::float AS "originalPrice",
+               discount_percent AS "discountPercent",
+               custom_text AS "customText", emoji
+        FROM published_posts
+        WHERE user_id = ${userId}
+          AND NOT COALESCE(terminata, false)
+          AND published_at > now() - interval '48 hours'
+          AND (last_checked_at IS NULL OR last_checked_at < now() - interval '1 hour')
+        ORDER BY last_checked_at ASC NULLS FIRST
+        LIMIT 3
+      `.catch(() => []);
+
+      for (const pub of toCheck) {
+        // Aggiorna subito per evitare doppio check in run sovrapposti
+        await sql`UPDATE published_posts SET last_checked_at = now() WHERE id = ${pub.id}`.catch(() => {});
+
+        const check = await checkPostPrice(pub as any, cfg).catch(() => ({ valid: true as const, currentPrice: undefined as number | undefined }));
+
+        // Registra il prezzo corrente nello storico anche se valido
+        if (check.currentPrice && pub.productId) {
+          sql`INSERT INTO price_history (product_id, platform, price)
+              VALUES (${String(pub.productId)}, ${String(pub.platform ?? 'amazon')}, ${check.currentPrice})
+          `.catch(() => {});
+        }
+
+        if (!check.valid) {
+          console.log(`[autopost] offerta scaduta: ${String(pub.title ?? '').slice(0, 40)}`);
+          const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
+
+          // Genera immagine terminata (grayscale + overlay)
+          let termImg: Buffer | null = null;
+          if (pub.image && String(pub.image).startsWith('http')) {
+            termImg = await generateTerminataImageServer(String(pub.image), termCfg).catch((e: any) => {
+              console.warn('[autopost] terminata img:', e?.message ?? e);
+              return null;
+            });
+          }
+
+          // Carica layout testo terminata
+          const [termLayoutRow] = termCfg.layoutId ? await sql`
+            SELECT body FROM layouts WHERE id = ${termCfg.layoutId} AND user_id = ${userId}
+          `.catch(() => [null]) : [null];
+
+          const affUrl     = String(pub.sourceUrl ?? '');
+          const termCaption = termLayoutRow?.body
+            ? buildMessage(String(termLayoutRow.body), pub as any, affUrl)
+            : `❌ <b>OFFERTA TERMINATA</b>\n\n${esc(String(pub.title ?? ''))}`;
+
+          const chatIdStr = String(pub.chatId ?? channels[0] ?? '');
+          const msgIdNum  = Number(pub.messageId ?? 0);
+
+          if (chatIdStr && msgIdNum) {
+            if (termImg) {
+              const form = new FormData();
+              form.append('chat_id', chatIdStr);
+              form.append('message_id', String(msgIdNum));
+              form.append('media', JSON.stringify({ type: 'photo', media: 'attach://photo', caption: termCaption.slice(0, 1024), parse_mode: 'HTML' }));
+              form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
+              await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => {});
+            } else {
+              // Fallback: solo caption
+              const captR = await fetch(`${tgBase}/editMessageCaption`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatIdStr, message_id: msgIdNum, caption: termCaption.slice(0, 1024), parse_mode: 'HTML' }),
+              }).catch(() => null);
+              const captD = captR ? await captR.json().catch(() => ({ ok: false })) as { ok: boolean } : { ok: false };
+              if (!captD.ok) {
+                await fetch(`${tgBase}/editMessageText`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chat_id: chatIdStr, message_id: msgIdNum, text: termCaption.slice(0, 4096), parse_mode: 'HTML' }),
+                }).catch(() => {});
+              }
+            }
+            await sql`UPDATE published_posts SET terminata = true WHERE id = ${pub.id}`.catch(() => {});
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[autopost] check expired:', e instanceof Error ? e.message : e);
     }
   }
 
