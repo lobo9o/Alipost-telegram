@@ -1491,8 +1491,11 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     setMergingId(true);
     try {
       const composite = await generateMultiPostImage(allPosts.map(p => p.image)).catch(() => '');
+      const defaultMultiLay = layouts.find(l => l.tipo === 'multi')?.id ?? 'l3';
       const mergedPosts: CreatedPost[] = allPosts.map((p, i) =>
-        i === 0 && composite ? { ...p, generatedImage: composite } : p
+        i === 0 && composite
+          ? { ...p, generatedImage: composite, layoutId: defaultMultiLay }
+          : { ...p, layoutId: defaultMultiLay }
       );
       const firstIdx = queue.findIndex(x => mergeSelected.has(x.id));
       const newItem: QueueItem = {
@@ -1528,7 +1531,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     }
     const post = rawPost as CreatedPost;
     if (!post.id) { setPublishErr('Post senza ID'); return; }
-    const layout = layouts.find(l => l.id === post.layoutId);
+    const layout = item.tipo === 'multi'
+      ? (layouts.find(l => l.tipo === 'multi') ?? layouts.find(l => l.id === post.layoutId))
+      : layouts.find(l => l.id === post.layoutId);
     const template = templates.find(t => t.id === post.templateId);
     setPublishErr(null);
 

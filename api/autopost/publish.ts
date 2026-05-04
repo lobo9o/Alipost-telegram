@@ -436,9 +436,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     try {
       // Carica layout testo (con eventuale tastiera associata)
-      const [layoutRow] = post.layoutId ? await sql`
-        SELECT body, keyboard_id FROM layouts WHERE id = ${post.layoutId} AND user_id = ${userId}
-      ` : [null];
+      // Per post multiplo usa il layout di tipo 'multi'; altrimenti usa layoutId del post
+      const [layoutRow] = isMulti
+        ? await sql`SELECT body, keyboard_id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`
+        : post.layoutId
+          ? await sql`SELECT body, keyboard_id FROM layouts WHERE id = ${post.layoutId} AND user_id = ${userId}`
+          : [null];
 
       // Tastiera: usa quella del layout se impostata, altrimenti quella del post
       const effectiveKeyboardId = layoutRow?.keyboard_id || post.keyboardId;
