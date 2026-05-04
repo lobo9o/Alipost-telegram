@@ -413,7 +413,7 @@ function DealCard({ p, selected, onToggle }: { p: DealProduct; selected: boolean
 }
 
 export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { settings, setSettings, templates, layouts } = useApp();
+  const { settings, setSettings, templates, layouts, setQueue } = useApp();
   const [tab, setTab] = useState('amazon');
 
   const ds = settings.dealSearch?.ali ?? { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT', deliveryDays: 0, categoryIds: '' };
@@ -464,26 +464,37 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     if (!selectedIds.size || adding) return;
     setAdding(true);
     const defaultAliLayout = layouts.find(l => l.tipo === 'aliexpress')?.id ?? '';
-    let added = 0;
+    const tpl = templates[0];
+    const addedItems: QueueItem[] = [];
     for (const pid of Array.from(selectedIds)) {
       const p = results.find(r => r.productId === pid);
       if (!p) continue;
-      const post: CreatedPost = {
+      let post: CreatedPost = {
         id: genId(), platform: 'aliexpress',
         sourceUrl: p.affiliateUrl || p.url,
         productId: p.productId, title: p.title, image: p.image,
         originalPrice: p.originalPrice, discountedPrice: p.discountedPrice,
         discountPercent: p.discountPercent,
         customText: '', isHistoricalLow: false,
-        templateId: templates[0]?.id || 'tpl1',
+        templateId: tpl?.id || 'tpl1',
         layoutId: defaultAliLayout, keyboardId: '', emoji: '🔴',
       };
+      // Genera immagine template (come NewPost) così il cron la usa direttamente
+      if (tpl && post.image) {
+        const gi = await generatePostImage(tpl, post.image, false, 'aliexpress', {
+          prezzo: p.discountedPrice.toFixed(2),
+          prezzoPrecedente: p.originalPrice.toFixed(2),
+          sconto: `${p.discountPercent}%`,
+        }).catch(() => '');
+        if (gi) post = { ...post, generatedImage: gi };
+      }
       const qItem: QueueItem = { id: genId(), tipo: 'single', sched: 'Auto', status: 'draft', sel: false, posts: [post] };
-      try { await autopostApi.create(qItem); added++; } catch {}
+      try { await autopostApi.create(qItem); addedItems.push(qItem); } catch {}
     }
+    if (addedItems.length) setQueue(prev => [...prev, ...addedItems]);
     setSelectedIds(new Set());
     setAdding(false);
-    showFb(`✅ ${added} prodotto${added === 1 ? '' : 'i'} aggiunto${added === 1 ? '' : 'i'} in coda`);
+    showFb(`✅ ${addedItems.length} prodotto${addedItems.length === 1 ? '' : 'i'} aggiunto${addedItems.length === 1 ? '' : 'i'} in coda`);
   };
 
   const saveFilters = async () => {
@@ -934,6 +945,22 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
             </div>
           </div>
 
+          {canCreate && (
+            <div style={{ padding: '0 16px 8px' }}>
+              <button className="btn bp bfull" onClick={creaPost}>
+                🚀 Crea Post ({itemsToCreate.length})
+              </button>
+            </div>
+          )}
+
+          {createdPosts.length > 0 && (
+            <div style={{ padding: '0 16px 8px' }}>
+              <button className="btn bs bfull" onClick={() => nav('queue')}>
+                📋 Vedi coda ({createdPosts.length} bozze)
+              </button>
+            </div>
+          )}
+
           {activeLinks.length > 0 && (
             <>
               <div className="stit">LINK AGGIUNTI ({activeLinks.length})</div>
@@ -950,22 +977,6 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 
           {mode === 'multi' && (
             <InfoBanner>Da 2 a 6 link per gruppo → 1 post multiplo. Usa le frecce per creare o cambiare gruppo.</InfoBanner>
-          )}
-
-          {canCreate && (
-            <div style={{ padding: '8px 16px 16px' }}>
-              <button className="btn bp bfull" onClick={creaPost}>
-                🚀 Crea Post ({itemsToCreate.length})
-              </button>
-            </div>
-          )}
-
-          {createdPosts.length > 0 && (
-            <div style={{ padding: canCreate ? '0 16px 16px' : '8px 16px 16px' }}>
-              <button className="btn bs bfull" onClick={() => nav('queue')}>
-                📋 Vedi coda ({createdPosts.length} bozze)
-              </button>
-            </div>
           )}
 
           <div style={{ padding: '4px 16px 8px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>

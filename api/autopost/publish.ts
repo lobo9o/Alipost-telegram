@@ -422,7 +422,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const country = (cfg.aliexpress?.targetCountry || 'IT').toUpperCase();
       const { currency, language } = ALI_COUNTRY_MAP[country] ?? { currency: 'EUR', language: 'IT' };
 
-      if (appKey && appSec) {
+      // Richiede almeno parole chiave o categoria: senza filtri si pubblicherebbe spazzatura generica
+      const hasSearchCriteria = !!(ds.keywords?.trim() || ds.categoryIds?.trim());
+      if (!hasSearchCriteria) {
+        console.log(`[autopost] auto-search saltato userId=${userId}: configura parole chiave o categoria in Cerca Offerte → Salva filtri`);
+      }
+
+      if (appKey && appSec && hasSearchCriteria) {
         const extra: Record<string, string> = {
           tracking_id: trackId, target_currency: currency, target_language: language,
           ship_to_country: country, sort: ds.sort || 'DEFAULT_SORT',
