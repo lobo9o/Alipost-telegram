@@ -203,6 +203,21 @@ export interface AliExpressSettings {
   targetCountry: string;
 }
 
+export interface DealSearchAliSettings {
+  keywords: string;
+  minDiscount: number;
+  minPrice: number;
+  maxPrice: number;
+  sort: string;
+}
+
+export interface DealSearchSettings {
+  autoPublishAliexpress: boolean;
+  autoPublishAmazon: boolean;
+  publishPattern: string; // '1:1' | '2:1' | '3:1' | 'ali-only' | 'amazon-only'
+  ali: DealSearchAliSettings;
+}
+
 export interface AppSettings {
   oraI: string;
   oraF: string;
@@ -213,6 +228,7 @@ export interface AppSettings {
   amazon: AmazonSettings;
   aliexpress: AliExpressSettings;
   terminata: TerminataConfig;
+  dealSearch: DealSearchSettings;
 }
 
 export interface AppState {

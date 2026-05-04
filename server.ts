@@ -39,6 +39,7 @@ async function main() {
     productHandler,
     templatesHandler,
     templatesIdHandler,
+    dealsHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -53,6 +54,7 @@ async function main() {
     loadHandler('api/product.ts'),
     loadHandler('api/templates/index.ts'),
     loadHandler('api/templates/[id].ts'),
+    loadHandler('api/deals/index.ts'),
   ]);
 
   const app = express();
@@ -76,6 +78,7 @@ async function main() {
   app.all('/api/product', productHandler);
   app.all('/api/templates', templatesHandler);
   app.all('/api/templates/:id', withId(templatesIdHandler));
+  app.all('/api/deals', dealsHandler);
 
   app.get('*', (_req, res) => {
     res.sendFile(path.join(__dirname, 'build', 'index.html'));

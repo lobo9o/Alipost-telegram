@@ -75,6 +75,12 @@ export const INITIAL_SETTINGS: AppSettings = {
   channels: [], notifThreshold: undefined,
   amazon: { enabled: false, affiliateTag: '', credentialId: '', credentialSecret: '', version: '2.2', marketplace: 'IT' },
   aliexpress: { enabled: false, appKey: '', appSecret: '', trackingId: '', targetCountry: 'IT' },
+  dealSearch: {
+    autoPublishAliexpress: false,
+    autoPublishAmazon: false,
+    publishPattern: '1:1',
+    ali: { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT' },
+  },
   terminata: {
     grayscale: true,
     overlayText: '❌ OFFERTA TERMINATA',

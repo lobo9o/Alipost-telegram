@@ -5,7 +5,7 @@ import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanne
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
-import { productApi, postsApi, autopostApi, publishedApi, utilsApi } from '../lib/api';
+import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, DealProduct } from '../lib/api';
 import { generatePostImage, generateMultiPostImage, generateTerminataImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
@@ -334,19 +334,242 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 // SEARCH PAGE
 // ============================================================
+const ALI_SORT_OPTIONS = [
+  { value: 'DEFAULT_SORT', label: 'Rilevanza' },
+  { value: 'ORDERS_DESC',  label: 'Più venduti' },
+  { value: 'SALE_PRICE_ASC',  label: 'Prezzo ↑' },
+  { value: 'SALE_PRICE_DESC', label: 'Prezzo ↓' },
+];
+
+function DealCard({
+  p, currency, onAdd,
+}: {
+  p: DealProduct;
+  currency: string;
+  onAdd: (p: DealProduct) => void;
+}) {
+  const sym = p.currency === 'EUR' ? '€' : p.currency === 'GBP' ? '£' : '$';
+  return (
+    <div style={{
+      background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10,
+      overflow: 'hidden', display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ position: 'relative', aspectRatio: '1/1', background: 'var(--bg3)' }}>
+        {p.image ? (
+          <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 40 }}>📦</div>
+        )}
+        {p.discountPercent > 0 && (
+          <div style={{
+            position: 'absolute', top: 6, right: 6,
+            background: '#ef4444', color: '#fff',
+            fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+          }}>-{p.discountPercent}%</div>
+        )}
+      </div>
+      <div style={{ padding: '8px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ fontSize: 11, color: 'var(--t1)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {p.title}
+        </div>
+        {p.category && (
+          <div style={{ fontSize: 10, color: 'var(--t3)' }}>{p.category}</div>
+        )}
+        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: '#22c55e' }}>{sym}{p.discountedPrice.toFixed(2)}</span>
+          {p.originalPrice > p.discountedPrice && (
+            <span style={{ fontSize: 11, color: 'var(--t3)', textDecoration: 'line-through' }}>{sym}{p.originalPrice.toFixed(2)}</span>
+          )}
+        </div>
+      </div>
+      <button
+        className="btn bp"
+        style={{ margin: '0 8px 8px', padding: '7px 0', fontSize: 12 }}
+        onClick={() => onAdd(p)}
+      >
+        ➕ Crea post
+      </button>
+    </div>
+  );
+}
+
 export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
+  const { settings, setNewPostItems, setNewPostMode } = useApp();
+  const [tab, setTab] = useState('aliexpress');
+
+  // Filtri AliExpress — inizializzati dalle impostazioni salvate
+  const ds = settings.dealSearch?.ali ?? { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT' };
+  const [keywords, setKeywords]     = useState(ds.keywords);
+  const [minDiscount, setMinDiscount] = useState(ds.minDiscount);
+  const [minPrice, setMinPrice]     = useState(ds.minPrice);
+  const [maxPrice, setMaxPrice]     = useState(ds.maxPrice);
+  const [sort, setSort]             = useState(ds.sort);
+
+  const [results, setResults]   = useState<DealProduct[]>([]);
+  const [total, setTotal]       = useState(0);
+  const [page, setPage]         = useState(1);
+  const [loading, setLoading]   = useState(false);
+  const [err, setErr]           = useState('');
+  const [searched, setSearched] = useState(false);
+
+  const currency = settings.aliexpress.targetCountry === 'UK' ? 'GBP' : settings.aliexpress.targetCountry === 'US' ? 'USD' : 'EUR';
+
+  const doSearch = async (resetPage = true) => {
+    setErr('');
+    setLoading(true);
+    if (resetPage) setPage(1);
+    const p = resetPage ? 1 : page;
+    try {
+      const data = await dealsApi.searchAli({ keywords: keywords.trim(), minDiscount, minPrice, maxPrice, sort, page: p });
+      if (resetPage) {
+        setResults(data.products);
+      } else {
+        setResults(prev => [...prev, ...data.products]);
+      }
+      setTotal(data.total);
+      setSearched(true);
+    } catch (e: any) {
+      setErr(e.message ?? 'Errore durante la ricerca');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    doSearch(false);
+  };
+
+  const handleAdd = (p: DealProduct) => {
+    const linkItem: LinkItem = { id: genId(), url: p.url, platform: 'aliexpress' };
+    setNewPostMode('single');
+    setNewPostItems([{ id: genId(), type: 'single', link: linkItem }]);
+    nav('newpost');
+  };
+
+  const hasMore = results.length < total;
+
   return (
     <div className="pg">
       <PageHeader title="Cerca Offerte" onBack={() => nav('dash')} />
-      <EmptyState
-        icon="🔍"
-        text="La ricerca prodotti non è ancora disponibile."
-        action={
-          <button className="btn bp" onClick={() => nav('newpost')}>
-            ✏️ Crea post da link
-          </button>
-        }
+      <SwitchTabs
+        options={[['aliexpress', '🔴 AliExpress'], ['amazon', '🟡 Amazon']]}
+        value={tab} onChange={setTab}
       />
+
+      {tab === 'amazon' && (
+        <EmptyState icon="🟡" text="Ricerca Amazon in arrivo." />
+      )}
+
+      {tab === 'aliexpress' && (
+        <>
+          {/* Filtri */}
+          <div style={{ padding: '12px 16px 0' }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <input
+                className="inp"
+                placeholder="Parole chiave (es: cuffie, gaming...)"
+                value={keywords}
+                onChange={e => setKeywords(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && doSearch()}
+                style={{ flex: 1 }}
+              />
+              <button className="btn bp" style={{ flexShrink: 0, padding: '0 16px' }} onClick={() => doSearch()} disabled={loading}>
+                {loading ? '⏳' : '🔍'}
+              </button>
+            </div>
+
+            {/* Seconda riga filtri */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>SCONTO MIN</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="range" min={0} max={90} step={5} value={minDiscount}
+                    style={{ flex: 1, accentColor: 'var(--a1)' }}
+                    onChange={e => setMinDiscount(Number(e.target.value))}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--t2)', minWidth: 32 }}>{minDiscount}%</span>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
+                <select className="sel" style={{ fontSize: 12 }} value={sort} onChange={e => setSort(e.target.value)}>
+                  {ALI_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MIN (€)</div>
+                <input className="inp" type="number" min={0} placeholder="0" value={minPrice || ''} onChange={e => setMinPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MAX (€)</div>
+                <input className="inp" type="number" min={0} placeholder="illimitato" value={maxPrice || ''} onChange={e => setMaxPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+              </div>
+            </div>
+
+            {!settings.aliexpress.enabled && (
+              <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 12, color: '#ef4444' }}>
+                ⚠️ Credenziali AliExpress non configurate.{' '}
+                <button className="btn bgh" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => nav('settings')}>Impostazioni →</button>
+              </div>
+            )}
+          </div>
+
+          {/* Errore */}
+          {err && <div style={{ margin: '0 16px 10px' }}><ErrorBanner>{err}</ErrorBanner></div>}
+
+          {/* Risultati */}
+          {searched && !loading && results.length === 0 && !err && (
+            <EmptyState icon="🔍" text="Nessun risultato. Prova parole chiave diverse o riduci i filtri." />
+          )}
+
+          {results.length > 0 && (
+            <>
+              <div style={{ padding: '4px 16px 8px', fontSize: 11, color: 'var(--t3)' }}>
+                {results.length} di {total} prodotti · clicca <b>Crea post</b> per aggiungere
+              </div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 1fr',
+                gap: 10, padding: '0 16px 16px',
+              }}>
+                {results.map(p => (
+                  <DealCard key={p.productId} p={p} currency={currency} onAdd={handleAdd} />
+                ))}
+              </div>
+              {hasMore && (
+                <div style={{ padding: '0 16px 20px' }}>
+                  <button className="btn bs bfull" onClick={loadMore} disabled={loading}>
+                    {loading ? '⏳ Caricamento...' : '⬇️ Carica altri'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {!searched && !loading && (
+            <EmptyState
+              icon="🔴"
+              text="Cerca prodotti AliExpress in offerta."
+              action={
+                <button className="btn bp" onClick={() => doSearch()}>
+                  🔍 Cerca ora
+                </button>
+              }
+            />
+          )}
+
+          {loading && results.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--t3)', fontSize: 13 }}>
+              ⏳ Ricerca in corso...
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -134,3 +134,43 @@ export const productApi = {
 export const utilsApi = {
   resolveUrl: (url: string) => req<{ resolved: string }>('POST', '/api/resolve-url', { url }),
 };
+
+// ── Deal Search ───────────────────────────────────────────────────────────────
+export interface DealProduct {
+  productId: string;
+  title: string;
+  image: string;
+  originalPrice: number;
+  discountedPrice: number;
+  discountPercent: number;
+  currency: string;
+  category: string;
+  rating: string;
+  url: string;
+}
+
+export interface DealsResult {
+  products: DealProduct[];
+  total: number;
+  page: number;
+}
+
+export const dealsApi = {
+  searchAli: (params: {
+    keywords?: string;
+    minDiscount?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    sort?: string;
+    page?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params.keywords)              qs.set('keywords',    params.keywords);
+    if (params.minDiscount)           qs.set('minDiscount', String(params.minDiscount));
+    if (params.minPrice)              qs.set('minPrice',    String(params.minPrice));
+    if (params.maxPrice)              qs.set('maxPrice',    String(params.maxPrice));
+    if (params.sort)                  qs.set('sort',        params.sort);
+    if (params.page && params.page > 1) qs.set('page',     String(params.page));
+    return req<DealsResult>('GET', `/api/deals?${qs.toString()}`);
+  },
+};

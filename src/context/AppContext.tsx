@@ -57,6 +57,18 @@ function mergeSettings(fetched: unknown): AppSettings {
       showSconto: typeof tm.showSconto === 'boolean' ? tm.showSconto : false,
       layoutId: typeof tm.layoutId === 'string' ? tm.layoutId : '',
     },
+    dealSearch: {
+      autoPublishAliexpress: typeof r.dealSearch?.autoPublishAliexpress === 'boolean' ? r.dealSearch.autoPublishAliexpress : false,
+      autoPublishAmazon: typeof r.dealSearch?.autoPublishAmazon === 'boolean' ? r.dealSearch.autoPublishAmazon : false,
+      publishPattern: typeof r.dealSearch?.publishPattern === 'string' ? r.dealSearch.publishPattern : '1:1',
+      ali: {
+        keywords: typeof r.dealSearch?.ali?.keywords === 'string' ? r.dealSearch.ali.keywords : '',
+        minDiscount: typeof r.dealSearch?.ali?.minDiscount === 'number' ? r.dealSearch.ali.minDiscount : 0,
+        minPrice: typeof r.dealSearch?.ali?.minPrice === 'number' ? r.dealSearch.ali.minPrice : 0,
+        maxPrice: typeof r.dealSearch?.ali?.maxPrice === 'number' ? r.dealSearch.ali.maxPrice : 0,
+        sort: typeof r.dealSearch?.ali?.sort === 'string' ? r.dealSearch.ali.sort : 'DEFAULT_SORT',
+      },
+    },
   };
 }
 

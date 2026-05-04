@@ -1227,6 +1227,39 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       {/* ── AUTOPOST ── */}
       <div className="stit">AUTOPOST</div>
       <ToggleRow label="AutoPost attivo" sub="Pubblicazione automatica programmata" value={s.attivo} onChange={v => setS({ ...s, attivo: v })} />
+
+      {/* Pubblicazione automatica per piattaforma */}
+      <div style={{ margin: '8px 16px 0', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: 1 }}>RICERCA OFFERTE AUTOMATICA</div>
+        <ToggleRow
+          label="🟡 Pubblica Amazon auto"
+          sub="Aggiunge offerte Amazon alla coda automaticamente"
+          value={s.dealSearch?.autoPublishAmazon ?? false}
+          onChange={v => setS(prev => ({ ...prev, dealSearch: { ...(prev.dealSearch ?? { autoPublishAliexpress: false, autoPublishAmazon: false, publishPattern: '1:1', ali: { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT' } }), autoPublishAmazon: v } }))}
+        />
+        <ToggleRow
+          label="🔴 Pubblica AliExpress auto"
+          sub="Aggiunge offerte AliExpress alla coda automaticamente"
+          value={s.dealSearch?.autoPublishAliexpress ?? false}
+          onChange={v => setS(prev => ({ ...prev, dealSearch: { ...(prev.dealSearch ?? { autoPublishAliexpress: false, autoPublishAmazon: false, publishPattern: '1:1', ali: { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT' } }), autoPublishAliexpress: v } }))}
+        />
+        {(s.dealSearch?.autoPublishAmazon || s.dealSearch?.autoPublishAliexpress) && (
+          <div style={{ padding: '0 14px 12px' }}>
+            <label className="lbl">Schema alternanza pubblicazioni</label>
+            <select className="sel" value={s.dealSearch?.publishPattern ?? '1:1'}
+              onChange={e => setS(prev => ({ ...prev, dealSearch: { ...(prev.dealSearch ?? { autoPublishAliexpress: false, autoPublishAmazon: false, publishPattern: '1:1', ali: { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT' } }), publishPattern: e.target.value } }))}>
+              <option value="1:1">1:1 — Alterni (Amazon, Ali, Amazon, Ali...)</option>
+              <option value="2:1">2:1 — 2 Amazon, 1 AliExpress</option>
+              <option value="3:1">3:1 — 3 Amazon, 1 AliExpress</option>
+              <option value="1:2">1:2 — 1 Amazon, 2 AliExpress</option>
+              <option value="1:3">1:3 — 1 Amazon, 3 AliExpress</option>
+              <option value="amazon-only">Solo Amazon</option>
+              <option value="ali-only">Solo AliExpress</option>
+            </select>
+          </div>
+        )}
+      </div>
+      <div style={{ height: 8 }} />
       <div style={{ height: 12 }} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '0 16px' }}>
         <div className="fld" style={{ margin: 0 }}><label className="lbl">Ora inizio</label><input type="time" className="inp" value={s.oraI} onChange={e => setS({ ...s, oraI: e.target.value })} /></div>
