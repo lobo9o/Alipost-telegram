@@ -79,7 +79,7 @@ export const INITIAL_SETTINGS: AppSettings = {
     autoPublishAliexpress: false,
     autoPublishAmazon: false,
     publishPattern: '1:1',
-    ali: { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT' },
+    ali: { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT', deliveryDays: 0, categoryIds: '' },
   },
   terminata: {
     grayscale: true,

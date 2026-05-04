@@ -48,12 +48,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   const q = req.query as Record<string, string>;
-  const keywords   = (q.keywords   ?? '').trim();
-  const minDiscount = parseInt(q.minDiscount ?? '0') || 0;
-  const minPrice   = parseFloat(q.minPrice  ?? '0') || 0;
-  const maxPrice   = parseFloat(q.maxPrice  ?? '0') || 0;
-  const sort       = q.sort || 'DEFAULT_SORT';
-  const page       = Math.max(1, parseInt(q.page ?? '1') || 1);
+  const keywords    = (q.keywords    ?? '').trim();
+  const minDiscount = parseInt(q.minDiscount  ?? '0') || 0;
+  const minPrice    = parseFloat(q.minPrice   ?? '0') || 0;
+  const maxPrice    = parseFloat(q.maxPrice   ?? '0') || 0;
+  const sort        = q.sort || 'DEFAULT_SORT';
+  const deliveryDays = parseInt(q.deliveryDays ?? '0') || 0;
+  const categoryIds = (q.categoryIds ?? '').trim();
+  const page        = Math.max(1, parseInt(q.page ?? '1') || 1);
 
   const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
 
@@ -61,6 +63,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     tracking_id: trackId,
     target_currency: currency,
     target_language: language,
+    ship_to_country: country.toUpperCase(),
     sort,
     page_size: '50',
     page_no: String(page),
@@ -68,15 +71,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       'product_id', 'product_title', 'product_main_image_url',
       'target_sale_price', 'target_original_price', 'target_sale_price_currency',
       'discount', 'evaluate_rate', 'second_level_category_name',
+      'promotion_link',
     ].join(','),
   };
-  if (keywords)         extra.keywords       = keywords;
-  if (minPrice > 0)     extra.min_sale_price = String(Math.round(minPrice * 100));
-  if (maxPrice > 0)     extra.max_sale_price = String(Math.round(maxPrice * 100));
+
+  if (keywords)              extra.keywords       = keywords;
+  if (categoryIds)           extra.category_ids   = categoryIds;
+  if (minPrice > 0)          extra.min_sale_price = String(Math.round(minPrice * 100));
+  if (maxPrice > 0)          extra.max_sale_price = String(Math.round(maxPrice * 100));
+  if (deliveryDays > 0)      extra.delivery_days  = String(deliveryDays);
 
   const params: Record<string, string> = {
     app_key: appKey.trim(),
-    method: 'aliexpress.affiliate.hotproduct.query',
+    method: 'aliexpress.affiliate.product.query',
     sign_method: 'md5',
     timestamp: aliTimestamp(),
     v: '2.0',
@@ -91,7 +98,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     body,
   });
   const text = await apiRes.text();
-  console.log('[deals] hotproduct.query status:', apiRes.status, text.slice(0, 300));
+  console.log('[deals] product.query status:', apiRes.status, text.slice(0, 300));
 
   if (!apiRes.ok) {
     res.status(500).json({ error: `AliExpress API error (${apiRes.status})` });
@@ -105,29 +112,31 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const resp = json?.aliexpress_affiliate_hotproduct_query_response?.resp_result;
+  const resp = json?.aliexpress_affiliate_product_query_response?.resp_result;
   if (!resp || resp.resp_code !== 200) {
     res.status(400).json({ error: `AliExpress [${resp?.resp_code ?? '?'}]: ${resp?.resp_msg ?? 'Errore sconosciuto'}` });
     return;
   }
 
   const products: any[] = resp?.result?.products?.product ?? [];
-  const total: number = resp?.result?.total_record_count ?? products.length;
+  const total: number   = resp?.result?.total_record_count ?? products.length;
 
   const mapped = products
     .map((p: any) => {
       const discPct = parseInt(String(p.discount ?? '0').replace('%', '')) || 0;
+      const productUrl = `https://www.aliexpress.com/item/${p.product_id}.html`;
       return {
-        productId: String(p.product_id),
-        title: p.product_title ?? '',
-        image: p.product_main_image_url ?? '',
-        originalPrice: parseFloat(p.target_original_price ?? '0') || 0,
+        productId:      String(p.product_id),
+        title:          p.product_title ?? '',
+        image:          p.product_main_image_url ?? '',
+        originalPrice:  parseFloat(p.target_original_price ?? '0') || 0,
         discountedPrice: parseFloat(p.target_sale_price ?? '0') || 0,
         discountPercent: discPct,
-        currency: p.target_sale_price_currency ?? currency,
-        category: p.second_level_category_name ?? '',
-        rating: p.evaluate_rate ?? '',
-        url: `https://www.aliexpress.com/item/${p.product_id}.html`,
+        currency:       p.target_sale_price_currency ?? currency,
+        category:       p.second_level_category_name ?? '',
+        rating:         p.evaluate_rate ?? '',
+        url:            productUrl,
+        affiliateUrl:   p.promotion_link || productUrl,
       };
     })
     .filter((p: any) => p.discountPercent >= minDiscount);

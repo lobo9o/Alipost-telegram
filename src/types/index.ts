@@ -209,6 +209,8 @@ export interface DealSearchAliSettings {
   minPrice: number;
   maxPrice: number;
   sort: string;
+  deliveryDays: number; // 0 = tutti, 7 ≈ UE warehouse, 15 = veloce
+  categoryIds: string;  // es. "44,509" — separati da virgola
 }
 
 export interface DealSearchSettings {

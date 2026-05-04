@@ -5,7 +5,7 @@ import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanne
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
-import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, DealProduct } from '../lib/api';
+import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, settingsApi, DealProduct } from '../lib/api';
 import { generatePostImage, generateMultiPostImage, generateTerminataImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
@@ -335,97 +335,116 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
 // SEARCH PAGE
 // ============================================================
 const ALI_SORT_OPTIONS = [
-  { value: 'DEFAULT_SORT', label: 'Rilevanza' },
-  { value: 'ORDERS_DESC',  label: 'Più venduti' },
+  { value: 'DEFAULT_SORT',    label: 'Rilevanza' },
+  { value: 'ORDERS_DESC',     label: 'Più venduti' },
   { value: 'SALE_PRICE_ASC',  label: 'Prezzo ↑' },
   { value: 'SALE_PRICE_DESC', label: 'Prezzo ↓' },
 ];
 
-function DealCard({
-  p, currency, onAdd,
-}: {
-  p: DealProduct;
-  currency: string;
-  onAdd: (p: DealProduct) => void;
-}) {
+const DELIVERY_OPTIONS = [
+  { value: 0,  label: '🌍 Tutti' },
+  { value: 7,  label: '🇪🇺 Magazzino UE (≤7 gg)' },
+  { value: 15, label: '⚡ Veloce (≤15 gg)' },
+];
+
+const CAT_PRESETS = [
+  { id: '44',     label: '📱 Elettronica' },
+  { id: '509',    label: '📱 Telefoni' },
+  { id: '7',      label: '💻 Computer' },
+  { id: '18',     label: '⚽ Sport' },
+  { id: '2',      label: '🏠 Casa' },
+  { id: '66',     label: '🎮 Gaming' },
+];
+
+function DealCard({ p, selected, onToggle }: { p: DealProduct; selected: boolean; onToggle: () => void }) {
   const sym = p.currency === 'EUR' ? '€' : p.currency === 'GBP' ? '£' : '$';
   return (
-    <div style={{
-      background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10,
-      overflow: 'hidden', display: 'flex', flexDirection: 'column',
-    }}>
-      <div style={{ position: 'relative', aspectRatio: '1/1', background: 'var(--bg3)' }}>
-        {p.image ? (
-          <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 40 }}>📦</div>
-        )}
+    <div
+      onClick={onToggle}
+      style={{
+        background: 'var(--card)',
+        border: `2px solid ${selected ? 'var(--a1)' : 'var(--bdr)'}`,
+        borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
+        display: 'flex', flexDirection: 'column', height: 210,
+        transition: 'border-color .15s',
+      }}
+    >
+      <div style={{ position: 'relative', height: 110, background: 'var(--bg3)', flexShrink: 0 }}>
+        {p.image
+          ? <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 36 }}>📦</div>
+        }
+        {/* Checkbox */}
+        <div style={{
+          position: 'absolute', top: 5, left: 5,
+          width: 22, height: 22, borderRadius: '50%',
+          background: selected ? 'var(--a1)' : 'rgba(0,0,0,0.45)',
+          border: `2px solid ${selected ? 'var(--a1)' : 'rgba(255,255,255,0.5)'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 13, color: '#fff', fontWeight: 700,
+        }}>{selected ? '✓' : ''}</div>
         {p.discountPercent > 0 && (
           <div style={{
-            position: 'absolute', top: 6, right: 6,
+            position: 'absolute', top: 5, right: 5,
             background: '#ef4444', color: '#fff',
-            fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+            fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 20,
           }}>-{p.discountPercent}%</div>
         )}
       </div>
-      <div style={{ padding: '8px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ fontSize: 11, color: 'var(--t1)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {p.title}
-        </div>
-        {p.category && (
-          <div style={{ fontSize: 10, color: 'var(--t3)' }}>{p.category}</div>
-        )}
-        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'baseline', gap: 5 }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: '#22c55e' }}>{sym}{p.discountedPrice.toFixed(2)}</span>
+      <div style={{ padding: '6px 8px', flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 0 }}>
+        <div style={{
+          fontSize: 11, color: 'var(--t1)', lineHeight: 1.3, flex: 1,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        }}>{p.title}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 'auto' }}>
+          <span style={{ fontWeight: 700, fontSize: 13, color: '#22c55e' }}>{sym}{p.discountedPrice.toFixed(2)}</span>
           {p.originalPrice > p.discountedPrice && (
-            <span style={{ fontSize: 11, color: 'var(--t3)', textDecoration: 'line-through' }}>{sym}{p.originalPrice.toFixed(2)}</span>
+            <span style={{ fontSize: 10, color: 'var(--t3)', textDecoration: 'line-through' }}>{sym}{p.originalPrice.toFixed(2)}</span>
           )}
         </div>
+        {(p.rating || p.category) && (
+          <div style={{ fontSize: 9, color: 'var(--t3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {p.rating ? `⭐ ${p.rating}` : ''}{p.rating && p.category ? ' · ' : ''}{p.category}
+          </div>
+        )}
       </div>
-      <button
-        className="btn bp"
-        style={{ margin: '0 8px 8px', padding: '7px 0', fontSize: 12 }}
-        onClick={() => onAdd(p)}
-      >
-        ➕ Crea post
-      </button>
     </div>
   );
 }
 
 export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { settings, setNewPostItems, setNewPostMode } = useApp();
-  const [tab, setTab] = useState('aliexpress');
+  const { settings, setSettings, templates, layouts } = useApp();
+  const [tab, setTab] = useState('amazon');
 
-  // Filtri AliExpress — inizializzati dalle impostazioni salvate
-  const ds = settings.dealSearch?.ali ?? { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT' };
-  const [keywords, setKeywords]     = useState(ds.keywords);
-  const [minDiscount, setMinDiscount] = useState(ds.minDiscount);
-  const [minPrice, setMinPrice]     = useState(ds.minPrice);
-  const [maxPrice, setMaxPrice]     = useState(ds.maxPrice);
-  const [sort, setSort]             = useState(ds.sort);
+  const ds = settings.dealSearch?.ali ?? { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'DEFAULT_SORT', deliveryDays: 0, categoryIds: '' };
+  const [keywords, setKeywords]         = useState(ds.keywords);
+  const [minDiscount, setMinDiscount]   = useState(ds.minDiscount);
+  const [minPrice, setMinPrice]         = useState(ds.minPrice);
+  const [maxPrice, setMaxPrice]         = useState(ds.maxPrice);
+  const [sort, setSort]                 = useState(ds.sort);
+  const [deliveryDays, setDeliveryDays] = useState(ds.deliveryDays ?? 0);
+  const [categoryIds, setCategoryIds]   = useState(ds.categoryIds ?? '');
 
-  const [results, setResults]   = useState<DealProduct[]>([]);
-  const [total, setTotal]       = useState(0);
-  const [page, setPage]         = useState(1);
-  const [loading, setLoading]   = useState(false);
-  const [err, setErr]           = useState('');
-  const [searched, setSearched] = useState(false);
+  const [results, setResults]         = useState<DealProduct[]>([]);
+  const [total, setTotal]             = useState(0);
+  const [page, setPage]               = useState(1);
+  const [loading, setLoading]         = useState(false);
+  const [err, setErr]                 = useState('');
+  const [searched, setSearched]       = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [adding, setAdding]           = useState(false);
+  const [feedback, setFeedback]       = useState('');
 
-  const currency = settings.aliexpress.targetCountry === 'UK' ? 'GBP' : settings.aliexpress.targetCountry === 'US' ? 'USD' : 'EUR';
+  const showFb = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(''), 3000); };
 
   const doSearch = async (resetPage = true) => {
     setErr('');
     setLoading(true);
-    if (resetPage) setPage(1);
     const p = resetPage ? 1 : page;
+    if (resetPage) { setPage(1); setSelectedIds(new Set()); }
     try {
-      const data = await dealsApi.searchAli({ keywords: keywords.trim(), minDiscount, minPrice, maxPrice, sort, page: p });
-      if (resetPage) {
-        setResults(data.products);
-      } else {
-        setResults(prev => [...prev, ...data.products]);
-      }
+      const data = await dealsApi.searchAli({ keywords: keywords.trim(), minDiscount, minPrice, maxPrice, sort, deliveryDays, categoryIds: categoryIds.trim(), page: p });
+      setResults(resetPage ? data.products : prev => [...prev, ...data.products]);
       setTotal(data.total);
       setSearched(true);
     } catch (e: any) {
@@ -435,17 +454,51 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     }
   };
 
-  const loadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    doSearch(false);
+  const toggleSelect = (id: string) =>
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const toggleAll = () =>
+    setSelectedIds(selectedIds.size === results.length ? new Set() : new Set(results.map(r => r.productId)));
+
+  const addSelectedToQueue = async () => {
+    if (!selectedIds.size || adding) return;
+    setAdding(true);
+    const defaultAliLayout = layouts.find(l => l.tipo === 'aliexpress')?.id ?? '';
+    let added = 0;
+    for (const pid of Array.from(selectedIds)) {
+      const p = results.find(r => r.productId === pid);
+      if (!p) continue;
+      const post: CreatedPost = {
+        id: genId(), platform: 'aliexpress',
+        sourceUrl: p.affiliateUrl || p.url,
+        productId: p.productId, title: p.title, image: p.image,
+        originalPrice: p.originalPrice, discountedPrice: p.discountedPrice,
+        discountPercent: p.discountPercent,
+        customText: '', isHistoricalLow: false,
+        templateId: templates[0]?.id || 'tpl1',
+        layoutId: defaultAliLayout, keyboardId: '', emoji: '🔴',
+      };
+      const qItem: QueueItem = { id: genId(), tipo: 'single', sched: 'Auto', status: 'draft', sel: false, posts: [post] };
+      try { await autopostApi.create(qItem); added++; } catch {}
+    }
+    setSelectedIds(new Set());
+    setAdding(false);
+    showFb(`✅ ${added} prodotto${added === 1 ? '' : 'i'} aggiunto${added === 1 ? '' : 'i'} in coda`);
   };
 
-  const handleAdd = (p: DealProduct) => {
-    const linkItem: LinkItem = { id: genId(), url: p.url, platform: 'aliexpress' };
-    setNewPostMode('single');
-    setNewPostItems([{ id: genId(), type: 'single', link: linkItem }]);
-    nav('newpost');
+  const saveFilters = async () => {
+    const newSettings = {
+      ...settings,
+      dealSearch: {
+        ...(settings.dealSearch ?? { autoPublishAliexpress: false, autoPublishAmazon: false, publishPattern: '1:1' }),
+        ali: { keywords, minDiscount, minPrice, maxPrice, sort, deliveryDays, categoryIds },
+      },
+    };
+    try {
+      await settingsApi.save(newSettings);
+      setSettings(newSettings);
+      showFb('✅ Filtri salvati per auto-ricerca');
+    } catch { showFb('⚠️ Errore nel salvataggio'); }
   };
 
   const hasMore = results.length < total;
@@ -454,43 +507,38 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     <div className="pg">
       <PageHeader title="Cerca Offerte" onBack={() => nav('dash')} />
       <SwitchTabs
-        options={[['aliexpress', '🔴 AliExpress'], ['amazon', '🟡 Amazon']]}
+        options={[['amazon', '🟡 Amazon'], ['aliexpress', '🔴 AliExpress']]}
         value={tab} onChange={setTab}
       />
 
       {tab === 'amazon' && (
-        <EmptyState icon="🟡" text="Ricerca Amazon in arrivo." />
+        <EmptyState icon="🟡" text="Ricerca offerte Amazon in arrivo." />
       )}
 
       {tab === 'aliexpress' && (
         <>
           {/* Filtri */}
-          <div style={{ padding: '12px 16px 0' }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <input
-                className="inp"
-                placeholder="Parole chiave (es: cuffie, gaming...)"
-                value={keywords}
-                onChange={e => setKeywords(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && doSearch()}
-                style={{ flex: 1 }}
-              />
-              <button className="btn bp" style={{ flexShrink: 0, padding: '0 16px' }} onClick={() => doSearch()} disabled={loading}>
+          <div style={{ padding: '10px 16px 0' }}>
+            {/* Keywords + cerca */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input className="inp" placeholder="Parole chiave (es: nintendo, cuffie...)"
+                value={keywords} onChange={e => setKeywords(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && doSearch()} style={{ flex: 1 }} />
+              <button className="btn bp" style={{ flexShrink: 0, padding: '0 14px' }}
+                onClick={() => doSearch()} disabled={loading}>
                 {loading ? '⏳' : '🔍'}
               </button>
             </div>
 
-            {/* Seconda riga filtri */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+            {/* Sconto + ordinamento */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               <div>
                 <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>SCONTO MIN</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="range" min={0} max={90} step={5} value={minDiscount}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <input type="range" min={0} max={90} step={5} value={minDiscount}
                     style={{ flex: 1, accentColor: 'var(--a1)' }}
-                    onChange={e => setMinDiscount(Number(e.target.value))}
-                  />
-                  <span style={{ fontSize: 12, color: 'var(--t2)', minWidth: 32 }}>{minDiscount}%</span>
+                    onChange={e => setMinDiscount(Number(e.target.value))} />
+                  <span style={{ fontSize: 12, color: 'var(--t2)', minWidth: 30 }}>{minDiscount}%</span>
                 </div>
               </div>
               <div>
@@ -501,18 +549,50 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+            {/* Spedizione + prezzo */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>SPEDIZIONE</div>
+                <select className="sel" style={{ fontSize: 12 }} value={deliveryDays} onChange={e => setDeliveryDays(Number(e.target.value))}>
+                  {DELIVERY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               <div>
                 <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MIN (€)</div>
-                <input className="inp" type="number" min={0} placeholder="0" value={minPrice || ''} onChange={e => setMinPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+                <input className="inp" type="number" min={0} placeholder="0"
+                  value={minPrice || ''} onChange={e => setMinPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
               </div>
               <div>
                 <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MAX (€)</div>
-                <input className="inp" type="number" min={0} placeholder="illimitato" value={maxPrice || ''} onChange={e => setMaxPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+                <input className="inp" type="number" min={0} placeholder="nessun limite"
+                  value={maxPrice || ''} onChange={e => setMaxPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
               </div>
             </div>
 
-            {!settings.aliexpress.enabled && (
+            {/* Categorie */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>CATEGORIA (ID)</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+                {CAT_PRESETS.map(c => (
+                  <button key={c.id} className={`btn bsm ${categoryIds === c.id ? 'bp' : 'bgh'}`}
+                    style={{ fontSize: 10, padding: '3px 8px' }}
+                    onClick={() => setCategoryIds(categoryIds === c.id ? '' : c.id)}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              <input className="inp" placeholder="ID personalizzato (es: 44,509)" value={categoryIds}
+                onChange={e => setCategoryIds(e.target.value)} style={{ fontSize: 12 }} />
+            </div>
+
+            {/* Salva filtri per auto-ricerca */}
+            <button className="btn bs" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} onClick={saveFilters}>
+              💾 Salva come filtri per auto-ricerca
+            </button>
+
+            {!settings.aliexpress.appKey && (
               <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 12, color: '#ef4444' }}>
                 ⚠️ Credenziali AliExpress non configurate.{' '}
                 <button className="btn bgh" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => nav('settings')}>Impostazioni →</button>
@@ -520,55 +600,63 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
             )}
           </div>
 
-          {/* Errore */}
-          {err && <div style={{ margin: '0 16px 10px' }}><ErrorBanner>{err}</ErrorBanner></div>}
+          {err && <div style={{ margin: '0 16px 8px' }}><ErrorBanner>{err}</ErrorBanner></div>}
+          {feedback && <div style={{ margin: '0 16px 8px', padding: '8px 12px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 8, fontSize: 12, color: '#4ade80' }}>{feedback}</div>}
 
-          {/* Risultati */}
+          {/* Barra selezione */}
+          {results.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px 8px' }}>
+              <button className="btn bgh bsm" style={{ fontSize: 11 }} onClick={toggleAll}>
+                {selectedIds.size === results.length ? '☑ Deseleziona' : '☐ Seleziona tutto'}
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--t3)', flex: 1 }}>
+                {results.length} di {total} · {selectedIds.size > 0 ? `${selectedIds.size} selezionati` : 'tocca per selezionare'}
+              </span>
+            </div>
+          )}
+
+          {/* Griglia risultati */}
           {searched && !loading && results.length === 0 && !err && (
-            <EmptyState icon="🔍" text="Nessun risultato. Prova parole chiave diverse o riduci i filtri." />
+            <EmptyState icon="🔍" text="Nessun risultato. Cambia parole chiave o riduci i filtri." />
           )}
 
           {results.length > 0 && (
-            <>
-              <div style={{ padding: '4px 16px 8px', fontSize: 11, color: 'var(--t3)' }}>
-                {results.length} di {total} prodotti · clicca <b>Crea post</b> per aggiungere
-              </div>
-              <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 1fr',
-                gap: 10, padding: '0 16px 16px',
-              }}>
-                {results.map(p => (
-                  <DealCard key={p.productId} p={p} currency={currency} onAdd={handleAdd} />
-                ))}
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '0 16px', paddingBottom: selectedIds.size > 0 ? 90 : 16 }}>
+              {results.map(p => (
+                <DealCard key={p.productId} p={p} selected={selectedIds.has(p.productId)} onToggle={() => toggleSelect(p.productId)} />
+              ))}
               {hasMore && (
-                <div style={{ padding: '0 16px 20px' }}>
-                  <button className="btn bs bfull" onClick={loadMore} disabled={loading}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <button className="btn bs bfull" onClick={() => { setPage(p => p + 1); doSearch(false); }} disabled={loading}>
                     {loading ? '⏳ Caricamento...' : '⬇️ Carica altri'}
                   </button>
                 </div>
               )}
-            </>
+            </div>
           )}
 
           {!searched && !loading && (
-            <EmptyState
-              icon="🔴"
-              text="Cerca prodotti AliExpress in offerta."
-              action={
-                <button className="btn bp" onClick={() => doSearch()}>
-                  🔍 Cerca ora
-                </button>
-              }
-            />
+            <EmptyState icon="🔴" text="Cerca prodotti AliExpress in offerta."
+              action={<button className="btn bp" onClick={() => doSearch()}>🔍 Cerca ora</button>} />
           )}
-
           {loading && results.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--t3)', fontSize: 13 }}>
-              ⏳ Ricerca in corso...
-            </div>
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--t3)', fontSize: 13 }}>⏳ Ricerca in corso...</div>
           )}
         </>
+      )}
+
+      {/* Bottone fisso in fondo — solo quando ci sono selezioni */}
+      {tab === 'aliexpress' && selectedIds.size > 0 && (
+        <div style={{ position: 'fixed', bottom: 60, left: 0, right: 0, padding: '0 16px', zIndex: 50 }}>
+          <button
+            className="btn bp"
+            style={{ width: '100%', padding: 13, fontSize: 14, fontWeight: 700, boxShadow: '0 4px 24px rgba(0,0,0,0.5)', borderRadius: 12 }}
+            onClick={addSelectedToQueue}
+            disabled={adding}
+          >
+            {adding ? '⏳ Aggiungendo...' : `➕ Aggiungi ${selectedIds.size} in coda autopost`}
+          </button>
+        </div>
       )}
     </div>
   );

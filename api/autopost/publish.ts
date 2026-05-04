@@ -2,7 +2,49 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler } from '../_utils.js';
 import { checkPostPrice } from '../_priceCheck.js';
+import crypto from 'crypto';
 
+// ── AliExpress auto-search helpers ────────────────────────────────────────────
+const ALI_COUNTRY_MAP: Record<string, { currency: string; language: string }> = {
+  IT: { currency: 'EUR', language: 'IT' }, US: { currency: 'USD', language: 'EN' },
+  DE: { currency: 'EUR', language: 'DE' }, FR: { currency: 'EUR', language: 'FR' },
+  ES: { currency: 'EUR', language: 'ES' }, UK: { currency: 'GBP', language: 'EN' },
+  RU: { currency: 'RUB', language: 'RU' }, BR: { currency: 'BRL', language: 'PT' },
+  PL: { currency: 'PLN', language: 'PL' }, NL: { currency: 'EUR', language: 'NL' },
+};
+
+function aliSignAuto(params: Record<string, string>, secret: string): string {
+  const sorted = Object.keys(params).sort();
+  const str = secret + sorted.map(k => `${k}${params[k]}`).join('') + secret;
+  return crypto.createHash('md5').update(str, 'utf8').digest('hex').toUpperCase();
+}
+
+function aliTsAuto(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+async function aliAutoQuery(appKey: string, appSecret: string, extra: Record<string, string>): Promise<any[]> {
+  try {
+    const params: Record<string, string> = {
+      app_key: appKey.trim(), method: 'aliexpress.affiliate.product.query',
+      sign_method: 'md5', timestamp: aliTsAuto(), v: '2.0', ...extra,
+    };
+    params.sign = aliSignAuto(params, appSecret.trim());
+    const res = await fetch('https://api-sg.aliexpress.com/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+      body: new URLSearchParams(params).toString(),
+    });
+    if (!res.ok) return [];
+    const json = await res.json() as any;
+    const products = json?.aliexpress_affiliate_product_query_response?.resp_result?.result?.products?.product;
+    return Array.isArray(products) ? products : [];
+  } catch { return []; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 const MARKETPLACE_DOMAINS: Record<string, string> = {
   IT: 'www.amazon.it', US: 'www.amazon.com', DE: 'www.amazon.de',
   FR: 'www.amazon.fr', ES: 'www.amazon.es', UK: 'www.amazon.co.uk',
@@ -308,6 +350,71 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       queueItem = candidate;
       post = candidatePost;
       break;
+    }
+
+    // ── Auto-search AliExpress quando coda è vuota ────────────────────────────
+    if (!queueItem && cfg.dealSearch?.autoPublishAliexpress) {
+      const ds     = cfg.dealSearch?.ali ?? {};
+      const appKey = cfg.aliexpress?.appKey     || process.env.ALIEXPRESS_APP_KEY     || '';
+      const appSec = cfg.aliexpress?.appSecret  || process.env.ALIEXPRESS_APP_SECRET  || '';
+      const trackId = cfg.aliexpress?.trackingId || process.env.ALIEXPRESS_TRACKING_ID || '';
+      const country = (cfg.aliexpress?.targetCountry || 'IT').toUpperCase();
+      const { currency, language } = ALI_COUNTRY_MAP[country] ?? { currency: 'EUR', language: 'IT' };
+
+      if (appKey && appSec) {
+        const extra: Record<string, string> = {
+          tracking_id: trackId, target_currency: currency, target_language: language,
+          ship_to_country: country, sort: ds.sort || 'DEFAULT_SORT',
+          page_size: '20', page_no: '1',
+          fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,promotion_link',
+        };
+        if (ds.keywords)                      extra.keywords       = ds.keywords;
+        if (Number(ds.minPrice)  > 0)         extra.min_sale_price = String(Math.round(Number(ds.minPrice) * 100));
+        if (Number(ds.maxPrice)  > 0)         extra.max_sale_price = String(Math.round(Number(ds.maxPrice) * 100));
+        if (Number(ds.deliveryDays) > 0)      extra.delivery_days  = String(ds.deliveryDays);
+        if (ds.categoryIds)                   extra.category_ids   = ds.categoryIds;
+
+        const products = await aliAutoQuery(appKey, appSec, extra);
+        const minDisc  = Number(ds.minDiscount ?? 0);
+
+        // Filtra già pubblicati nelle ultime 24h
+        const recentRows = await sql`
+          SELECT source_url FROM published_posts
+          WHERE user_id = ${userId} AND published_at > now() - interval '24 hours'
+        `;
+        const publishedUrls = new Set(recentRows.map((r: any) => String(r.source_url)));
+
+        const candidate = products.find((p: any) => {
+          const disc = parseInt(String(p.discount ?? '0').replace('%', '')) || 0;
+          if (disc < minDisc) return false;
+          const url = p.promotion_link || `https://www.aliexpress.com/item/${p.product_id}.html`;
+          return !publishedUrls.has(url);
+        });
+
+        if (candidate) {
+          const discPct   = parseInt(String(candidate.discount ?? '0').replace('%', '')) || 0;
+          const salePrice = parseFloat(candidate.target_sale_price ?? '0') || 0;
+          const origPrice = parseFloat(candidate.target_original_price ?? '0') || salePrice;
+          const affUrl    = candidate.promotion_link || `https://www.aliexpress.com/item/${candidate.product_id}.html`;
+          const autoPostId = crypto.randomUUID();
+          post = {
+            id: crypto.randomUUID(), platform: 'aliexpress',
+            sourceUrl: affUrl, productId: String(candidate.product_id),
+            title: candidate.product_title ?? '',
+            image: candidate.product_main_image_url ?? '',
+            originalPrice: origPrice, discountedPrice: salePrice,
+            discountPercent: discPct,
+            customText: '', isHistoricalLow: false,
+            templateId: 'tpl1', layoutId: '', keyboardId: '', emoji: '🔴',
+          };
+          queueItem = { id: autoPostId, posts: [post], silenzioso: null };
+          postsArr  = [post];
+          isMulti   = false;
+          console.log(`[autopost] auto-search trovato: ${post.title?.slice(0, 50)}`);
+        } else {
+          console.log(`[autopost] auto-search: nessun prodotto nuovo trovato per userId=${userId}`);
+        }
+      }
     }
 
     if (!queueItem || !post) { skipped.push(`${userId}: coda vuota o tutti i prezzi scaduti`); continue; }

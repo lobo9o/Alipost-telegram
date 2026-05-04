@@ -67,6 +67,8 @@ function mergeSettings(fetched: unknown): AppSettings {
         minPrice: typeof r.dealSearch?.ali?.minPrice === 'number' ? r.dealSearch.ali.minPrice : 0,
         maxPrice: typeof r.dealSearch?.ali?.maxPrice === 'number' ? r.dealSearch.ali.maxPrice : 0,
         sort: typeof r.dealSearch?.ali?.sort === 'string' ? r.dealSearch.ali.sort : 'DEFAULT_SORT',
+        deliveryDays: typeof r.dealSearch?.ali?.deliveryDays === 'number' ? r.dealSearch.ali.deliveryDays : 0,
+        categoryIds: typeof r.dealSearch?.ali?.categoryIds === 'string' ? r.dealSearch.ali.categoryIds : '',
       },
     },
   };
