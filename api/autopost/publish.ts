@@ -18,6 +18,36 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function safeCaption(html: string, maxLen: number): string {
+  if (html.length <= maxLen) return html;
+  const stack: string[] = [];
+  const voidTags = new Set(['br', 'hr', 'img']);
+  let i = 0, visLen = 0, out = '';
+  while (i < html.length && visLen < maxLen) {
+    if (html[i] === '<') {
+      const end = html.indexOf('>', i);
+      if (end === -1) break;
+      const inner = html.slice(i + 1, end).trim();
+      const isClose = inner.startsWith('/');
+      const tagName = (isClose ? inner.slice(1) : inner.split(/[\s/]/)[0]).toLowerCase();
+      if (isClose) {
+        const idx = stack.lastIndexOf(tagName);
+        if (idx !== -1) stack.splice(idx, 1);
+      } else if (!voidTags.has(tagName) && !inner.endsWith('/')) {
+        stack.push(tagName);
+      }
+      out += html.slice(i, end + 1);
+      i = end + 1;
+    } else {
+      out += html[i];
+      visLen++;
+      i++;
+    }
+  }
+  for (let j = stack.length - 1; j >= 0; j--) out += `</${stack[j]}>`;
+  return out.trimEnd() + (html.length > maxLen ? '…' : '');
+}
+
 function buildMessage(
   contenuto: string,
   post: Record<string, any>,
@@ -398,7 +428,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const formData = new FormData();
         formData.append('chat_id', channel);
         formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
-        formData.append('caption', messageText.slice(0, 1024));
+        formData.append('caption', safeCaption(messageText, 1024));
         formData.append('parse_mode', 'HTML');
         if (disableNotification) formData.append('disable_notification', 'true');
         if (replyMarkup) formData.append('reply_markup', JSON.stringify(replyMarkup));
@@ -410,7 +440,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           body: JSON.stringify({
             chat_id: channel,
             photo: post.image,
-            caption: messageText.slice(0, 1024),
+            caption: safeCaption(messageText, 1024),
             parse_mode: 'HTML',
             ...(disableNotification ? { disable_notification: true } : {}),
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),

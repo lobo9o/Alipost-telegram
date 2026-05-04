@@ -12,6 +12,37 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Tronca HTML rispettando i tag aperti: chiude tutti i tag prima di tagliare
+function safeCaption(html: string, maxLen: number): string {
+  if (html.length <= maxLen) return html;
+  const stack: string[] = [];
+  const voidTags = new Set(['br', 'hr', 'img']);
+  let i = 0, visLen = 0, out = '';
+  while (i < html.length && visLen < maxLen) {
+    if (html[i] === '<') {
+      const end = html.indexOf('>', i);
+      if (end === -1) break;
+      const inner = html.slice(i + 1, end).trim();
+      const isClose = inner.startsWith('/');
+      const tagName = (isClose ? inner.slice(1) : inner.split(/[\s/]/)[0]).toLowerCase();
+      if (isClose) {
+        const idx = stack.lastIndexOf(tagName);
+        if (idx !== -1) stack.splice(idx, 1);
+      } else if (!voidTags.has(tagName) && !inner.endsWith('/')) {
+        stack.push(tagName);
+      }
+      out += html.slice(i, end + 1);
+      i = end + 1;
+    } else {
+      out += html[i];
+      visLen++;
+      i++;
+    }
+  }
+  for (let j = stack.length - 1; j >= 0; j--) out += `</${stack[j]}>`;
+  return out.trimEnd() + (html.length > maxLen ? '…' : '');
+}
+
 const ALI_CURRENCY_SYM: Record<string, string> = {
   IT: '€', DE: '€', FR: '€', ES: '€', NL: '€',
   US: '$', BR: 'R$', UK: '£', RU: '₽', PL: 'zł',
@@ -296,7 +327,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const form = new FormData();
     form.append('chat_id', channel);
     form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'post.jpg');
-    form.append('caption', messageText.slice(0, 1024));
+    form.append('caption', safeCaption(messageText, 1024));
     form.append('parse_mode', 'HTML');
     if (disableNotification) form.append('disable_notification', 'true');
     if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
@@ -309,7 +340,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         body: JSON.stringify({
           chat_id: channel,
           photo: post.image,
-          caption: messageText.slice(0, 1024),
+          caption: safeCaption(messageText, 1024),
           parse_mode: 'HTML',
           ...(disableNotification ? { disable_notification: true } : {}),
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
