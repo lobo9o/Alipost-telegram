@@ -52,10 +52,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  // Strip generatedImage before saving to DB — prevents JSONB bloat on polling
   const { id, posts = [], status = 'draft', scheduled = null, silenzioso = null } = req.body ?? {};
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
-  const postsForDb = (posts as any[]).map(({ generatedImage: _g, ...p }) => p);
+  // Salviamo generatedImage nel DB — serve al cron per pubblicare con overlay
+  // Viene strippato solo dalla risposta GET per non appesantire il polling
+  const postsForDb = posts as any[];
   const [row] = await sql`
     INSERT INTO autopost_queue (id, user_id, posts, status, scheduled, silenzioso)
     VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled}, ${silenzioso})

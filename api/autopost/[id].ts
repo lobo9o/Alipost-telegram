@@ -20,9 +20,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const hasScheduled = body.scheduled !== undefined;
   const hasSilenzioso = body.silenzioso !== undefined;
 
-  const postsForDb = hasPosts
-    ? (body.posts as any[]).map(({ generatedImage: _g, ...p }: any) => p)
-    : undefined;
+  // Manteniamo generatedImage nel DB — serve al cron per pubblicare con overlay
+  const postsForDb = hasPosts ? (body.posts as any[]) : undefined;
 
   // silenzioso: null → NULL (auto/default), true/false → override esplicito
   const silenziosoVal = hasSilenzioso
