@@ -22,8 +22,11 @@ const MARKETPLACE_CURRENCY: Record<string, string> = {
   UK: 'GBP', US: 'USD', JP: 'JPY', CA: 'CAD',
 };
 
-// Categorie da cercare quando nessun filtro è impostato
+// Categorie di default quando nessun filtro è impostato
 const DEFAULT_INDEXES = ['Electronics', 'Computers', 'VideoGames', 'HomeAndKitchen', 'Toys', 'SportingGoods'];
+
+// Pagine da scaricare per categoria in una singola richiesta (10 item/pagina × 3 = 30 per categoria)
+const PAGES_PER_CATEGORY = 3;
 
 async function getToken(credentialId: string, credentialSecret: string, version: string): Promise<string> {
   const tokenUrl = TOKEN_ENDPOINTS[version];
@@ -80,14 +83,27 @@ async function searchOne(
     body: JSON.stringify(body),
   });
   const text = await apiRes.text();
-  console.log('[amazon-deals] searchItems', body.searchIndex ?? 'noIdx', apiRes.status, text.slice(0, 200));
+  const label = `${body.searchIndex ?? 'noIdx'} p${body.itemPage}`;
+  console.log('[amazon-deals]', label, apiRes.status, text.slice(0, 150));
 
-  if (!apiRes.ok) throw new Error(`Amazon API (${apiRes.status}): ${text.slice(0, 300)}`);
+  if (!apiRes.ok) throw new Error(`Amazon API ${apiRes.status}: ${text.slice(0, 200)}`);
   const data = JSON.parse(text) as any;
   const sr    = pick(data, 'searchResult', 'SearchResult') as any;
   const items = (pick(sr, 'items', 'Items') as any[]) ?? [];
   const total = Number(pick(sr, 'totalResultCount', 'TotalResultCount') ?? items.length);
   return { products: items, total };
+}
+
+// Esegue chiamate in batch per rispettare i rate limit di Amazon
+async function batchAll<T>(tasks: (() => Promise<T>)[], batchSize = 4, delayMs = 300): Promise<T[]> {
+  const results: T[] = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(t => t()));
+    results.push(...batchResults);
+    if (i + batchSize < tasks.length) await new Promise(r => setTimeout(r, delayMs));
+  }
+  return results;
 }
 
 function parseItem(item: any, currency: string, marketplaceDomain: string, affiliateTag: string) {
@@ -155,51 +171,64 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const minPrice    = parseFloat(q.minPrice   ?? '0') || 0;
   const maxPrice    = parseFloat(q.maxPrice   ?? '0') || 0;
   const sortBy      = q.sort || 'Featured';
-  // Supporto multi-categoria: "Electronics,VideoGames,Toys"
   const searchIndexesRaw = (q.searchIndexes ?? q.searchIndex ?? '').trim();
   const searchIndexes    = searchIndexesRaw ? searchIndexesRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
-  const page        = Math.max(1, parseInt(q.page ?? '1') || 1);
+  // page: per multi-categoria indica il "blocco" di pagine da scaricare
+  // blocco 1 = pagine 1-3, blocco 2 = pagine 4-6, ecc.
+  const pageBlock   = Math.max(1, parseInt(q.page ?? '1') || 1);
+  const isMulti     = searchIndexes.length > 1 || (!keywords && !searchIndexesRaw);
 
   const token = await getToken(credentialId, credentialSecret, version);
 
   const baseBody: Record<string, any> = {
     partnerTag: apiTag, partnerType: 'associates',
     resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price', 'browseNodeInfo.browseNodes'],
-    itemPage: page,
   };
-  if (keywords)            baseBody.keywords         = keywords;
-  if (minDiscount > 0)     baseBody.minSavingPercent = minDiscount;
-  if (minPrice > 0)        baseBody.minPrice         = Math.round(minPrice * 100);
-  if (maxPrice > 0)        baseBody.maxPrice         = Math.round(maxPrice * 100);
-  if (sortBy !== 'Featured') baseBody.sortBy         = sortBy;
+  if (keywords)              baseBody.keywords         = keywords;
+  if (minDiscount > 0)       baseBody.minSavingPercent = minDiscount;
+  if (minPrice > 0)          baseBody.minPrice         = Math.round(minPrice * 100);
+  if (maxPrice > 0)          baseBody.maxPrice         = Math.round(maxPrice * 100);
+  if (sortBy !== 'Featured') baseBody.sortBy           = sortBy;
 
-  // Determina quali indici chiamare
-  // Se nessuna categoria e nessuna keyword: cerca nelle categorie di default
   const indexes = searchIndexes.length > 0
     ? searchIndexes
-    : keywords ? [''] : DEFAULT_INDEXES;  // '' = nessun searchIndex (Amazon usa "All")
+    : keywords ? [''] : DEFAULT_INDEXES;
 
-  // Chiamate parallele (una per categoria)
-  const calls = indexes.map(idx => {
-    const body = { ...baseBody };
-    if (idx) body.searchIndex = idx;
-    return searchOne(token, marketplaceDomain, body).catch(e => {
-      console.warn('[amazon-deals] errore su', idx, e.message);
-      return { products: [], total: 0 };
-    });
-  });
-  const results = await Promise.all(calls);
+  let rawItems: any[] = [];
+  let anyPageHadResults = false;
 
-  // Merge e dedup per ASIN
-  const seen    = new Set<string>();
-  const rawItems: any[] = [];
-  let totalSum = 0;
-  for (const r of results) {
-    totalSum += r.total;
-    for (const item of r.products) {
-      const asin = String(pick(item, 'asin', 'ASIN') ?? '');
-      if (asin && !seen.has(asin)) { seen.add(asin); rawItems.push(item); }
+  if (isMulti) {
+    // Multi-categoria: scarica PAGES_PER_CATEGORY pagine per categoria, in batch per non fare rate-limit
+    const startPage = (pageBlock - 1) * PAGES_PER_CATEGORY + 1;
+    const pagesToFetch = Array.from({ length: PAGES_PER_CATEGORY }, (_, i) => startPage + i);
+
+    const tasks = indexes.flatMap(idx =>
+      pagesToFetch.map(pg => () => {
+        const body = { ...baseBody, itemPage: pg };
+        if (idx) body.searchIndex = idx;
+        return searchOne(token, marketplaceDomain, body).catch(e => {
+          console.warn('[amazon-deals] skip', idx, 'p'+pg, e.message);
+          return { products: [], total: 0 };
+        });
+      })
+    );
+
+    const results = await batchAll(tasks, 4, 250);
+    const seen = new Set<string>();
+    for (const r of results) {
+      if (r.products.length > 0) anyPageHadResults = true;
+      for (const item of r.products) {
+        const asin = String(pick(item, 'asin', 'ASIN') ?? '');
+        if (asin && !seen.has(asin)) { seen.add(asin); rawItems.push(item); }
+      }
     }
+  } else {
+    // Singola categoria o keyword: paginazione classica
+    const body = { ...baseBody, itemPage: pageBlock };
+    if (indexes[0]) body.searchIndex = indexes[0];
+    const r = await searchOne(token, marketplaceDomain, body);
+    rawItems = r.products;
+    anyPageHadResults = r.products.length > 0;
   }
 
   // Mappa e filtra
@@ -212,6 +241,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // Ordina per sconto decrescente
   products.sort((a, b) => b.discountPercent - a.discountPercent);
 
-  const total = indexes.length > 1 ? products.length : totalSum;
-  res.json({ products, total, page });
+  // Per multi-categoria, total indica se c'è una prossima pagina
+  const total = isMulti
+    ? (anyPageHadResults ? products.length + PAGES_PER_CATEGORY * 10 : products.length)
+    : rawItems.length;
+
+  res.json({ products, total, page: pageBlock });
 });
