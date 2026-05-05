@@ -482,13 +482,19 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const [feedback, setFeedback]       = useState('');
 
   // ── Stato Amazon ────────────────────────────────────────────────────────────
-  const dsAmz = settings.dealSearch?.amazon ?? { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'Featured', searchIndex: '' };
+  const dsAmz = settings.dealSearch?.amazon ?? { keywords: '', minDiscount: 0, maxDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'Featured', searchIndexes: '' };
   const [amzKeywords, setAmzKeywords]         = useState(dsAmz.keywords ?? '');
   const [amzMinDiscount, setAmzMinDiscount]   = useState(dsAmz.minDiscount ?? 0);
+  const [amzMaxDiscount, setAmzMaxDiscount]   = useState(dsAmz.maxDiscount ?? 0);
   const [amzMinPrice, setAmzMinPrice]         = useState(dsAmz.minPrice ?? 0);
   const [amzMaxPrice, setAmzMaxPrice]         = useState(dsAmz.maxPrice ?? 0);
   const [amzSort, setAmzSort]                 = useState(dsAmz.sort ?? 'Featured');
-  const [amzSearchIndex, setAmzSearchIndex]   = useState(dsAmz.searchIndex ?? '');
+  // Multi-categoria: Set di SearchIndex selezionati (vuoto = tutte)
+  const [amzSearchIndexes, setAmzSearchIndexes] = useState<Set<string>>(
+    new Set((dsAmz.searchIndexes ?? '').split(',').map((s: string) => s.trim()).filter(Boolean))
+  );
+  const toggleAmzCat = (v: string) =>
+    setAmzSearchIndexes(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n; });
   const [amzResults, setAmzResults]           = useState<DealProduct[]>([]);
   const [amzTotal, setAmzTotal]               = useState(0);
   const [amzPage, setAmzPage]                 = useState(1);
@@ -582,9 +588,9 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     if (resetPage) { setAmzPage(1); setAmzSelectedIds(new Set()); }
     try {
       const data = await dealsApi.searchAmazon({
-        keywords: amzKeywords.trim(), minDiscount: amzMinDiscount,
+        keywords: amzKeywords.trim(), minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount,
         minPrice: amzMinPrice, maxPrice: amzMaxPrice,
-        sort: amzSort, searchIndex: amzSearchIndex, page: p,
+        sort: amzSort, searchIndexes: Array.from(amzSearchIndexes).join(','), page: p,
       });
       setAmzResults(resetPage ? data.products : prev => [...prev, ...data.products]);
       setAmzTotal(data.total);
@@ -637,7 +643,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       ...settings,
       dealSearch: {
         ...(settings.dealSearch ?? { autoPublishAliexpress: false, autoPublishAmazon: false, publishPattern: '1:1' }),
-        amazon: { keywords: amzKeywords, minDiscount: amzMinDiscount, minPrice: amzMinPrice, maxPrice: amzMaxPrice, sort: amzSort, searchIndex: amzSearchIndex },
+        amazon: { keywords: amzKeywords, minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount, minPrice: amzMinPrice, maxPrice: amzMaxPrice, sort: amzSort, searchIndexes: Array.from(amzSearchIndexes).join(',') },
       },
     };
     try {
@@ -670,22 +676,39 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>SCONTO MIN</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <input type="range" min={0} max={90} step={5} value={amzMinDiscount}
-                    style={{ flex: 1, accentColor: 'var(--a1)' }}
-                    onChange={e => setAmzMinDiscount(Number(e.target.value))} />
-                  <span style={{ fontSize: 12, color: 'var(--t2)', minWidth: 30 }}>{amzMinDiscount}%</span>
-                </div>
+            {/* Sconto min–max + ordinamento */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
+                SCONTO {amzMinDiscount > 0 || amzMaxDiscount > 0
+                  ? <span style={{ color: 'var(--a1)' }}>
+                      {amzMinDiscount > 0 ? `${amzMinDiscount}%` : '0%'}
+                      {' → '}
+                      {amzMaxDiscount > 0 ? `${amzMaxDiscount}%` : 'illimitato'}
+                    </span>
+                  : <span style={{ color: 'var(--t3)' }}>qualsiasi</span>
+                }
               </div>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
-                <select className="sel" style={{ fontSize: 12 }} value={amzSort} onChange={e => setAmzSort(e.target.value)}>
-                  {AMZ_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: 'var(--t3)', minWidth: 22 }}>min</span>
+                <input type="range" min={0} max={90} step={5} value={amzMinDiscount}
+                  style={{ flex: 1, accentColor: 'var(--a1)' }}
+                  onChange={e => { const v = Number(e.target.value); setAmzMinDiscount(v); if (amzMaxDiscount > 0 && v >= amzMaxDiscount) setAmzMaxDiscount(0); }} />
+                <span style={{ fontSize: 11, color: 'var(--t2)', minWidth: 28 }}>{amzMinDiscount}%</span>
               </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--t3)', minWidth: 22 }}>max</span>
+                <input type="range" min={0} max={90} step={5} value={amzMaxDiscount}
+                  style={{ flex: 1, accentColor: 'var(--a1)' }}
+                  onChange={e => setAmzMaxDiscount(Number(e.target.value))} />
+                <span style={{ fontSize: 11, color: 'var(--t2)', minWidth: 28 }}>{amzMaxDiscount > 0 ? `${amzMaxDiscount}%` : '—'}</span>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
+              <select className="sel" style={{ fontSize: 12 }} value={amzSort} onChange={e => setAmzSort(e.target.value)}>
+                {AMZ_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
@@ -701,11 +724,24 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
               </div>
             </div>
 
+            {/* Categorie multi-select */}
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>CATEGORIA</div>
-              <select className="sel" style={{ fontSize: 12 }} value={amzSearchIndex} onChange={e => setAmzSearchIndex(e.target.value)}>
-                {AMZ_SEARCH_INDEXES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
+                CATEGORIE{' '}
+                {amzSearchIndexes.size > 0
+                  ? <span style={{ color: 'var(--a1)' }}>({amzSearchIndexes.size} sel.) </span>
+                  : <span style={{ color: 'var(--t3)' }}>(tutte) </span>
+                }
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {AMZ_SEARCH_INDEXES.filter(o => o.value).map(o => (
+                  <button key={o.value} className={`btn bsm ${amzSearchIndexes.has(o.value) ? 'bp' : 'bgh'}`}
+                    style={{ fontSize: 10, padding: '3px 8px' }}
+                    onClick={() => toggleAmzCat(o.value)}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <button className="btn bs" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} onClick={saveFiltersAmazon}>

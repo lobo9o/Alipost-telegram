@@ -216,10 +216,11 @@ export interface DealSearchAliSettings {
 export interface DealSearchAmazonSettings {
   keywords: string;
   minDiscount: number;
+  maxDiscount: number;
   minPrice: number;
   maxPrice: number;
   sort: string;
-  searchIndex: string; // SearchIndex Amazon: 'Electronics', 'VideoGames', ecc.
+  searchIndexes: string; // SearchIndex separati da virgola: 'Electronics,VideoGames'
 }
 
 export interface DealSearchSettings {

@@ -12,20 +12,18 @@ const TOKEN_ENDPOINTS: Record<string, string> = {
 };
 
 const MARKETPLACE_DOMAINS: Record<string, string> = {
-  IT: 'www.amazon.it',
-  US: 'www.amazon.com',
-  DE: 'www.amazon.de',
-  FR: 'www.amazon.fr',
-  ES: 'www.amazon.es',
-  UK: 'www.amazon.co.uk',
-  JP: 'www.amazon.co.jp',
-  CA: 'www.amazon.ca',
+  IT: 'www.amazon.it', US: 'www.amazon.com', DE: 'www.amazon.de',
+  FR: 'www.amazon.fr', ES: 'www.amazon.es', UK: 'www.amazon.co.uk',
+  JP: 'www.amazon.co.jp', CA: 'www.amazon.ca',
 };
 
 const MARKETPLACE_CURRENCY: Record<string, string> = {
   IT: 'EUR', DE: 'EUR', FR: 'EUR', ES: 'EUR', NL: 'EUR',
   UK: 'GBP', US: 'USD', JP: 'JPY', CA: 'CAD',
 };
+
+// Categorie da cercare quando nessun filtro è impostato
+const DEFAULT_INDEXES = ['Electronics', 'Computers', 'VideoGames', 'HomeAndKitchen', 'Toys', 'SportingGoods'];
 
 async function getToken(credentialId: string, credentialSecret: string, version: string): Promise<string> {
   const tokenUrl = TOKEN_ENDPOINTS[version];
@@ -66,68 +64,11 @@ function pick(obj: unknown, ...keys: string[]): unknown {
   return undefined;
 }
 
-export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
-  if (!allowMethods(['GET'], req, res)) return;
-  const userId = requireUserId(req, res);
-  if (!userId) return;
-
-  const [settingsRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
-  const rawData = settingsRow?.data ?? {};
-  const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
-
-  const userHasCreds   = !!(cfg.amazon?.credentialId && cfg.amazon?.credentialSecret);
-  const credentialId   = cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '';
-  const credentialSecret = cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '';
-  const apiTag         = userHasCreds ? (cfg.amazon?.affiliateTag || '') : (process.env.AMAZON_AFFILIATE_TAG || '');
-  const affiliateTag   = cfg.amazon?.affiliateTag || process.env.AMAZON_AFFILIATE_TAG || '';
-  const version        = userHasCreds
-    ? (cfg.amazon?.version      || process.env.AMAZON_VERSION      || '2.2')
-    : (process.env.AMAZON_VERSION || '2.2');
-  const marketplaceCode = ((cfg.amazon?.marketplace || process.env.AMAZON_MARKETPLACE || 'IT').toUpperCase());
-  const marketplaceDomain = MARKETPLACE_DOMAINS[marketplaceCode] ?? 'www.amazon.it';
-  const currency = MARKETPLACE_CURRENCY[marketplaceCode] ?? 'EUR';
-
-  if (!credentialId || !credentialSecret || !apiTag) {
-    res.status(400).json({ error: 'Credenziali Amazon non configurate. Vai in Impostazioni → Amazon.' });
-    return;
-  }
-
-  const q           = req.query as Record<string, string>;
-  const keywords    = (q.keywords ?? '').trim();
-  const minDiscount = parseInt(q.minDiscount  ?? '0') || 0;
-  const minPrice    = parseFloat(q.minPrice   ?? '0') || 0;
-  const maxPrice    = parseFloat(q.maxPrice   ?? '0') || 0;
-  const sortBy      = q.sort || 'Featured';
-  const searchIndex = (q.searchIndex ?? '').trim();
-  const page        = Math.max(1, parseInt(q.page ?? '1') || 1);
-  const minRating   = parseFloat(q.minRating ?? '0') || 0;
-
-  if (!keywords && !searchIndex) {
-    res.status(400).json({ error: 'Inserisci almeno una parola chiave o seleziona una categoria.' });
-    return;
-  }
-
-  const token = await getToken(credentialId, credentialSecret, version);
-
-  const body: Record<string, any> = {
-    partnerTag:  apiTag,
-    partnerType: 'associates',
-    resources: [
-      'itemInfo.title',
-      'images.primary.large',
-      'offersV2.listings.price',
-      'browseNodeInfo.browseNodes',
-    ],
-    itemPage: page,
-  };
-  if (keywords)           body.keywords        = keywords;
-  if (searchIndex)        body.searchIndex     = searchIndex;
-  if (minDiscount > 0)    body.minSavingPercent = minDiscount;
-  if (minPrice > 0)       body.minPrice        = Math.round(minPrice * 100);
-  if (maxPrice > 0)       body.maxPrice        = Math.round(maxPrice * 100);
-  if (minRating > 0)      body.minReviewsRating = Math.round(minRating);
-  if (sortBy && sortBy !== 'Featured') body.sortBy = sortBy;
-
+async function searchOne(
+  token: string,
+  marketplaceDomain: string,
+  body: Record<string, any>,
+): Promise<{ products: any[]; total: number }> {
   const apiRes = await fetch('https://creatorsapi.amazon/catalog/v1/searchItems', {
     method: 'POST',
     headers: {
@@ -139,61 +80,138 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     body: JSON.stringify(body),
   });
   const text = await apiRes.text();
-  console.log('[amazon-deals] searchItems', apiRes.status, text.slice(0, 400));
+  console.log('[amazon-deals] searchItems', body.searchIndex ?? 'noIdx', apiRes.status, text.slice(0, 200));
 
-  if (!apiRes.ok) {
-    res.status(apiRes.status).json({ error: `Amazon API (${apiRes.status}): ${text.slice(0, 300)}` });
+  if (!apiRes.ok) throw new Error(`Amazon API (${apiRes.status}): ${text.slice(0, 300)}`);
+  const data = JSON.parse(text) as any;
+  const sr    = pick(data, 'searchResult', 'SearchResult') as any;
+  const items = (pick(sr, 'items', 'Items') as any[]) ?? [];
+  const total = Number(pick(sr, 'totalResultCount', 'TotalResultCount') ?? items.length);
+  return { products: items, total };
+}
+
+function parseItem(item: any, currency: string, marketplaceDomain: string, affiliateTag: string) {
+  const asin     = String(pick(item, 'asin', 'ASIN') ?? '');
+  if (!asin) return null;
+
+  const titleVal  = pick(pick(pick(item, 'itemInfo', 'ItemInfo'), 'title', 'Title'), 'displayValue', 'DisplayValue');
+  const imageUrl  = pick(pick(pick(pick(item, 'images', 'Images'), 'primary', 'Primary'), 'large', 'Large'), 'url', 'URL');
+  const offersV2  = pick(item, 'offersV2', 'OffersV2') as any;
+  const listings  = ((pick(offersV2, 'listings', 'Listings') as any[]) ?? [])[0];
+  const priceObj  = pick(listings, 'price', 'Price') as any;
+
+  const discountedPrice = Number(pick(pick(priceObj, 'money', 'Money'), 'amount', 'Amount') ?? 0);
+  const savingBasisAmt  = Number(pick(pick(pick(priceObj, 'savingBasis', 'SavingBasis'), 'money', 'Money'), 'amount', 'Amount') ?? 0);
+  const savingsPct      = Number(pick(pick(priceObj, 'savings', 'Savings'), 'percentage', 'Percentage') ?? 0);
+  const originalPrice   = savingBasisAmt > 0 ? savingBasisAmt : discountedPrice;
+  const discountPercent = savingsPct > 0
+    ? Math.round(savingsPct)
+    : originalPrice > discountedPrice ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
+
+  if (discountedPrice <= 0) return null;
+
+  const browseNodes = (pick(pick(item, 'browseNodeInfo', 'BrowseNodeInfo'), 'browseNodes', 'BrowseNodes') as any[]) ?? [];
+  const category    = browseNodes[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
+
+  return {
+    productId: asin, title: String(titleVal ?? ''), image: String(imageUrl ?? ''),
+    originalPrice, discountedPrice, discountPercent, currency, category,
+    rating: '', url: `https://${marketplaceDomain}/dp/${asin}`,
+    affiliateUrl: `https://${marketplaceDomain}/dp/${asin}?tag=${affiliateTag}`,
+    platform: 'amazon',
+  };
+}
+
+export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
+  if (!allowMethods(['GET'], req, res)) return;
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+
+  const [settingsRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
+  const rawData = settingsRow?.data ?? {};
+  const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
+
+  const userHasCreds     = !!(cfg.amazon?.credentialId && cfg.amazon?.credentialSecret);
+  const credentialId     = cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '';
+  const credentialSecret = cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '';
+  const apiTag           = userHasCreds ? (cfg.amazon?.affiliateTag || '') : (process.env.AMAZON_AFFILIATE_TAG || '');
+  const affiliateTag     = cfg.amazon?.affiliateTag || process.env.AMAZON_AFFILIATE_TAG || '';
+  const version          = userHasCreds
+    ? (cfg.amazon?.version || process.env.AMAZON_VERSION || '2.2')
+    : (process.env.AMAZON_VERSION || '2.2');
+  const marketplaceCode   = ((cfg.amazon?.marketplace || process.env.AMAZON_MARKETPLACE || 'IT').toUpperCase());
+  const marketplaceDomain = MARKETPLACE_DOMAINS[marketplaceCode] ?? 'www.amazon.it';
+  const currency          = MARKETPLACE_CURRENCY[marketplaceCode] ?? 'EUR';
+
+  if (!credentialId || !credentialSecret || !apiTag) {
+    res.status(400).json({ error: 'Credenziali Amazon non configurate. Vai in Impostazioni → Amazon.' });
     return;
   }
 
-  const data = JSON.parse(text) as any;
-  const searchResult    = pick(data, 'searchResult', 'SearchResult') as any;
-  const items           = (pick(searchResult, 'items', 'Items') as any[]) ?? [];
-  const totalResultCount = Number(pick(searchResult, 'totalResultCount', 'TotalResultCount') ?? items.length);
+  const q           = req.query as Record<string, string>;
+  const keywords    = (q.keywords    ?? '').trim();
+  const minDiscount = parseInt(q.minDiscount  ?? '0') || 0;
+  const maxDiscount = parseInt(q.maxDiscount  ?? '0') || 0;
+  const minPrice    = parseFloat(q.minPrice   ?? '0') || 0;
+  const maxPrice    = parseFloat(q.maxPrice   ?? '0') || 0;
+  const sortBy      = q.sort || 'Featured';
+  // Supporto multi-categoria: "Electronics,VideoGames,Toys"
+  const searchIndexesRaw = (q.searchIndexes ?? q.searchIndex ?? '').trim();
+  const searchIndexes    = searchIndexesRaw ? searchIndexesRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const page        = Math.max(1, parseInt(q.page ?? '1') || 1);
 
-  const products = items.flatMap((item: any) => {
-    const asin       = String(pick(item, 'asin', 'ASIN') ?? '');
-    if (!asin) return [];
+  const token = await getToken(credentialId, credentialSecret, version);
 
-    const titleVal   = pick(pick(pick(item, 'itemInfo', 'ItemInfo'), 'title', 'Title'), 'displayValue', 'DisplayValue');
-    const imageUrl   = pick(pick(pick(pick(item, 'images', 'Images'), 'primary', 'Primary'), 'large', 'Large'), 'url', 'URL');
+  const baseBody: Record<string, any> = {
+    partnerTag: apiTag, partnerType: 'associates',
+    resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price', 'browseNodeInfo.browseNodes'],
+    itemPage: page,
+  };
+  if (keywords)            baseBody.keywords         = keywords;
+  if (minDiscount > 0)     baseBody.minSavingPercent = minDiscount;
+  if (minPrice > 0)        baseBody.minPrice         = Math.round(minPrice * 100);
+  if (maxPrice > 0)        baseBody.maxPrice         = Math.round(maxPrice * 100);
+  if (sortBy !== 'Featured') baseBody.sortBy         = sortBy;
 
-    const offersV2   = pick(item, 'offersV2', 'OffersV2') as any;
-    const listings   = ((pick(offersV2, 'listings', 'Listings') as any[]) ?? [])[0];
-    const priceObj   = pick(listings, 'price', 'Price') as any;
+  // Determina quali indici chiamare
+  // Se nessuna categoria e nessuna keyword: cerca nelle categorie di default
+  const indexes = searchIndexes.length > 0
+    ? searchIndexes
+    : keywords ? [''] : DEFAULT_INDEXES;  // '' = nessun searchIndex (Amazon usa "All")
 
-    const discountedPrice  = Number(pick(pick(priceObj, 'money', 'Money'), 'amount', 'Amount') ?? 0);
-    const savingBasisAmt   = Number(pick(pick(pick(priceObj, 'savingBasis', 'SavingBasis'), 'money', 'Money'), 'amount', 'Amount') ?? 0);
-    const savingsPct       = Number(pick(pick(priceObj, 'savings', 'Savings'), 'percentage', 'Percentage') ?? 0);
-    const originalPrice    = savingBasisAmt > 0 ? savingBasisAmt : discountedPrice;
-    const discountPercent  = savingsPct > 0
-      ? Math.round(savingsPct)
-      : originalPrice > discountedPrice
-        ? Math.round((1 - discountedPrice / originalPrice) * 100) : 0;
-
-    if (discountedPrice <= 0) return [];
-
-    const browseNodes = (pick(pick(item, 'browseNodeInfo', 'BrowseNodeInfo'), 'browseNodes', 'BrowseNodes') as any[]) ?? [];
-    const category    = browseNodes[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
-
-    return [{
-      productId:       asin,
-      title:           String(titleVal ?? ''),
-      image:           String(imageUrl ?? ''),
-      originalPrice,
-      discountedPrice,
-      discountPercent,
-      currency,
-      category,
-      rating:          '',
-      url:             `https://${marketplaceDomain}/dp/${asin}`,
-      affiliateUrl:    `https://${marketplaceDomain}/dp/${asin}?tag=${affiliateTag}`,
-      platform:        'amazon',
-    }];
+  // Chiamate parallele (una per categoria)
+  const calls = indexes.map(idx => {
+    const body = { ...baseBody };
+    if (idx) body.searchIndex = idx;
+    return searchOne(token, marketplaceDomain, body).catch(e => {
+      console.warn('[amazon-deals] errore su', idx, e.message);
+      return { products: [], total: 0 };
+    });
   });
+  const results = await Promise.all(calls);
+
+  // Merge e dedup per ASIN
+  const seen    = new Set<string>();
+  const rawItems: any[] = [];
+  let totalSum = 0;
+  for (const r of results) {
+    totalSum += r.total;
+    for (const item of r.products) {
+      const asin = String(pick(item, 'asin', 'ASIN') ?? '');
+      if (asin && !seen.has(asin)) { seen.add(asin); rawItems.push(item); }
+    }
+  }
+
+  // Mappa e filtra
+  let products = rawItems
+    .map(item => parseItem(item, currency, marketplaceDomain, affiliateTag))
+    .filter((p): p is NonNullable<ReturnType<typeof parseItem>> => p !== null);
+
+  if (maxDiscount > 0) products = products.filter(p => p.discountPercent <= maxDiscount);
 
   // Ordina per sconto decrescente
   products.sort((a, b) => b.discountPercent - a.discountPercent);
 
-  res.json({ products, total: totalResultCount, page });
+  const total = indexes.length > 1 ? products.length : totalSum;
+  res.json({ products, total, page });
 });
