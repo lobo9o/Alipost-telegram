@@ -182,4 +182,26 @@ export const dealsApi = {
     if (params.minRating)               qs.set('minRating',    String(params.minRating));
     return req<DealsResult>('GET', `/api/deals?${qs.toString()}`);
   },
+
+  searchAmazon: (params: {
+    keywords?: string;
+    minDiscount?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    sort?: string;
+    searchIndex?: string;
+    page?: number;
+    minRating?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params.keywords)                qs.set('keywords',     params.keywords);
+    if (params.minDiscount)             qs.set('minDiscount',  String(params.minDiscount));
+    if (params.minPrice)                qs.set('minPrice',     String(params.minPrice));
+    if (params.maxPrice)                qs.set('maxPrice',     String(params.maxPrice));
+    if (params.sort)                    qs.set('sort',         params.sort);
+    if (params.searchIndex)             qs.set('searchIndex',  params.searchIndex);
+    if (params.page && params.page > 1) qs.set('page',         String(params.page));
+    if (params.minRating)               qs.set('minRating',    String(params.minRating));
+    return req<DealsResult>('GET', `/api/amazon-deals?${qs.toString()}`);
+  },
 };

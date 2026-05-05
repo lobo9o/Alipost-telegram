@@ -369,6 +369,31 @@ const CAT_PRESETS = [
   { id: '200003498',   label: '📷 Foto' },
 ];
 
+const AMZ_SORT_OPTIONS = [
+  { value: 'Featured',           label: 'In evidenza' },
+  { value: 'Price:LowToHigh',    label: 'Prezzo ↑' },
+  { value: 'Price:HighToLow',    label: 'Prezzo ↓' },
+  { value: 'AvgCustomerReviews', label: 'Recensioni ↓' },
+  { value: 'NewestArrivals',     label: 'Più recenti' },
+];
+
+const AMZ_SEARCH_INDEXES = [
+  { value: '',                         label: 'Tutte le categorie' },
+  { value: 'Electronics',              label: '📱 Elettronica' },
+  { value: 'Computers',                label: '💻 Computer' },
+  { value: 'VideoGames',               label: '🎮 Videogiochi' },
+  { value: 'HomeAndKitchen',           label: '🏠 Casa e cucina' },
+  { value: 'Apparel',                  label: '👕 Abbigliamento' },
+  { value: 'SportingGoods',            label: '⚽ Sport' },
+  { value: 'Books',                    label: '📚 Libri' },
+  { value: 'Beauty',                   label: '💄 Bellezza' },
+  { value: 'Toys',                     label: '🧸 Giocattoli' },
+  { value: 'Automotive',               label: '🚗 Auto' },
+  { value: 'ToolsAndHomeImprovement',  label: '🔧 Fai da te' },
+  { value: 'Watches',                  label: '⌚ Orologi' },
+  { value: 'Music',                    label: '🎵 Musica' },
+];
+
 function DealCard({ p, selected, onToggle }: { p: DealProduct; selected: boolean; onToggle: () => void }) {
   const sym = p.currency === 'EUR' ? '€' : p.currency === 'GBP' ? '£' : '$';
   return (
@@ -456,6 +481,23 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const [adding, setAdding]           = useState(false);
   const [feedback, setFeedback]       = useState('');
 
+  // ── Stato Amazon ────────────────────────────────────────────────────────────
+  const dsAmz = settings.dealSearch?.amazon ?? { keywords: '', minDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'Featured', searchIndex: '' };
+  const [amzKeywords, setAmzKeywords]         = useState(dsAmz.keywords ?? '');
+  const [amzMinDiscount, setAmzMinDiscount]   = useState(dsAmz.minDiscount ?? 0);
+  const [amzMinPrice, setAmzMinPrice]         = useState(dsAmz.minPrice ?? 0);
+  const [amzMaxPrice, setAmzMaxPrice]         = useState(dsAmz.maxPrice ?? 0);
+  const [amzSort, setAmzSort]                 = useState(dsAmz.sort ?? 'Featured');
+  const [amzSearchIndex, setAmzSearchIndex]   = useState(dsAmz.searchIndex ?? '');
+  const [amzResults, setAmzResults]           = useState<DealProduct[]>([]);
+  const [amzTotal, setAmzTotal]               = useState(0);
+  const [amzPage, setAmzPage]                 = useState(1);
+  const [amzLoading, setAmzLoading]           = useState(false);
+  const [amzErr, setAmzErr]                   = useState('');
+  const [amzSearched, setAmzSearched]         = useState(false);
+  const [amzSelectedIds, setAmzSelectedIds]   = useState<Set<string>>(new Set());
+  const [amzAdding, setAmzAdding]             = useState(false);
+
   const showFb = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(''), 3000); };
 
   const doSearch = async (resetPage = true) => {
@@ -533,6 +575,78 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     } catch { showFb('⚠️ Errore nel salvataggio'); }
   };
 
+  const doSearchAmazon = async (resetPage = true) => {
+    setAmzErr('');
+    setAmzLoading(true);
+    const p = resetPage ? 1 : amzPage;
+    if (resetPage) { setAmzPage(1); setAmzSelectedIds(new Set()); }
+    try {
+      const data = await dealsApi.searchAmazon({
+        keywords: amzKeywords.trim(), minDiscount: amzMinDiscount,
+        minPrice: amzMinPrice, maxPrice: amzMaxPrice,
+        sort: amzSort, searchIndex: amzSearchIndex, page: p,
+      });
+      setAmzResults(resetPage ? data.products : prev => [...prev, ...data.products]);
+      setAmzTotal(data.total);
+      setAmzSearched(true);
+    } catch (e: any) {
+      setAmzErr(e.message ?? 'Errore durante la ricerca');
+    } finally {
+      setAmzLoading(false);
+    }
+  };
+
+  const addSelectedAmazonToQueue = async () => {
+    if (!amzSelectedIds.size || amzAdding) return;
+    setAmzAdding(true);
+    const defaultAmazonLayout = layouts.find(l => l.tipo === 'amazon')?.id ?? layouts.find(l => l.tipo === 'aliexpress')?.id ?? '';
+    const tpl = templates[0];
+    const addedItems: QueueItem[] = [];
+    for (const pid of Array.from(amzSelectedIds)) {
+      const p = amzResults.find(r => r.productId === pid);
+      if (!p) continue;
+      let post: CreatedPost = {
+        id: genId(), platform: 'amazon',
+        sourceUrl: p.affiliateUrl || p.url,
+        productId: p.productId, title: p.title, image: p.image,
+        originalPrice: p.originalPrice, discountedPrice: p.discountedPrice,
+        discountPercent: p.discountPercent,
+        customText: '', isHistoricalLow: false,
+        templateId: tpl?.id || 'tpl1',
+        layoutId: defaultAmazonLayout, keyboardId: '', emoji: '🟡',
+      };
+      if (tpl && post.image) {
+        const gi = await generatePostImage(tpl, post.image, false, 'amazon', {
+          prezzo: p.discountedPrice.toFixed(2),
+          prezzoPrecedente: p.originalPrice.toFixed(2),
+          sconto: `${p.discountPercent}%`,
+        }).catch(() => '');
+        if (gi) post = { ...post, generatedImage: gi };
+      }
+      const qItem: QueueItem = { id: genId(), tipo: 'single', sched: 'Auto', status: 'draft', sel: false, posts: [post] };
+      try { await autopostApi.create(qItem); addedItems.push(qItem); } catch {}
+    }
+    if (addedItems.length) setQueue(prev => [...prev, ...addedItems]);
+    setAmzSelectedIds(new Set());
+    setAmzAdding(false);
+    showFb(`✅ ${addedItems.length} prodotto${addedItems.length === 1 ? '' : 'i'} aggiunto${addedItems.length === 1 ? '' : 'i'} in coda`);
+  };
+
+  const saveFiltersAmazon = async () => {
+    const newSettings = {
+      ...settings,
+      dealSearch: {
+        ...(settings.dealSearch ?? { autoPublishAliexpress: false, autoPublishAmazon: false, publishPattern: '1:1' }),
+        amazon: { keywords: amzKeywords, minDiscount: amzMinDiscount, minPrice: amzMinPrice, maxPrice: amzMaxPrice, sort: amzSort, searchIndex: amzSearchIndex },
+      },
+    };
+    try {
+      await settingsApi.save(newSettings);
+      setSettings(newSettings);
+      showFb('✅ Filtri salvati per auto-ricerca Amazon');
+    } catch { showFb('⚠️ Errore nel salvataggio'); }
+  };
+
   const hasMore = results.length < total;
 
   return (
@@ -544,7 +658,112 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       />
 
       {tab === 'amazon' && (
-        <EmptyState icon="🟡" text="Ricerca offerte Amazon in arrivo." />
+        <>
+          <div style={{ padding: '10px 16px 0' }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input className="inp" placeholder="Parole chiave (es: cuffie bluetooth, nintendo switch...)"
+                value={amzKeywords} onChange={e => setAmzKeywords(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && doSearchAmazon()} style={{ flex: 1 }} />
+              <button className="btn bp" style={{ flexShrink: 0, padding: '0 14px' }}
+                onClick={() => doSearchAmazon()} disabled={amzLoading}>
+                {amzLoading ? '⏳' : '🔍'}
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>SCONTO MIN</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <input type="range" min={0} max={90} step={5} value={amzMinDiscount}
+                    style={{ flex: 1, accentColor: 'var(--a1)' }}
+                    onChange={e => setAmzMinDiscount(Number(e.target.value))} />
+                  <span style={{ fontSize: 12, color: 'var(--t2)', minWidth: 30 }}>{amzMinDiscount}%</span>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
+                <select className="sel" style={{ fontSize: 12 }} value={amzSort} onChange={e => setAmzSort(e.target.value)}>
+                  {AMZ_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MIN (€)</div>
+                <input className="inp" type="number" min={0} placeholder="0"
+                  value={amzMinPrice || ''} onChange={e => setAmzMinPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MAX (€)</div>
+                <input className="inp" type="number" min={0} placeholder="nessun limite"
+                  value={amzMaxPrice || ''} onChange={e => setAmzMaxPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>CATEGORIA</div>
+              <select className="sel" style={{ fontSize: 12 }} value={amzSearchIndex} onChange={e => setAmzSearchIndex(e.target.value)}>
+                {AMZ_SEARCH_INDEXES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+
+            <button className="btn bs" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} onClick={saveFiltersAmazon}>
+              💾 Salva come filtri per auto-ricerca
+            </button>
+
+            {!settings.amazon?.credentialId && (
+              <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 12, color: '#ef4444' }}>
+                ⚠️ Credenziali Amazon non configurate.{' '}
+                <button className="btn bgh" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => nav('settings')}>Impostazioni →</button>
+              </div>
+            )}
+          </div>
+
+          {amzErr && <div style={{ margin: '0 16px 8px' }}><ErrorBanner>{amzErr}</ErrorBanner></div>}
+          {feedback && <div style={{ margin: '0 16px 8px', padding: '8px 12px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 8, fontSize: 12, color: '#4ade80' }}>{feedback}</div>}
+
+          {amzResults.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px 8px' }}>
+              <button className="btn bgh bsm" style={{ fontSize: 11 }}
+                onClick={() => setAmzSelectedIds(amzSelectedIds.size === amzResults.length ? new Set() : new Set(amzResults.map(r => r.productId)))}>
+                {amzSelectedIds.size === amzResults.length ? '☑ Deseleziona' : '☐ Seleziona tutto'}
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--t3)', flex: 1 }}>
+                {amzResults.length} di {amzTotal} · {amzSelectedIds.size > 0 ? `${amzSelectedIds.size} selezionati` : 'tocca per selezionare'}
+              </span>
+            </div>
+          )}
+
+          {amzSearched && !amzLoading && amzResults.length === 0 && !amzErr && (
+            <EmptyState icon="🔍" text="Nessun risultato. Cambia parole chiave o riduci i filtri." />
+          )}
+
+          {amzResults.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '0 16px', paddingBottom: amzSelectedIds.size > 0 ? 90 : 16 }}>
+              {amzResults.map(p => (
+                <DealCard key={p.productId} p={p} selected={amzSelectedIds.has(p.productId)} onToggle={() => {
+                  setAmzSelectedIds(prev => { const n = new Set(prev); n.has(p.productId) ? n.delete(p.productId) : n.add(p.productId); return n; });
+                }} />
+              ))}
+              {amzResults.length < amzTotal && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <button className="btn bs bfull" onClick={() => { setAmzPage(p => p + 1); doSearchAmazon(false); }} disabled={amzLoading}>
+                    {amzLoading ? '⏳ Caricamento...' : '⬇️ Carica altri'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!amzSearched && !amzLoading && (
+            <EmptyState icon="🟡" text="Cerca prodotti Amazon in offerta."
+              action={<button className="btn bp" onClick={() => doSearchAmazon()}>🔍 Cerca ora</button>} />
+          )}
+          {amzLoading && amzResults.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--t3)', fontSize: 13 }}>⏳ Ricerca in corso...</div>
+          )}
+        </>
       )}
 
       {tab === 'aliexpress' && (
@@ -688,15 +907,17 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       )}
 
       {/* Bottone fisso in fondo — solo quando ci sono selezioni */}
-      {tab === 'aliexpress' && selectedIds.size > 0 && (
+      {((tab === 'aliexpress' && selectedIds.size > 0) || (tab === 'amazon' && amzSelectedIds.size > 0)) && (
         <div style={{ position: 'fixed', bottom: 60, left: 0, right: 0, padding: '0 16px', zIndex: 50 }}>
           <button
             className="btn bp"
             style={{ width: '100%', padding: 13, fontSize: 14, fontWeight: 700, boxShadow: '0 4px 24px rgba(0,0,0,0.5)', borderRadius: 12 }}
-            onClick={addSelectedToQueue}
-            disabled={adding}
+            onClick={tab === 'aliexpress' ? addSelectedToQueue : addSelectedAmazonToQueue}
+            disabled={adding || amzAdding}
           >
-            {adding ? '⏳ Aggiungendo...' : `➕ Aggiungi ${selectedIds.size} in coda autopost`}
+            {(adding || amzAdding)
+              ? '⏳ Aggiungendo...'
+              : `➕ Aggiungi ${tab === 'aliexpress' ? selectedIds.size : amzSelectedIds.size} in coda autopost`}
           </button>
         </div>
       )}

@@ -1,7 +1,7 @@
 export type Platform = 'amazon' | 'aliexpress';
 export type PostType = 'single' | 'multi';
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'error';
-export type LayoutType = 'normal' | 'historical_low' | 'multi' | 'aliexpress' | 'aliexpress_historical_low';
+export type LayoutType = 'normal' | 'historical_low' | 'multi' | 'aliexpress' | 'aliexpress_historical_low' | 'amazon';
 export type NavPage = 'dash' | 'search' | 'newpost' | 'queue' | 'published' | 'layout' | 'settings';
 
 export interface LinkItem { id: string; url: string; platform: Platform; }
@@ -213,11 +213,21 @@ export interface DealSearchAliSettings {
   categoryIds: string;  // es. "44,509" — separati da virgola
 }
 
+export interface DealSearchAmazonSettings {
+  keywords: string;
+  minDiscount: number;
+  minPrice: number;
+  maxPrice: number;
+  sort: string;
+  searchIndex: string; // SearchIndex Amazon: 'Electronics', 'VideoGames', ecc.
+}
+
 export interface DealSearchSettings {
   autoPublishAliexpress: boolean;
   autoPublishAmazon: boolean;
   publishPattern: string; // '1:1' | '2:1' | '3:1' | 'ali-only' | 'amazon-only'
   ali: DealSearchAliSettings;
+  amazon?: DealSearchAmazonSettings;
 }
 
 export interface AppSettings {

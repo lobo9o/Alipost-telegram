@@ -129,6 +129,7 @@ const TIPO_STYLE: Record<LayoutType, string> = {
   multi: 'ltype mult',
   aliexpress: 'ltype ali',
   aliexpress_historical_low: 'ltype ali',
+  amazon: 'ltype norm',
 };
 const TIPO_LABEL: Record<LayoutType, string> = {
   normal: 'Normale',
@@ -136,6 +137,7 @@ const TIPO_LABEL: Record<LayoutType, string> = {
   multi: 'Multiplo',
   aliexpress: 'AliExpress',
   aliexpress_historical_low: 'Min. Storico Ali',
+  amazon: 'Amazon',
 };
 
 function TextLayoutSection() {
