@@ -52,10 +52,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const minDiscount = parseInt(q.minDiscount  ?? '0') || 0;
   const minPrice    = parseFloat(q.minPrice   ?? '0') || 0;
   const maxPrice    = parseFloat(q.maxPrice   ?? '0') || 0;
-  const sort        = q.sort || 'DEFAULT_SORT';
+  const sortReq     = q.sort || 'DEFAULT_SORT';
+  // RATING_DESC è gestito lato server (post-sort) — per l'API usiamo LAST_VOLUME_DESC
+  const sort        = sortReq === 'RATING_DESC' ? 'LAST_VOLUME_DESC' : sortReq;
   const deliveryDays = parseInt(q.deliveryDays ?? '0') || 0;
   const categoryIds = (q.categoryIds ?? '').trim();
   const page        = Math.max(1, parseInt(q.page ?? '1') || 1);
+  const minRating   = parseFloat(q.minRating ?? '0') || 0;
 
   const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
 
@@ -123,23 +126,31 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   const mapped = products
     .map((p: any) => {
-      const discPct = parseInt(String(p.discount ?? '0').replace('%', '')) || 0;
+      const discPct  = parseInt(String(p.discount ?? '0').replace('%', '')) || 0;
+      const ratingNum = parseFloat(String(p.evaluate_rate ?? '0').replace('%', '')) || 0;
       const productUrl = `https://www.aliexpress.com/item/${p.product_id}.html`;
       return {
-        productId:      String(p.product_id),
-        title:          p.product_title ?? '',
-        image:          p.product_main_image_url ?? '',
-        originalPrice:  parseFloat(p.target_original_price ?? '0') || 0,
+        productId:       String(p.product_id),
+        title:           p.product_title ?? '',
+        image:           p.product_main_image_url ?? '',
+        originalPrice:   parseFloat(p.target_original_price ?? '0') || 0,
         discountedPrice: parseFloat(p.target_sale_price ?? '0') || 0,
         discountPercent: discPct,
-        currency:       p.target_sale_price_currency ?? currency,
-        category:       p.second_level_category_name ?? '',
-        rating:         p.evaluate_rate ?? '',
-        url:            productUrl,
-        affiliateUrl:   p.promotion_link || productUrl,
+        currency:        p.target_sale_price_currency ?? currency,
+        category:        p.second_level_category_name ?? '',
+        rating:          p.evaluate_rate ?? '',
+        ratingNum,
+        url:             productUrl,
+        affiliateUrl:    p.promotion_link || productUrl,
       };
     })
-    .filter((p: any) => p.discountPercent >= minDiscount);
+    .filter((p: any) => p.discountPercent >= minDiscount)
+    .filter((p: any) => minRating <= 0 || p.ratingNum >= minRating);
+
+  // Se l'utente ha chiesto "Valutazione ↓", ordina per rating decrescente nella pagina
+  if (sortReq === 'RATING_DESC') {
+    mapped.sort((a: any, b: any) => b.ratingNum - a.ratingNum);
+  }
 
   res.json({ products: mapped, total, page });
 });

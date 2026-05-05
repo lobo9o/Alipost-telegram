@@ -168,6 +168,7 @@ export const dealsApi = {
     deliveryDays?: number;
     categoryIds?: string;
     page?: number;
+    minRating?: number;
   }) => {
     const qs = new URLSearchParams();
     if (params.keywords)                qs.set('keywords',     params.keywords);
@@ -178,6 +179,7 @@ export const dealsApi = {
     if (params.deliveryDays)            qs.set('deliveryDays', String(params.deliveryDays));
     if (params.categoryIds)             qs.set('categoryIds',  params.categoryIds);
     if (params.page && params.page > 1) qs.set('page',         String(params.page));
+    if (params.minRating)               qs.set('minRating',    String(params.minRating));
     return req<DealsResult>('GET', `/api/deals?${qs.toString()}`);
   },
 };

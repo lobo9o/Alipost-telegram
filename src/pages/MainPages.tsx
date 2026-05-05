@@ -335,10 +335,11 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
 // SEARCH PAGE
 // ============================================================
 const ALI_SORT_OPTIONS = [
-  { value: 'DEFAULT_SORT',    label: 'Rilevanza' },
-  { value: 'ORDERS_DESC',     label: 'Più venduti' },
-  { value: 'SALE_PRICE_ASC',  label: 'Prezzo ↑' },
-  { value: 'SALE_PRICE_DESC', label: 'Prezzo ↓' },
+  { value: 'DEFAULT_SORT',      label: 'Rilevanza' },
+  { value: 'LAST_VOLUME_DESC',  label: 'Più venduti' },
+  { value: 'RATING_DESC',       label: 'Valutazione ↓' },
+  { value: 'SALE_PRICE_ASC',    label: 'Prezzo ↑' },
+  { value: 'SALE_PRICE_DESC',   label: 'Prezzo ↓' },
 ];
 
 const DELIVERY_OPTIONS = [
@@ -347,13 +348,25 @@ const DELIVERY_OPTIONS = [
   { value: 15, label: '⚡ Veloce (≤15 gg)' },
 ];
 
+const MIN_RATING_OPTIONS = [
+  { value: 0,  label: 'Qualsiasi' },
+  { value: 80, label: '≥ 80%' },
+  { value: 85, label: '≥ 85%' },
+  { value: 90, label: '≥ 90%' },
+  { value: 95, label: '≥ 95% (solo top)' },
+];
+
 const CAT_PRESETS = [
-  { id: '44',     label: '📱 Elettronica' },
-  { id: '509',    label: '📱 Telefoni' },
-  { id: '7',      label: '💻 Computer' },
-  { id: '18',     label: '⚽ Sport' },
-  { id: '2',      label: '🏠 Casa' },
-  { id: '66',     label: '🎮 Gaming' },
+  { id: '44',          label: '📱 Elettronica' },
+  { id: '509',         label: '📱 Telefoni' },
+  { id: '7',           label: '💻 Computer' },
+  { id: '200000783',   label: '⌚ Wearable' },
+  { id: '18',          label: '⚽ Sport' },
+  { id: '2',           label: '🏠 Casa' },
+  { id: '66',          label: '🎮 Gaming' },
+  { id: '1511',        label: '🎧 Audio' },
+  { id: '200001075',   label: '🏡 Smart Home' },
+  { id: '200003498',   label: '📷 Foto' },
 ];
 
 function DealCard({ p, selected, onToggle }: { p: DealProduct; selected: boolean; onToggle: () => void }) {
@@ -424,6 +437,14 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const [sort, setSort]                 = useState(ds.sort);
   const [deliveryDays, setDeliveryDays] = useState(ds.deliveryDays ?? 0);
   const [categoryIds, setCategoryIds]   = useState(ds.categoryIds ?? '');
+  const [minRating, setMinRating]       = useState(0);
+
+  // Multi-categoria: toggle una pill aggiunge/rimuove dall'elenco separato da virgola
+  const toggleCat = (id: string) => {
+    const ids = categoryIds.split(',').map(s => s.trim()).filter(Boolean);
+    setCategoryIds(ids.includes(id) ? ids.filter(x => x !== id).join(',') : [...ids, id].join(','));
+  };
+  const activeCats = new Set(categoryIds.split(',').map(s => s.trim()).filter(Boolean));
 
   const [results, setResults]         = useState<DealProduct[]>([]);
   const [total, setTotal]             = useState(0);
@@ -443,7 +464,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     const p = resetPage ? 1 : page;
     if (resetPage) { setPage(1); setSelectedIds(new Set()); }
     try {
-      const data = await dealsApi.searchAli({ keywords: keywords.trim(), minDiscount, minPrice, maxPrice, sort, deliveryDays, categoryIds: categoryIds.trim(), page: p });
+      const data = await dealsApi.searchAli({ keywords: keywords.trim(), minDiscount, minPrice, maxPrice, sort, deliveryDays, categoryIds: categoryIds.trim(), page: p, minRating });
       setResults(resetPage ? data.products : prev => [...prev, ...data.products]);
       setTotal(data.total);
       setSearched(true);
@@ -582,19 +603,29 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
               </div>
             </div>
 
-            {/* Categorie */}
+            {/* Valutazione minima */}
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>CATEGORIA (ID)</div>
+              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>VALUTAZIONE MINIMA</div>
+              <select className="sel" style={{ fontSize: 12 }} value={minRating} onChange={e => setMinRating(Number(e.target.value))}>
+                {MIN_RATING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+
+            {/* Categorie multi-select */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
+                CATEGORIE {activeCats.size > 0 && <span style={{ color: 'var(--a1)' }}>({activeCats.size} selezionate)</span>}
+              </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
                 {CAT_PRESETS.map(c => (
-                  <button key={c.id} className={`btn bsm ${categoryIds === c.id ? 'bp' : 'bgh'}`}
+                  <button key={c.id} className={`btn bsm ${activeCats.has(c.id) ? 'bp' : 'bgh'}`}
                     style={{ fontSize: 10, padding: '3px 8px' }}
-                    onClick={() => setCategoryIds(categoryIds === c.id ? '' : c.id)}>
+                    onClick={() => toggleCat(c.id)}>
                     {c.label}
                   </button>
                 ))}
               </div>
-              <input className="inp" placeholder="ID personalizzato (es: 44,509)" value={categoryIds}
+              <input className="inp" placeholder="ID aggiuntivi (es: 44,509)" value={categoryIds}
                 onChange={e => setCategoryIds(e.target.value)} style={{ fontSize: 12 }} />
             </div>
 
