@@ -28,6 +28,76 @@ function aliTimestamp(): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
+// Quante parole chiave (>1 carattere) compaiono nel titolo (0.0 – 1.0)
+function titleScore(title: string, term: string): number {
+  if (!term) return 1;
+  const words = term.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+  if (!words.length) return 1;
+  const t = title.toLowerCase();
+  const matched = words.filter(w => t.includes(w)).length;
+  return matched / words.length;
+}
+
+// Soglia minima: almeno il 60% delle parole deve comparire nel titolo
+function scoreThreshold(term: string): number {
+  const words = term.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+  if (!words.length) return 0;
+  return Math.ceil(words.length * 0.6) / words.length;
+}
+
+// Un prodotto passa il filtro se corrisp. a ALMENO UN termine del gruppo |
+function passesTitleFilter(title: string, terms: string[]): boolean {
+  if (!terms.length) return true;
+  return terms.some(t => titleScore(title, t) >= scoreThreshold(t));
+}
+
+// Miglior score tra tutti i termini (usato per il ranking)
+function bestTitleScore(title: string, terms: string[]): number {
+  if (!terms.length) return 1;
+  return Math.max(...terms.map(t => titleScore(title, t)));
+}
+
+async function queryAli(
+  appKey: string,
+  appSecret: string,
+  baseParams: Record<string, string>,
+  keyword: string,
+  page: number,
+): Promise<{ products: any[]; total: number }> {
+  const params: Record<string, string> = {
+    app_key: appKey.trim(),
+    method: 'aliexpress.affiliate.product.query',
+    sign_method: 'md5',
+    timestamp: aliTimestamp(),
+    v: '2.0',
+    ...baseParams,
+    page_no: String(page),
+  };
+  if (keyword) params.keywords = keyword;
+  params.sign = aliSign(params, appSecret.trim());
+
+  const apiRes = await fetch('https://api-sg.aliexpress.com/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+    body: new URLSearchParams(params).toString(),
+  });
+  const text = await apiRes.text();
+  console.log(`[deals] "${keyword.slice(0, 30)}" → ${apiRes.status} ${text.slice(0, 150)}`);
+
+  if (!apiRes.ok) return { products: [], total: 0 };
+  const json = JSON.parse(text) as any;
+  if (json.error_response) {
+    console.warn('[deals] error_response:', json.error_response.msg);
+    return { products: [], total: 0 };
+  }
+  const resp = json?.aliexpress_affiliate_product_query_response?.resp_result;
+  if (!resp || resp.resp_code !== 200) return { products: [], total: 0 };
+  return {
+    products: resp?.result?.products?.product ?? [],
+    total:    resp?.result?.total_record_count ?? 0,
+  };
+}
+
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['GET'], req, res)) return;
   const userId = requireUserId(req, res);
@@ -47,110 +117,117 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const q = req.query as Record<string, string>;
-  const keywords    = (q.keywords    ?? '').trim();
+  const q          = req.query as Record<string, string>;
+  const kwRaw      = (q.keywords ?? '').trim();
   const minDiscount = parseInt(q.minDiscount  ?? '0') || 0;
   const minPrice    = parseFloat(q.minPrice   ?? '0') || 0;
   const maxPrice    = parseFloat(q.maxPrice   ?? '0') || 0;
   const sortReq     = q.sort || 'DEFAULT_SORT';
-  // RATING_DESC è gestito lato server (post-sort) — per l'API usiamo LAST_VOLUME_DESC
-  const sort        = sortReq === 'RATING_DESC' ? 'LAST_VOLUME_DESC' : sortReq;
+  // RATING_DESC è gestito lato server; per l'API usiamo LAST_VOLUME_DESC (più venduti)
+  const apiSort     = sortReq === 'RATING_DESC' ? 'LAST_VOLUME_DESC' : sortReq;
   const deliveryDays = parseInt(q.deliveryDays ?? '0') || 0;
-  const categoryIds = (q.categoryIds ?? '').trim();
-  const page        = Math.max(1, parseInt(q.page ?? '1') || 1);
-  const minRating   = parseFloat(q.minRating ?? '0') || 0;
+  const categoryIds  = (q.categoryIds ?? '').trim();
+  const page         = Math.max(1, parseInt(q.page ?? '1') || 1);
+  const minRating    = parseFloat(q.minRating ?? '0') || 0;
+
+  // Supporto ricerche multiple: "cuffie | auricolari | headset"
+  const terms = kwRaw.split('|').map(s => s.trim()).filter(Boolean);
+  const isMulti = terms.length > 1;
 
   const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
 
-  const extra: Record<string, string> = {
-    tracking_id: trackId,
-    target_currency: currency,
-    target_language: language,
-    ship_to_country: country.toUpperCase(),
-    sort,
-    page_size: '50',
-    page_no: String(page),
+  const base: Record<string, string> = {
+    tracking_id:      trackId,
+    target_currency:  currency,
+    target_language:  language,
+    ship_to_country:  country.toUpperCase(),
+    sort:             apiSort,
+    page_size:        '50',
     fields: [
       'product_id', 'product_title', 'product_main_image_url',
       'target_sale_price', 'target_original_price', 'target_sale_price_currency',
-      'discount', 'evaluate_rate', 'second_level_category_name',
-      'promotion_link',
+      'discount', 'evaluate_rate', 'second_level_category_name', 'promotion_link',
     ].join(','),
   };
+  if (categoryIds)      base.category_ids  = categoryIds;
+  if (minPrice > 0)     base.min_sale_price = String(Math.round(minPrice * 100));
+  if (maxPrice > 0)     base.max_sale_price = String(Math.round(maxPrice * 100));
+  if (deliveryDays > 0) base.delivery_days  = String(deliveryDays);
 
-  if (keywords)              extra.keywords       = keywords;
-  if (categoryIds)           extra.category_ids   = categoryIds;
-  if (minPrice > 0)          extra.min_sale_price = String(Math.round(minPrice * 100));
-  if (maxPrice > 0)          extra.max_sale_price = String(Math.round(maxPrice * 100));
-  if (deliveryDays > 0)      extra.delivery_days  = String(deliveryDays);
+  // ── Chiamate API ──────────────────────────────────────────────────────────
+  let rawProducts: any[] = [];
+  let apiTotal = 0;
 
-  const params: Record<string, string> = {
-    app_key: appKey.trim(),
-    method: 'aliexpress.affiliate.product.query',
-    sign_method: 'md5',
-    timestamp: aliTimestamp(),
-    v: '2.0',
-    ...extra,
-  };
-  params.sign = aliSign(params, appSecret.trim());
+  if (!terms.length) {
+    // Nessuna keyword: ricerca generica
+    const r = await queryAli(appKey, appSecret, base, '', page);
+    rawProducts = r.products;
+    apiTotal    = r.total;
+  } else if (isMulti) {
+    // Ricerche parallele per ogni termine, poi merge/dedup
+    const results = await Promise.all(terms.map(t => queryAli(appKey, appSecret, base, t, 1)));
+    const seen = new Set<string>();
+    for (const r of results) {
+      apiTotal += r.total;
+      for (const p of r.products) {
+        const pid = String(p.product_id);
+        if (!seen.has(pid)) { seen.add(pid); rawProducts.push(p); }
+      }
+    }
+  } else {
+    // Singola keyword, con paginazione
+    const r = await queryAli(appKey, appSecret, base, terms[0], page);
+    rawProducts = r.products;
+    apiTotal    = r.total;
+  }
 
-  const body = new URLSearchParams(params).toString();
-  const apiRes = await fetch('https://api-sg.aliexpress.com/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
-    body,
+  // ── Mappa ─────────────────────────────────────────────────────────────────
+  const mapped = rawProducts.map((p: any) => {
+    const discPct   = parseInt(String(p.discount ?? '0').replace('%', '')) || 0;
+    const ratingNum = parseFloat(String(p.evaluate_rate ?? '0').replace('%', '')) || 0;
+    const productUrl = `https://www.aliexpress.com/item/${p.product_id}.html`;
+    return {
+      productId:       String(p.product_id),
+      title:           String(p.product_title ?? ''),
+      image:           String(p.product_main_image_url ?? ''),
+      originalPrice:   parseFloat(p.target_original_price ?? '0') || 0,
+      discountedPrice: parseFloat(p.target_sale_price ?? '0') || 0,
+      discountPercent: discPct,
+      currency:        String(p.target_sale_price_currency ?? currency),
+      category:        String(p.second_level_category_name ?? ''),
+      rating:          String(p.evaluate_rate ?? ''),
+      ratingNum,
+      url:             productUrl,
+      affiliateUrl:    String(p.promotion_link || productUrl),
+    };
   });
-  const text = await apiRes.text();
-  console.log('[deals] product.query status:', apiRes.status, text.slice(0, 300));
 
-  if (!apiRes.ok) {
-    res.status(500).json({ error: `AliExpress API error (${apiRes.status})` });
-    return;
-  }
+  // ── Filtri ────────────────────────────────────────────────────────────────
+  let filtered = mapped
+    .filter(p => p.discountPercent >= minDiscount)
+    .filter(p => minRating <= 0 || p.ratingNum >= minRating)
+    .filter(p => passesTitleFilter(p.title, terms));   // ← filtro rilevanza titolo
 
-  const json = JSON.parse(text) as any;
-  if (json.error_response) {
-    const e = json.error_response;
-    res.status(400).json({ error: `AliExpress [${e.code}]: ${e.msg}` });
-    return;
-  }
+  // ── Scoring + ordinamento ─────────────────────────────────────────────────
+  // Calcola il punteggio di rilevanza per ogni prodotto
+  const scored = filtered.map(p => ({ ...p, _score: bestTitleScore(p.title, terms) }));
 
-  const resp = json?.aliexpress_affiliate_product_query_response?.resp_result;
-  if (!resp || resp.resp_code !== 200) {
-    res.status(400).json({ error: `AliExpress [${resp?.resp_code ?? '?'}]: ${resp?.resp_msg ?? 'Errore sconosciuto'}` });
-    return;
-  }
-
-  const products: any[] = resp?.result?.products?.product ?? [];
-  const total: number   = resp?.result?.total_record_count ?? products.length;
-
-  const mapped = products
-    .map((p: any) => {
-      const discPct  = parseInt(String(p.discount ?? '0').replace('%', '')) || 0;
-      const ratingNum = parseFloat(String(p.evaluate_rate ?? '0').replace('%', '')) || 0;
-      const productUrl = `https://www.aliexpress.com/item/${p.product_id}.html`;
-      return {
-        productId:       String(p.product_id),
-        title:           p.product_title ?? '',
-        image:           p.product_main_image_url ?? '',
-        originalPrice:   parseFloat(p.target_original_price ?? '0') || 0,
-        discountedPrice: parseFloat(p.target_sale_price ?? '0') || 0,
-        discountPercent: discPct,
-        currency:        p.target_sale_price_currency ?? currency,
-        category:        p.second_level_category_name ?? '',
-        rating:          p.evaluate_rate ?? '',
-        ratingNum,
-        url:             productUrl,
-        affiliateUrl:    p.promotion_link || productUrl,
-      };
-    })
-    .filter((p: any) => p.discountPercent >= minDiscount)
-    .filter((p: any) => minRating <= 0 || p.ratingNum >= minRating);
-
-  // Se l'utente ha chiesto "Valutazione ↓", ordina per rating decrescente nella pagina
   if (sortReq === 'RATING_DESC') {
-    mapped.sort((a: any, b: any) => b.ratingNum - a.ratingNum);
+    scored.sort((a, b) => b.ratingNum - a.ratingNum);
+  } else {
+    // Porta in cima i prodotti con rilevanza significativamente più alta,
+    // poi mantieni l'ordine dell'API per quelli con score simile
+    scored.sort((a, b) => {
+      const diff = b._score - a._score;
+      if (diff > 0.2) return 1;
+      if (diff < -0.2) return -1;
+      return 0;
+    });
   }
 
-  res.json({ products: mapped, total, page });
+  // Rimuove i campi interni prima di inviare
+  const response = scored.map(({ _score: _, ratingNum: __, ...rest }) => rest);
+  const total = isMulti ? response.length : apiTotal;
+
+  res.json({ products: response, total, page });
 });

@@ -553,7 +553,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
           <div style={{ padding: '10px 16px 0' }}>
             {/* Keywords + cerca */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <input className="inp" placeholder="Parole chiave (es: nintendo, cuffie...)"
+              <input className="inp" placeholder="Parole chiave · usa | per più termini (es: cuffie | auricolari)"
                 value={keywords} onChange={e => setKeywords(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && doSearch()} style={{ flex: 1 }} />
               <button className="btn bp" style={{ flexShrink: 0, padding: '0 14px' }}
