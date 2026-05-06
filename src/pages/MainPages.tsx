@@ -605,7 +605,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const addSelectedAmazonToQueue = async () => {
     if (!amzSelectedIds.size || amzAdding) return;
     setAmzAdding(true);
-    const defaultAmazonLayout = layouts.find(l => l.tipo === 'amazon')?.id ?? layouts.find(l => l.tipo === 'aliexpress')?.id ?? '';
+    const defaultAmazonLayout = layouts.find(l => l.tipo === 'amazon')?.id ?? layouts.find(l => l.tipo === 'normal')?.id ?? layouts.find(l => l.tipo === 'historical_low')?.id ?? '';
     const tpl = templates[0];
     const addedItems: QueueItem[] = [];
     for (const pid of Array.from(amzSelectedIds)) {
