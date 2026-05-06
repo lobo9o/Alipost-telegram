@@ -22,13 +22,12 @@ const MARKETPLACE_CURRENCY: Record<string, string> = {
   UK: 'GBP', US: 'USD', JP: 'JPY', CA: 'CAD',
 };
 
-// Tutte le categorie fisiche principali
+// Categorie valide per il marketplace IT (fonte: amazon.it/paapi5/locale-reference/italy)
 const DEFAULT_INDEXES = [
-  'Electronics', 'Computers', 'VideoGames', 'HomeAndKitchen', 'Toys', 'SportingGoods',
+  'Electronics', 'Computers', 'VideoGames', 'HomeAndKitchen', 'SportsAndOutdoors',
   'HealthPersonalCare', 'Beauty', 'Automotive', 'Baby', 'Books', 'Apparel',
   'Shoes', 'Watches', 'Jewelry', 'GardenAndOutdoor', 'MusicalInstruments',
-  'OfficeProducts', 'PetSupplies', 'Photo', 'ToolsAndHomeImprovement',
-  'Luggage', 'Kitchen', 'Lighting',
+  'OfficeProducts', 'PetSupplies', 'ToolsAndHomeImprovement', 'Luggage', 'EverythingElse',
 ];
 
 const PAGES_PER_CATEGORY = 3;
@@ -99,7 +98,7 @@ async function searchOne(
   return { products: items, total };
 }
 
-async function batchAll<T>(tasks: (() => Promise<T>)[], batchSize = 6, delayMs = 250): Promise<T[]> {
+async function batchAll<T>(tasks: (() => Promise<T>)[], batchSize = 3, delayMs = 600): Promise<T[]> {
   const results: T[] = [];
   for (let i = 0; i < tasks.length; i += batchSize) {
     const batch = tasks.slice(i, i + batchSize);
