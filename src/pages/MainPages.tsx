@@ -600,7 +600,11 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
         minPrice: amzMinPrice, maxPrice: amzMaxPrice,
         sort: amzSort, searchIndexes: Array.from(amzSearchIndexes).join(','), page: p,
       });
-      setAmzResults(resetPage ? data.products : prev => [...prev, ...data.products]);
+      setAmzResults(resetPage ? data.products : prev => {
+        const combined = [...prev, ...data.products];
+        combined.sort((a, b) => b.discountPercent - a.discountPercent);
+        return combined;
+      });
       setAmzTotal(data.total);
       setAmzSearched(true);
     } catch (e: any) {

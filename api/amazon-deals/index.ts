@@ -332,6 +332,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     .map(item => parseItem(item, currency, marketplaceDomain, affiliateTag))
     .filter((p): p is NonNullable<ReturnType<typeof parseItem>> => p !== null);
 
+  // Filtra articoli che non rispettano lo sconto minimo (Amazon a volte li invia lo stesso)
+  const effectiveMin = minDiscount > 0 ? minDiscount : 1;
+  products = products.filter(p => p.discountPercent >= effectiveMin);
+
   if (maxDiscount > 0) products = products.filter(p => p.discountPercent <= maxDiscount);
 
   products.sort((a, b) => b.discountPercent - a.discountPercent);
