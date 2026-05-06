@@ -581,10 +581,10 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     } catch { showFb('⚠️ Errore nel salvataggio'); }
   };
 
-  const doSearchAmazon = async (resetPage = true) => {
+  const doSearchAmazon = async (resetPage = true, pageOverride?: number) => {
     setAmzErr('');
     setAmzLoading(true);
-    const p = resetPage ? 1 : amzPage;
+    const p = pageOverride ?? (resetPage ? 1 : amzPage);
     if (resetPage) { setAmzPage(1); setAmzSelectedIds(new Set()); }
     try {
       const data = await dealsApi.searchAmazon({
@@ -784,7 +784,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
               ))}
               {amzResults.length < amzTotal && (
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <button className="btn bs bfull" onClick={() => { setAmzPage(p => p + 1); doSearchAmazon(false); }} disabled={amzLoading}>
+                  <button className="btn bs bfull" onClick={() => { const next = amzPage + 1; setAmzPage(next); doSearchAmazon(false, next); }} disabled={amzLoading}>
                     {amzLoading ? '⏳ Caricamento...' : '⬇️ Carica altri'}
                   </button>
                 </div>

@@ -185,7 +185,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price', 'browseNodeInfo.browseNodes'],
   };
   if (keywords)              baseBody.keywords         = keywords;
-  if (minDiscount > 0)       baseBody.minSavingPercent = minDiscount;
+  baseBody.minSavingPercent = minDiscount > 0 ? minDiscount : 1;
   if (minPrice > 0)          baseBody.minPrice         = Math.round(minPrice * 100);
   if (maxPrice > 0)          baseBody.maxPrice         = Math.round(maxPrice * 100);
   if (sortBy !== 'Featured') baseBody.sortBy           = sortBy;
