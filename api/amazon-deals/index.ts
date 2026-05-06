@@ -22,10 +22,15 @@ const MARKETPLACE_CURRENCY: Record<string, string> = {
   UK: 'GBP', US: 'USD', JP: 'JPY', CA: 'CAD',
 };
 
-// Categorie di default quando nessun filtro è impostato
-const DEFAULT_INDEXES = ['Electronics', 'Computers', 'VideoGames', 'HomeAndKitchen', 'Toys', 'SportingGoods'];
+// Tutte le categorie fisiche principali
+const DEFAULT_INDEXES = [
+  'Electronics', 'Computers', 'VideoGames', 'HomeAndKitchen', 'Toys', 'SportingGoods',
+  'HealthPersonalCare', 'Beauty', 'Automotive', 'Baby', 'Books', 'Apparel',
+  'Shoes', 'Watches', 'Jewelry', 'GardenAndOutdoor', 'MusicalInstruments',
+  'OfficeProducts', 'PetSupplies', 'Photo', 'ToolsAndHomeImprovement',
+  'Luggage', 'Kitchen', 'Lighting',
+];
 
-// Pagine da scaricare per categoria in una singola richiesta (10 item/pagina × 3 = 30 per categoria)
 const PAGES_PER_CATEGORY = 3;
 
 async function getToken(credentialId: string, credentialSecret: string, version: string): Promise<string> {
@@ -94,14 +99,86 @@ async function searchOne(
   return { products: items, total };
 }
 
-// Esegue chiamate in batch per rispettare i rate limit di Amazon
-async function batchAll<T>(tasks: (() => Promise<T>)[], batchSize = 4, delayMs = 300): Promise<T[]> {
+async function batchAll<T>(tasks: (() => Promise<T>)[], batchSize = 6, delayMs = 250): Promise<T[]> {
   const results: T[] = [];
   for (let i = 0; i < tasks.length; i += batchSize) {
     const batch = tasks.slice(i, i + batchSize);
     const batchResults = await Promise.all(batch.map(t => t()));
     results.push(...batchResults);
     if (i + batchSize < tasks.length) await new Promise(r => setTimeout(r, delayMs));
+  }
+  return results;
+}
+
+// Estrae ASIN dalla pagina pubblica Amazon Deals/Goldbox
+async function fetchGoldboxAsins(marketplaceDomain: string): Promise<string[]> {
+  const urls = [
+    `https://${marketplaceDomain}/deals`,
+    `https://${marketplaceDomain}/gp/goldbox`,
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'it-IT,it;q=0.9,en;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const matches = [...html.matchAll(/data-asin="([A-Z0-9]{10})"/g)];
+      const asins = [...new Set(matches.map(m => m[1]))].filter(Boolean);
+      if (asins.length > 0) {
+        console.log(`[amazon-deals] goldbox ${url}: ${asins.length} ASIN trovati`);
+        return asins.slice(0, 120);
+      }
+    } catch (e: any) {
+      console.warn('[amazon-deals] goldbox fetch error:', e.message);
+    }
+  }
+  return [];
+}
+
+// Recupera dettagli prodotto per lista ASIN tramite Creators API getItems
+async function getItemsByAsins(
+  token: string,
+  marketplaceDomain: string,
+  asins: string[],
+  affiliateTag: string,
+): Promise<any[]> {
+  if (!asins.length) return [];
+  const BATCH = 10;
+  const results: any[] = [];
+  for (let i = 0; i < asins.length; i += BATCH) {
+    const batch = asins.slice(i, i + BATCH);
+    try {
+      const apiRes = await fetch('https://creatorsapi.amazon/catalog/v1/getItems', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-marketplace': marketplaceDomain,
+          'User-Agent': 'creatorsapi-nodejs-sdk/1.2.0',
+        },
+        body: JSON.stringify({
+          itemIds: batch,
+          partnerTag: affiliateTag,
+          partnerType: 'associates',
+          resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price', 'browseNodeInfo.browseNodes'],
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!apiRes.ok) { console.warn('[amazon-deals] getItems', apiRes.status); continue; }
+      const data = await apiRes.json() as any;
+      const items = (data.itemsResult?.items ?? data.ItemsResult?.Items ?? []) as any[];
+      results.push(...items);
+    } catch (e: any) {
+      console.warn('[amazon-deals] getItems batch error:', e.message);
+    }
+    if (i + BATCH < asins.length) await new Promise(r => setTimeout(r, 300));
   }
   return results;
 }
@@ -173,8 +250,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const sortBy      = q.sort || 'Featured';
   const searchIndexesRaw = (q.searchIndexes ?? q.searchIndex ?? '').trim();
   const searchIndexes    = searchIndexesRaw ? searchIndexesRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
-  // page: per multi-categoria indica il "blocco" di pagine da scaricare
-  // blocco 1 = pagine 1-3, blocco 2 = pagine 4-6, ecc.
   const pageBlock   = Math.max(1, parseInt(q.page ?? '1') || 1);
   const isMulti     = searchIndexes.length > 1 || (!keywords && !searchIndexesRaw);
 
@@ -194,11 +269,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     ? searchIndexes
     : keywords ? [''] : DEFAULT_INDEXES;
 
+  const seen = new Set<string>();
   let rawItems: any[] = [];
   let anyPageHadResults = false;
 
+  // ── Metodo 1: Creators API searchItems ──────────────────────────────────────
   if (isMulti) {
-    // Multi-categoria: scarica PAGES_PER_CATEGORY pagine per categoria, in batch per non fare rate-limit
     const startPage = (pageBlock - 1) * PAGES_PER_CATEGORY + 1;
     const pagesToFetch = Array.from({ length: PAGES_PER_CATEGORY }, (_, i) => startPage + i);
 
@@ -213,17 +289,39 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       })
     );
 
-    const results = await batchAll(tasks, 4, 250);
-    const seen = new Set<string>();
-    for (const r of results) {
+    // ── Metodo 2: Goldbox (solo blocco 1) ────────────────────────────────────
+    const goldboxPromise = pageBlock === 1
+      ? fetchGoldboxAsins(marketplaceDomain)
+          .then(asins => {
+            if (!asins.length) return [];
+            // Rimuovi ASIN già trovati da searchItems (li aggiungiamo dopo)
+            return getItemsByAsins(token, marketplaceDomain, asins, affiliateTag);
+          })
+          .catch(() => [] as any[])
+      : Promise.resolve([] as any[]);
+
+    const [searchResults, goldboxItems] = await Promise.all([
+      batchAll(tasks, 6, 250),
+      goldboxPromise,
+    ]);
+
+    for (const r of searchResults) {
       if (r.products.length > 0) anyPageHadResults = true;
       for (const item of r.products) {
         const asin = String(pick(item, 'asin', 'ASIN') ?? '');
         if (asin && !seen.has(asin)) { seen.add(asin); rawItems.push(item); }
       }
     }
+
+    // Aggiunge i prodotti goldbox non ancora presenti
+    let goldboxNew = 0;
+    for (const item of goldboxItems) {
+      const asin = String(pick(item, 'asin', 'ASIN') ?? '');
+      if (asin && !seen.has(asin)) { seen.add(asin); rawItems.push(item); goldboxNew++; }
+    }
+    if (goldboxNew > 0) console.log(`[amazon-deals] goldbox ha aggiunto ${goldboxNew} nuovi prodotti`);
+
   } else {
-    // Singola categoria o keyword: paginazione classica
     const body = { ...baseBody, itemPage: pageBlock };
     if (indexes[0]) body.searchIndex = indexes[0];
     const r = await searchOne(token, marketplaceDomain, body);
@@ -231,17 +329,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     anyPageHadResults = r.products.length > 0;
   }
 
-  // Mappa e filtra
+  // ── Mappa, filtra e ordina ──────────────────────────────────────────────────
   let products = rawItems
     .map(item => parseItem(item, currency, marketplaceDomain, affiliateTag))
     .filter((p): p is NonNullable<ReturnType<typeof parseItem>> => p !== null);
 
   if (maxDiscount > 0) products = products.filter(p => p.discountPercent <= maxDiscount);
 
-  // Ordina per sconto decrescente
   products.sort((a, b) => b.discountPercent - a.discountPercent);
 
-  // Per multi-categoria, total indica se c'è una prossima pagina
   const total = isMulti
     ? (anyPageHadResults ? products.length + PAGES_PER_CATEGORY * 10 : products.length)
     : rawItems.length;
