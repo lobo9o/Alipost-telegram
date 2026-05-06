@@ -1,11 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout, LinkItem, NewPostItem } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
-import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, settingsApi, DealProduct } from '../lib/api';
+import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, DealProduct } from '../lib/api';
 import { generatePostImage, generateMultiPostImage, generateTerminataImage } from '../utils/imageCompose';
 
 // ── Template image preview (reused in PostCard + standalone) ──
@@ -507,10 +507,18 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const [amzTotal, setAmzTotal]               = useState(0);
   const [amzPage, setAmzPage]                 = useState(1);
   const [amzLoading, setAmzLoading]           = useState(false);
+  const [amzRefreshing, setAmzRefreshing]     = useState(false);
   const [amzErr, setAmzErr]                   = useState('');
   const [amzSearched, setAmzSearched]         = useState(false);
+  const [amzRefreshedAt, setAmzRefreshedAt]   = useState<string | null>(null);
   const [amzSelectedIds, setAmzSelectedIds]   = useState<Set<string>>(new Set());
   const [amzAdding, setAmzAdding]             = useState(false);
+  const [amzIsKeywordSearch, setAmzIsKeywordSearch] = useState(false);
+
+  // Carica cache Amazon quando si apre il tab
+  useEffect(() => {
+    if (tab === 'amazon' && !amzSearched) { loadAmzCache(); }
+  }, [tab]); // eslint-disable-line
 
   const showFb = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(''), 3000); };
 
@@ -589,9 +597,62 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     } catch { showFb('⚠️ Errore nel salvataggio'); }
   };
 
+  // Carica dalla cache DB (istantaneo)
+  const loadAmzCache = async () => {
+    setAmzErr('');
+    setAmzLoading(true);
+    setAmzIsKeywordSearch(false);
+    try {
+      const data = await dealsCacheApi.listAmazon({
+        minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount,
+        searchIndexes: Array.from(amzSearchIndexes).join(',') || undefined,
+      });
+      setAmzResults(data.products);
+      setAmzTotal(data.total);
+      setAmzRefreshedAt(data.refreshedAt);
+      setAmzSearched(true);
+    } catch (e: any) {
+      setAmzErr(e.message ?? 'Errore nel caricamento');
+    } finally {
+      setAmzLoading(false);
+    }
+  };
+
+  // Avvia refresh in background (chiama API Amazon → aggiorna cache → ricarica)
+  const doRefreshAmazon = async () => {
+    if (amzRefreshing) return;
+    setAmzRefreshing(true);
+    setAmzErr('');
+    try {
+      await dealsCacheApi.refresh();
+      // Polling finché la cache viene aggiornata (max 90s)
+      const start = Date.now();
+      const prevAt = amzRefreshedAt;
+      while (Date.now() - start < 90000) {
+        await new Promise(r => setTimeout(r, 4000));
+        const data = await dealsCacheApi.listAmazon({
+          minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount,
+          searchIndexes: Array.from(amzSearchIndexes).join(',') || undefined,
+        });
+        if (data.refreshedAt !== prevAt || (data.products.length > 0 && Date.now() - start > 15000)) {
+          setAmzResults(data.products);
+          setAmzTotal(data.total);
+          setAmzRefreshedAt(data.refreshedAt);
+          setAmzSearched(true);
+          break;
+        }
+      }
+    } catch (e: any) {
+      setAmzErr(e.message ?? 'Errore durante l\'aggiornamento');
+    } finally {
+      setAmzRefreshing(false);
+    }
+  };
+
   const doSearchAmazon = async (resetPage = true, pageOverride?: number) => {
     setAmzErr('');
     setAmzLoading(true);
+    setAmzIsKeywordSearch(true);
     const p = pageOverride ?? (resetPage ? 1 : amzPage);
     if (resetPage) { setAmzPage(1); setAmzSelectedIds(new Set()); }
     try {
@@ -768,6 +829,25 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
             )}
           </div>
 
+          {/* Barra cache: timestamp + pulsanti aggiorna / svuota */}
+          {!amzIsKeywordSearch && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px 8px' }}>
+              <span style={{ fontSize: 11, color: 'var(--t3)', flex: 1 }}>
+                {amzRefreshedAt
+                  ? `🕐 Aggiornato: ${new Date(amzRefreshedAt).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+                  : '📦 Cache vuota'}
+              </span>
+              <button className="btn bgh bsm" style={{ fontSize: 11 }}
+                onClick={doRefreshAmazon} disabled={amzRefreshing || amzLoading}>
+                {amzRefreshing ? '⏳ Aggiornamento...' : '🔄 Aggiorna'}
+              </button>
+              <button className="btn bgh bsm" style={{ fontSize: 11 }}
+                onClick={loadAmzCache} disabled={amzLoading || amzRefreshing}>
+                ↺
+              </button>
+            </div>
+          )}
+
           {amzErr && <div style={{ margin: '0 16px 8px' }}><ErrorBanner>{amzErr}</ErrorBanner></div>}
           {feedback && <div style={{ margin: '0 16px 8px', padding: '8px 12px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 8, fontSize: 12, color: '#4ade80' }}>{feedback}</div>}
 
@@ -778,13 +858,13 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
                 {amzSelectedIds.size === amzResults.length ? '☑ Deseleziona' : '☐ Seleziona tutto'}
               </button>
               <span style={{ fontSize: 11, color: 'var(--t3)', flex: 1 }}>
-                {amzResults.length} di {amzTotal} · {amzSelectedIds.size > 0 ? `${amzSelectedIds.size} selezionati` : 'tocca per selezionare'}
+                {amzResults.length}{amzIsKeywordSearch ? ` di ${amzTotal}` : ''} · {amzSelectedIds.size > 0 ? `${amzSelectedIds.size} selezionati` : 'tocca per selezionare'}
               </span>
             </div>
           )}
 
           {amzSearched && !amzLoading && amzResults.length === 0 && !amzErr && (
-            <EmptyState icon="🔍" text="Nessun risultato. Cambia parole chiave o riduci i filtri." />
+            <EmptyState icon="🔍" text={amzIsKeywordSearch ? "Nessun risultato. Cambia parole chiave o riduci i filtri." : "Cache vuota. Clicca Aggiorna per caricare le offerte."} />
           )}
 
           {amzResults.length > 0 && (
@@ -794,7 +874,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
                   setAmzSelectedIds(prev => { const n = new Set(prev); n.has(p.productId) ? n.delete(p.productId) : n.add(p.productId); return n; });
                 }} />
               ))}
-              {amzResults.length < amzTotal && (
+              {amzIsKeywordSearch && amzResults.length < amzTotal && (
                 <div style={{ gridColumn: '1 / -1' }}>
                   <button className="btn bs bfull" onClick={() => { const next = amzPage + 1; setAmzPage(next); doSearchAmazon(false, next); }} disabled={amzLoading}>
                     {amzLoading ? '⏳ Caricamento...' : '⬇️ Carica altri'}
@@ -805,11 +885,10 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
           )}
 
           {!amzSearched && !amzLoading && (
-            <EmptyState icon="🟡" text="Cerca prodotti Amazon in offerta."
-              action={<button className="btn bp" onClick={() => doSearchAmazon()}>🔍 Cerca ora</button>} />
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--t3)', fontSize: 13 }}>⏳ Caricamento cache...</div>
           )}
           {amzLoading && amzResults.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--t3)', fontSize: 13 }}>⏳ Ricerca in corso...</div>
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--t3)', fontSize: 13 }}>⏳ {amzIsKeywordSearch ? 'Ricerca in corso...' : 'Caricamento cache...'}</div>
           )}
         </>
       )}

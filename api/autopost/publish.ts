@@ -484,6 +484,69 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
+    // ── Auto-publish Amazon dal pool deals_cache ─────────────────────────────
+    if (!queueItem && cfg.dealSearch?.autoPublishAmazon) {
+      const dsAmz = cfg.dealSearch?.amazon ?? {};
+      const minDisc  = Number(dsAmz.minDiscount ?? 0);
+      const maxDisc  = Number(dsAmz.maxDiscount ?? 0);
+      const searchIdxRaw = (dsAmz.searchIndexes ?? '').trim();
+      const searchIdxs   = searchIdxRaw ? searchIdxRaw.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+
+      // Escludi prodotti già pubblicati nelle ultime 48h
+      const recentAmz = await sql`
+        SELECT product_id FROM published_posts
+        WHERE user_id = ${userId} AND platform = 'amazon'
+          AND published_at > now() - interval '48 hours'
+      `;
+      const recentAmzIds = new Set(recentAmz.map((r: any) => String(r.product_id)));
+
+      const cacheRows = await sql`
+        SELECT product_id, title, image, original_price::float, discounted_price::float,
+               discount_percent, currency, category, search_index, url, affiliate_url
+        FROM deals_cache
+        WHERE user_id = ${userId} AND platform = 'amazon'
+          AND (${minDisc} = 0 OR discount_percent >= ${minDisc})
+          AND (${maxDisc} = 0 OR discount_percent <= ${maxDisc})
+        ORDER BY discount_percent DESC
+        LIMIT 200
+      `;
+
+      const amzCandidate = cacheRows.find((r: any) => {
+        if (recentAmzIds.has(String(r.product_id))) return false;
+        if (searchIdxs.length > 0 && r.search_index && !searchIdxs.includes(r.search_index)) return false;
+        return true;
+      });
+
+      if (amzCandidate) {
+        const amzLayouts = await sql`
+          SELECT id FROM layouts WHERE user_id = ${userId}
+            AND tipo IN ('amazon', 'normal', 'historical_low')
+          ORDER BY tipo = 'amazon' DESC, created_at ASC LIMIT 1
+        `;
+        const layoutId = amzLayouts[0]?.id ?? '';
+        const tplRow = await sql`SELECT id FROM templates WHERE user_id = ${userId} LIMIT 1`;
+        const templateId = tplRow[0]?.id ?? 'tpl1';
+
+        post = {
+          id: crypto.randomUUID(), platform: 'amazon',
+          sourceUrl: amzCandidate.affiliate_url || amzCandidate.url,
+          productId: String(amzCandidate.product_id),
+          title: amzCandidate.title ?? '', image: amzCandidate.image ?? '',
+          originalPrice: Number(amzCandidate.original_price),
+          discountedPrice: Number(amzCandidate.discounted_price),
+          discountPercent: Number(amzCandidate.discount_percent),
+          customText: '', isHistoricalLow: false,
+          templateId, layoutId, keyboardId: '', emoji: '🟡',
+        };
+        queueItem = { id: crypto.randomUUID(), posts: [post], silenzioso: null };
+        postsArr  = [post];
+        isMulti   = false;
+        console.log(`[autopost] Amazon pool: ${post.title?.slice(0, 50)} (${post.discountPercent}%)`);
+      } else {
+        console.log(`[autopost] Amazon pool vuoto o tutti già pubblicati userId=${userId}`);
+      }
+    }
+
     if (!queueItem || !post) {
       skipped.push(`${userId}: coda vuota o tutti i prezzi scaduti`);
     } else {

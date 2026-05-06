@@ -41,6 +41,7 @@ async function main() {
     templatesIdHandler,
     dealsHandler,
     amazonDealsHandler,
+    dealsCacheHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -57,6 +58,7 @@ async function main() {
     loadHandler('api/templates/[id].ts'),
     loadHandler('api/deals/index.ts'),
     loadHandler('api/amazon-deals/index.ts'),
+    loadHandler('api/deals-cache/index.ts'),
   ]);
 
   const app = express();
@@ -82,6 +84,7 @@ async function main() {
   app.all('/api/templates/:id', withId(templatesIdHandler));
   app.all('/api/deals', dealsHandler);
   app.all('/api/amazon-deals', amazonDealsHandler);
+  app.all('/api/deals-cache', dealsCacheHandler);
 
   app.get('*', (_req, res) => {
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
@@ -100,6 +103,14 @@ async function main() {
         if (d.errors?.length)    console.error('[cron] errori:', d.errors);
       })
       .catch(e => console.error('[cron autopost]', e));
+  });
+
+  // Refresh deals cache ogni 4 ore
+  cron.schedule('0 */4 * * *', () => {
+    fetch(`http://localhost:${PORT}/api/deals-cache`, { method: 'POST', headers: cronHeaders() })
+      .then(r => r.json())
+      .then((d: any) => console.log(`[cron deals-cache] refresh: ${d.refreshed ?? 0} utenti`))
+      .catch(e => console.error('[cron deals-cache]', e));
   });
 
   // Price check ogni giorno alle 9:00

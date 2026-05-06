@@ -205,3 +205,21 @@ export const dealsApi = {
     return req<DealsResult>('GET', `/api/amazon-deals?${qs.toString()}`);
   },
 };
+
+export interface DealsCache {
+  products: DealProduct[];
+  total: number;
+  refreshedAt: string | null;
+}
+
+export const dealsCacheApi = {
+  listAmazon: (params?: { minDiscount?: number; maxDiscount?: number; searchIndexes?: string }) => {
+    const qs = new URLSearchParams({ platform: 'amazon' });
+    if (params?.minDiscount) qs.set('minDiscount', String(params.minDiscount));
+    if (params?.maxDiscount) qs.set('maxDiscount', String(params.maxDiscount));
+    if (params?.searchIndexes) qs.set('searchIndexes', params.searchIndexes);
+    return req<DealsCache>('GET', `/api/deals-cache?${qs.toString()}`);
+  },
+  refresh: () => req<{ ok: boolean; message: string }>('POST', '/api/deals-cache'),
+  clearAmazon: () => req<{ ok: boolean }>('DELETE', '/api/deals-cache?platform=amazon'),
+};

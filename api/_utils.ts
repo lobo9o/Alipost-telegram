@@ -84,6 +84,27 @@ async function ensureMigrated() {
   await sql`CREATE INDEX IF NOT EXISTS price_history_product_idx
     ON price_history (product_id, platform, recorded_at DESC)`;
 
+  await sql`CREATE TABLE IF NOT EXISTS deals_cache (
+    id               TEXT PRIMARY KEY,
+    user_id          TEXT NOT NULL,
+    platform         TEXT NOT NULL DEFAULT 'amazon',
+    product_id       TEXT NOT NULL,
+    title            TEXT DEFAULT '',
+    image            TEXT DEFAULT '',
+    original_price   NUMERIC(10,2) DEFAULT 0,
+    discounted_price NUMERIC(10,2) DEFAULT 0,
+    discount_percent INTEGER DEFAULT 0,
+    currency         TEXT DEFAULT 'EUR',
+    category         TEXT DEFAULT '',
+    search_index     TEXT DEFAULT '',
+    url              TEXT DEFAULT '',
+    affiliate_url    TEXT DEFAULT '',
+    found_at         TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    UNIQUE(user_id, platform, product_id)
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS deals_cache_user_idx
+    ON deals_cache(user_id, platform, discount_percent DESC)`;
+
   // Migrazioni per tabelle già esistenti (aggiunta colonna user_id)
   await sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS user_id TEXT`;
   try {
@@ -100,7 +121,7 @@ async function ensureMigrated() {
 
   // Aggiunge 'aliexpress' e 'aliexpress_historical_low' ai valori validi per layouts.tipo
   await sql`ALTER TABLE layouts DROP CONSTRAINT IF EXISTS layouts_tipo_check`;
-  await sql`ALTER TABLE layouts ADD CONSTRAINT layouts_tipo_check CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress', 'aliexpress_historical_low'))`;
+  await sql`ALTER TABLE layouts ADD CONSTRAINT layouts_tipo_check CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress', 'aliexpress_historical_low', 'amazon'))`;
   // Tastiera associata per layout
   await sql`ALTER TABLE layouts ADD COLUMN IF NOT EXISTS keyboard_id TEXT`;
 
