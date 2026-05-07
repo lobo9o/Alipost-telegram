@@ -131,7 +131,21 @@ async function generateTemplateImageServer(
       console.warn('[tpl] node-canvas non installato — esegui: npm install canvas');
       return null;
     }
-    const { createCanvas, loadImage } = canvasMod;
+    const { createCanvas, loadImage, registerFont } = canvasMod;
+
+    // Registra Impact esplicitamente se presente (Raspberry Pi dopo mscorefonts)
+    const impactPaths = [
+      '/usr/share/fonts/truetype/msttcorefonts/Impact.ttf',
+      '/usr/share/fonts/truetype/impact.ttf',
+      '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
+    ];
+    for (const p of impactPaths) {
+      try {
+        const { existsSync } = await import('fs');
+        if (existsSync(p)) { registerFont(p, { family: 'Impact' }); break; }
+      } catch { /* ignore */ }
+    }
+
     const SIZE = 1024;
     const canvas = createCanvas(SIZE, SIZE);
     const ctx = canvas.getContext('2d');
