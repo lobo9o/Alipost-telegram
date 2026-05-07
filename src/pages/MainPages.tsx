@@ -458,6 +458,80 @@ function DealCard({ p, selected, onToggle }: { p: DealProduct; selected: boolean
   );
 }
 
+const AMZ_DEFAULT_BRANDS = [
+  'samsung','apple','mulino bianco','philips','gillette','acer','lenovo','blink','nespresso',
+  'bialetti','borbone',"kellogg's",'nescafé','kinder','peroni','misura','echo show','huawei',
+  'msi','pavesi','adidas','echo dot','braun','sandisk','pringles','kimbo','nestlé','tuborg',
+  "m&m's",'pan di stelle','aukey','pellini','honor','gran cereale','epson','lg','san carlo',
+  'lavazza','nike',"jack daniel's",'wd','jbl','galbusera','starbucks','riso scotti','xiaomi',
+  'fitbit','realme','fire tv','diadora','twinings','coca-cola','lipton','lindor','ferrero',
+  'kitkat','benq','hp','perugina','poretti','panasonic','kingston','crucial','paco rabanne',
+  'netac','amazfit','vergnano','chupa chups','bottega verde','calvin klein','tuc','microsoft',
+  'collistar','lexar','toshiba','fila','remington','sony','motta','belkin','fire hd','wilkinson',
+  "levi's",'diesel','hugo boss','nero giardini','laura biagiotti','bauli','snickers','dell',
+  'hisense','puma','amazon','oneplus','oppo','nutella','fossil','canon','google','garnier',
+  'nivea','logitech','tp-link','whirlpool','bosch','netgear','revlon','pantene','olaz','armani',
+  'hoover','imetec',"de'longhi",'rowenta','vileda','durex','seagate','irobot','illy','kenwood',
+  'sharp','geox','electrolux','ariete','veet','moulinex','spigen','candy','sennheiser',
+  'indesit','haier','pedigree','razer','asus','bayer','aigostar','gucci','dior','anker',
+  'eero','garmin','casio','dove','lacoste','vans','western digital','amuchina','cocolino',
+  'dash','dixan','fairy','finish','haribo','lenor','lindt','loacker','motorola','nintendo',
+  'corsair','ubisoft','steelseries','capcom','oreo','playstation','schwarzkopf','sodastream',
+  'timberland','vanish','xbox','chicco','disney','barilla',"l'oréal paris",'maybelline',
+  'morellato','oral-b','clementoni','kipling','colgate','brita','borotalco','de cecco',
+  'doritos','milka','olay','lego','marvel','pokémon','ray-ban','reolink','roborock','scholl',
+  'tena','gigabyte','govee','hasbro','hyperx','kodak','panini','converse','knorr','la molisana',
+  'garofalo','head & shoulders','hotpoint','lagostina','tapo','alpro','airwick','bacardi',
+  'cif','emporio armani','levoit','granarolo','tcl','konami','crocs','intex','superga','sonoff',
+  'hugo','labello','jabra','varta','eufy','intel','amd','ugreen','aoc','cerave','under armour',
+  'aperol','bandai','barbie','black+decker','renpho',"rubik's",'nzxt','pioneer','trust',
+  'swarovski','duracell','frontline','dreame','ecovacs','the north face','versace',
+  'oral-b','ticwatch','nothing','asrock','cooler master','tineco','thun','voiello','sacla',
+  'olimpia splendid','severin','cecotec','eureka','thermalright','narwal','laica','sunsilk',
+  "tesori d'oriente",'vagisil','vidal','vivident','ciarra','dreo','patriot memory','equilibra',
+  'aeg','united colors of benetton','creative','mars gaming','arctic','evga','powera','calgon',
+  "l'oréal professionnel",'russel hobbs','cuisinart','merross','forno bonomi','baileys',
+  'boss','gigabyte','maalox','tristar','lamborghini','bellissima','der-franz','breil',
+  'electronic arts','sega','thq nordic','namco','nacon','warner bros','activision',
+  'milestones','codemasters','roblox','ring','bethesda','carrera','champion','chanteclair',
+  'herbal essence','amaro montenegro','daniel wellington','listerine','absolut','astro gaming',
+  'govee','hyperx','kodak','roscenic','scholl','tennent\'s','converse','raid','delicius',
+  'granbest','jaotto','la cafetiere','lydevo','v-tac','ultenic','versuni','calvé','polti',
+  'swiffer','scottex','red bull','san benedetto','purina','whiskas','biffi','levoit',
+  'granarolo','foppapedretti','protein works','goleador','vigorsol','vitalcare','citrosodina',
+  'magic the gathering','maserati','roblox','sbs','yoga','ace','act','antica erboristeria',
+  'bonomelli','brekkies','carrera','chanteclair','wasw','wc net','barilla','morellato',
+  "l'oréal paris",'maybelline','clementoni','kipling','brita','de cecco','doritos','gallo',
+  'grisbi','milka','olay','ticwatch','nothing','avalon hill','az','baileys','bombay','cameo',
+  'david jones','funk','lego','marvel','pokémon','quasar','ray-ban','tena','thun','voiello',
+  'knorr','la molisana','garofalo','girmi','armando','bionsen','costa d\'oro','deconovo',
+  'delicius','felix','granbest','olimpia splendid','severin','fabuloso','hotpoint',
+  'lagostina','maxijin','nettura','tapo','teehon','ultenic','versuni','alpro','airwick',
+  'calvé','cif','der-franz','biffi','emporio armani','levoit','merross','granarolo',
+  'forno bonomi','tcl','konami','crocs','intex','superga','sonoff','hugo','labello',
+  'ambi pur','lines','tigullio','bistefani','aeg','ubena','united colors of benetton',
+  'creative','amia chips','mars gaming','arctic','aoc','narwal','be-total','calgon',
+  'cerave','deox','friskies','foppapedretti','goleador','laica','oregon','protein works',
+  'sunsilk','under armour','vagisil','vidal','vigorsol','vitalcare','vivident','eureka',
+  'thermalright','aperol','bandai','barbie','black+decker','citrosodina','ciarra','dreo',
+  'magic the gathering','renpho',"rubik's",'nzxt','fm london','aukeypower','defacto',
+  'cavo per diffusori','enterogermina','felce azzurra','jack & jones','kappa','urban classics',
+  'advantage','napisan','nelsen','neutro robers','omino bianco','purina felix','purina friskies',
+  'spuma di sciampagna','svelto','tempo fazzoletti','tommy jeans','eastpak','microids',
+  'meridiem games','mag','mastro lindo','regina','citrosil','joopin','malfy','relevo',
+  'sabrent','transcend','vernel','gourmet','zzzquil','rockstar','dc comics','ea',
+  'square enix','skybound','codemasters','brooklyn','sbs','xbox','yoga','ring',
+  'bonomelli','buscofen premestruale','ecovacs','wc net','disney','hasbro gaming',
+  'roscenic','reolink','roborock','loacker','lysoform','mr muscle','napisan','sole',
+  'swiffer','scottex','seresto','spuma di sciampagna','svelto','tempo fazzoletti',
+  'daygum','pépé jeans','rimmel london','trust','chloe','zuegg','doria','nesquik',
+  'indesit','haier','swarovski','frontline','advantix','franck provost','tommy hilfiger',
+  'aigostar','gucci','dior','anker','jack & jones','purina one','urban classics',
+  'cocolino','dixan','fairy','finish','foxy','gimoka','lenor','lysoform','motorola',
+  'mastro lindo','capcom','oreo','schwarzkopf','vanish','vernel','rockstar','ubi soft',
+  'activision','milestones','maserati','roblox','yoga','act','antica erboristeria',
+];
+
 export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const { settings, setSettings, templates, layouts, setQueue } = useApp();
   const [tab, setTab] = useState('amazon');
@@ -497,6 +571,17 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const [amzMinPrice, setAmzMinPrice]         = useState(dsAmz.minPrice ?? 0);
   const [amzMaxPrice, setAmzMaxPrice]         = useState(dsAmz.maxPrice ?? 0);
   const [amzSort, setAmzSort]                 = useState(dsAmz.sort ?? 'Featured');
+  const [amzMinRating, setAmzMinRating]       = useState(dsAmz.minRating ?? 0);
+  const [amzMinReviews, setAmzMinReviews]     = useState(dsAmz.minReviews ?? 0);
+  const [amzMerchantFilter, setAmzMerchantFilter] = useState(dsAmz.merchantFilter ?? 'all');
+  const [amzBrandKeywords, setAmzBrandKeywords] = useState<string[]>(
+    dsAmz.brandKeywords
+      ? dsAmz.brandKeywords.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : AMZ_DEFAULT_BRANDS
+  );
+  const [newBrandKw, setNewBrandKw]           = useState('');
+  const [showFilters, setShowFilters]         = useState(false);
+  const [brandSearch, setBrandSearch]         = useState('');
   // Multi-categoria: Set di SearchIndex selezionati (vuoto = tutte)
   const [amzSearchIndexes, setAmzSearchIndexes] = useState<Set<string>>(
     new Set((dsAmz.searchIndexes ?? '').split(',').map((s: string) => s.trim()).filter(Boolean))
@@ -606,6 +691,9 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       const data = await dealsCacheApi.listAmazon({
         minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount,
         searchIndexes: Array.from(amzSearchIndexes).join(',') || undefined,
+        minRating: amzMinRating || undefined,
+        minReviews: amzMinReviews || undefined,
+        merchantFilter: amzMerchantFilter !== 'all' ? amzMerchantFilter : undefined,
       });
       setAmzResults(data.products);
       setAmzTotal(data.total);
@@ -633,6 +721,9 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
         const data = await dealsCacheApi.listAmazon({
           minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount,
           searchIndexes: Array.from(amzSearchIndexes).join(',') || undefined,
+          minRating: amzMinRating || undefined,
+          minReviews: amzMinReviews || undefined,
+          merchantFilter: amzMerchantFilter !== 'all' ? amzMerchantFilter : undefined,
         });
         if (data.refreshedAt !== prevAt || (data.products.length > 0 && Date.now() - start > 15000)) {
           setAmzResults(data.products);
@@ -716,13 +807,23 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       ...settings,
       dealSearch: {
         ...(settings.dealSearch ?? { autoPublishAliexpress: false, autoPublishAmazon: false, publishPattern: '1:1' }),
-        amazon: { keywords: amzKeywords, minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount, minPrice: amzMinPrice, maxPrice: amzMaxPrice, sort: amzSort, searchIndexes: Array.from(amzSearchIndexes).join(',') },
+        amazon: {
+          keywords: amzKeywords,
+          minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount,
+          minPrice: amzMinPrice, maxPrice: amzMaxPrice,
+          sort: amzSort,
+          searchIndexes: Array.from(amzSearchIndexes).join(','),
+          brandKeywords: amzBrandKeywords.join(','),
+          minRating: amzMinRating,
+          minReviews: amzMinReviews,
+          merchantFilter: amzMerchantFilter,
+        },
       },
     };
     try {
       await settingsApi.save(newSettings);
       setSettings(newSettings);
-      showFb('✅ Filtri salvati per auto-ricerca Amazon');
+      showFb('✅ Filtri salvati');
     } catch { showFb('⚠️ Errore nel salvataggio'); }
   };
 
@@ -738,113 +839,226 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 
       {tab === 'amazon' && (
         <>
-          <div style={{ padding: '10px 16px 0' }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <input className="inp" placeholder="Parole chiave (es: cuffie bluetooth, nintendo switch...)"
-                value={amzKeywords} onChange={e => setAmzKeywords(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && doSearchAmazon()} style={{ flex: 1 }} />
-              <button className="btn bp" style={{ flexShrink: 0, padding: '0 14px' }}
-                onClick={() => doSearchAmazon()} disabled={amzLoading}>
-                {amzLoading ? '⏳' : '🔍'}
-              </button>
-            </div>
-
-            {/* Sconto min–max + ordinamento */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
-                SCONTO {amzMinDiscount > 0 || amzMaxDiscount > 0
-                  ? <span style={{ color: 'var(--a1)' }}>
-                      {amzMinDiscount > 0 ? `${amzMinDiscount}%` : '0%'}
-                      {' → '}
-                      {amzMaxDiscount > 0 ? `${amzMaxDiscount}%` : 'illimitato'}
-                    </span>
-                  : <span style={{ color: 'var(--t3)' }}>qualsiasi</span>
-                }
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: 'var(--t3)', minWidth: 22 }}>min</span>
-                <input type="range" min={0} max={90} step={5} value={amzMinDiscount}
-                  style={{ flex: 1, accentColor: 'var(--a1)' }}
-                  onChange={e => { const v = Number(e.target.value); setAmzMinDiscount(v); if (amzMaxDiscount > 0 && v >= amzMaxDiscount) setAmzMaxDiscount(0); }} />
-                <span style={{ fontSize: 11, color: 'var(--t2)', minWidth: 28 }}>{amzMinDiscount}%</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                <span style={{ fontSize: 11, color: 'var(--t3)', minWidth: 22 }}>max</span>
-                <input type="range" min={0} max={90} step={5} value={amzMaxDiscount}
-                  style={{ flex: 1, accentColor: 'var(--a1)' }}
-                  onChange={e => setAmzMaxDiscount(Number(e.target.value))} />
-                <span style={{ fontSize: 11, color: 'var(--t2)', minWidth: 28 }}>{amzMaxDiscount > 0 ? `${amzMaxDiscount}%` : '—'}</span>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
-              <select className="sel" style={{ fontSize: 12 }} value={amzSort} onChange={e => setAmzSort(e.target.value)}>
-                {AMZ_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MIN (€)</div>
-                <input className="inp" type="number" min={0} placeholder="0"
-                  value={amzMinPrice || ''} onChange={e => setAmzMinPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MAX (€)</div>
-                <input className="inp" type="number" min={0} placeholder="nessun limite"
-                  value={amzMaxPrice || ''} onChange={e => setAmzMaxPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
-              </div>
-            </div>
-
-            {/* Categorie multi-select */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
-                CATEGORIE{' '}
-                {amzSearchIndexes.size > 0
-                  ? <span style={{ color: 'var(--a1)' }}>({amzSearchIndexes.size} sel.) </span>
-                  : <span style={{ color: 'var(--t3)' }}>(tutte) </span>
-                }
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                {AMZ_SEARCH_INDEXES.filter(o => o.value).map(o => (
-                  <button key={o.value} className={`btn bsm ${amzSearchIndexes.has(o.value) ? 'bp' : 'bgh'}`}
-                    style={{ fontSize: 10, padding: '3px 8px' }}
-                    onClick={() => toggleAmzCat(o.value)}>
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button className="btn bs" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} onClick={saveFiltersAmazon}>
-              💾 Salva come filtri per auto-ricerca
+          {/* Barra ricerca + filtri */}
+          <div style={{ padding: '10px 16px 6px', display: 'flex', gap: 8 }}>
+            <input className="inp" placeholder="Cerca un prodotto specifico..."
+              value={amzKeywords} onChange={e => setAmzKeywords(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && doSearchAmazon()} style={{ flex: 1 }} />
+            <button className="btn bp" style={{ flexShrink: 0, padding: '0 14px' }}
+              onClick={() => doSearchAmazon()} disabled={amzLoading}>
+              {amzLoading && amzIsKeywordSearch ? '⏳' : '🔍'}
             </button>
-
-            {!settings.amazon?.credentialId && (
-              <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 12, color: '#ef4444' }}>
-                ⚠️ Credenziali Amazon non configurate.{' '}
-                <button className="btn bgh" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => nav('settings')}>Impostazioni →</button>
-              </div>
-            )}
+            <button className="btn bgh" style={{ flexShrink: 0, padding: '0 12px', position: 'relative' }}
+              onClick={() => setShowFilters(true)}>
+              ⚙️
+              {(amzMinDiscount > 0 || amzMaxDiscount > 0 || amzMinPrice > 0 || amzMaxPrice > 0 ||
+                amzSearchIndexes.size > 0 || amzMinRating > 0 || amzMinReviews > 0 || amzMerchantFilter !== 'all') && (
+                <span style={{ position: 'absolute', top: 3, right: 3, width: 6, height: 6, borderRadius: '50%', background: 'var(--a1)' }} />
+              )}
+            </button>
           </div>
 
-          {/* Barra cache: timestamp + pulsanti aggiorna / svuota */}
+          {!settings.amazon?.credentialId && (
+            <div style={{ margin: '0 16px 6px', padding: '6px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 12, color: '#ef4444' }}>
+              ⚠️ Credenziali Amazon non configurate.{' '}
+              <button className="btn bgh" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => nav('settings')}>Impostazioni →</button>
+            </div>
+          )}
+
+          {/* Barra cache: timestamp + pulsanti aggiorna */}
           {!amzIsKeywordSearch && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px 8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 16px 8px' }}>
               <span style={{ fontSize: 11, color: 'var(--t3)', flex: 1 }}>
                 {amzRefreshedAt
-                  ? `🕐 Aggiornato: ${new Date(amzRefreshedAt).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+                  ? `🕐 ${new Date(amzRefreshedAt).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
                   : '📦 Cache vuota'}
               </span>
               <button className="btn bgh bsm" style={{ fontSize: 11 }}
                 onClick={doRefreshAmazon} disabled={amzRefreshing || amzLoading}>
-                {amzRefreshing ? '⏳ Aggiornamento...' : '🔄 Aggiorna'}
+                {amzRefreshing ? '⏳' : '🔄 Aggiorna'}
               </button>
               <button className="btn bgh bsm" style={{ fontSize: 11 }}
                 onClick={loadAmzCache} disabled={amzLoading || amzRefreshing}>
                 ↺
               </button>
+            </div>
+          )}
+
+          {/* Modale filtri (bottom sheet) */}
+          {showFilters && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowFilters(false)} />
+              <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: '18px 18px 0 0', maxHeight: '90vh', overflowY: 'auto', padding: '0 0 24px' }}>
+                {/* Handle */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 8px' }}>
+                  <span style={{ fontWeight: 600, fontSize: 15 }}>Filtri offerte Amazon</span>
+                  <button className="btn bgh bsm" onClick={() => setShowFilters(false)}>✕</button>
+                </div>
+
+                <div style={{ padding: '0 16px' }}>
+                  {/* Sconto */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
+                      SCONTO {amzMinDiscount > 0 || amzMaxDiscount > 0
+                        ? <span style={{ color: 'var(--a1)' }}>{amzMinDiscount}% → {amzMaxDiscount > 0 ? `${amzMaxDiscount}%` : '∞'}</span>
+                        : <span>qualsiasi</span>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11, color: 'var(--t3)', minWidth: 22 }}>min</span>
+                      <input type="range" min={0} max={90} step={5} value={amzMinDiscount}
+                        style={{ flex: 1, accentColor: 'var(--a1)' }}
+                        onChange={e => { const v = Number(e.target.value); setAmzMinDiscount(v); if (amzMaxDiscount > 0 && v >= amzMaxDiscount) setAmzMaxDiscount(0); }} />
+                      <span style={{ fontSize: 11, color: 'var(--t2)', minWidth: 28 }}>{amzMinDiscount}%</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: 'var(--t3)', minWidth: 22 }}>max</span>
+                      <input type="range" min={0} max={90} step={5} value={amzMaxDiscount}
+                        style={{ flex: 1, accentColor: 'var(--a1)' }}
+                        onChange={e => setAmzMaxDiscount(Number(e.target.value))} />
+                      <span style={{ fontSize: 11, color: 'var(--t2)', minWidth: 28 }}>{amzMaxDiscount > 0 ? `${amzMaxDiscount}%` : '—'}</span>
+                    </div>
+                  </div>
+
+                  {/* Prezzo */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MIN (€)</div>
+                      <input className="inp" type="number" min={0} placeholder="0"
+                        value={amzMinPrice || ''} onChange={e => setAmzMinPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MAX (€)</div>
+                      <input className="inp" type="number" min={0} placeholder="illimitato"
+                        value={amzMaxPrice || ''} onChange={e => setAmzMaxPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+                    </div>
+                  </div>
+
+                  {/* Stelle */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 6 }}>STELLE MINIME</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {[0, 1, 2, 3, 4, 5].map(s => (
+                        <button key={s} className={`btn bsm ${amzMinRating === s ? 'bp' : 'bgh'}`}
+                          style={{ fontSize: 12, padding: '4px 10px' }}
+                          onClick={() => setAmzMinRating(s)}>
+                          {s === 0 ? 'Tutte' : `${s}★`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Recensioni minime */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>RECENSIONI MINIME</div>
+                    <input className="inp" type="number" min={0} placeholder="0 = nessun filtro"
+                      value={amzMinReviews || ''} onChange={e => setAmzMinReviews(Number(e.target.value))} style={{ fontSize: 13 }} />
+                  </div>
+
+                  {/* Venditore */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 6 }}>VENDITORE</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {[['all','Tutti'],['amazon','Solo Amazon']].map(([v,l]) => (
+                        <button key={v} className={`btn bsm ${amzMerchantFilter === v ? 'bp' : 'bgh'}`}
+                          style={{ fontSize: 12, padding: '4px 10px' }}
+                          onClick={() => setAmzMerchantFilter(v)}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ordinamento */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
+                    <select className="sel" style={{ fontSize: 12 }} value={amzSort} onChange={e => setAmzSort(e.target.value)}>
+                      {AMZ_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Categorie */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
+                      CATEGORIE {amzSearchIndexes.size > 0
+                        ? <span style={{ color: 'var(--a1)' }}>({amzSearchIndexes.size} sel.)</span>
+                        : <span>(tutte)</span>}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {AMZ_SEARCH_INDEXES.filter(o => o.value).map(o => (
+                        <button key={o.value} className={`btn bsm ${amzSearchIndexes.has(o.value) ? 'bp' : 'bgh'}`}
+                          style={{ fontSize: 10, padding: '3px 8px' }}
+                          onClick={() => toggleAmzCat(o.value)}>
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Brand keyword */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 10, color: 'var(--t3)' }}>
+                        BRAND / PAROLE CHIAVE ({amzBrandKeywords.length}) — aggiornati ad ogni refresh cache
+                      </span>
+                      <button className="btn bgh bsm" style={{ fontSize: 9 }}
+                        onClick={() => setAmzBrandKeywords(AMZ_DEFAULT_BRANDS)}>
+                        Reset
+                      </button>
+                    </div>
+                    {/* Aggiungi keyword */}
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                      <input className="inp" placeholder="Aggiungi brand..."
+                        value={newBrandKw} onChange={e => setNewBrandKw(e.target.value)}
+                        style={{ flex: 1, fontSize: 12 }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && newBrandKw.trim()) {
+                            const kw = newBrandKw.trim().toLowerCase();
+                            if (!amzBrandKeywords.includes(kw)) setAmzBrandKeywords(prev => [...prev, kw]);
+                            setNewBrandKw('');
+                          }
+                        }} />
+                      <button className="btn bp bsm" style={{ fontSize: 12 }}
+                        onClick={() => {
+                          const kw = newBrandKw.trim().toLowerCase();
+                          if (kw && !amzBrandKeywords.includes(kw)) setAmzBrandKeywords(prev => [...prev, kw]);
+                          setNewBrandKw('');
+                        }}>+</button>
+                    </div>
+                    {/* Cerca nella lista */}
+                    <input className="inp" placeholder="Filtra lista brand..." value={brandSearch}
+                      onChange={e => setBrandSearch(e.target.value)}
+                      style={{ fontSize: 11, marginBottom: 6 }} />
+                    {/* Lista brand come pill rimuovibili */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 180, overflowY: 'auto', padding: '4px 0' }}>
+                      {amzBrandKeywords
+                        .filter(k => !brandSearch || k.includes(brandSearch.toLowerCase()))
+                        .map(kw => (
+                          <span key={kw} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            background: 'var(--bg2)', borderRadius: 12,
+                            padding: '2px 6px', fontSize: 10, color: 'var(--t2)',
+                          }}>
+                            {kw}
+                            <button onClick={() => setAmzBrandKeywords(prev => prev.filter(x => x !== kw))}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t3)', fontSize: 10, padding: 0, lineHeight: 1 }}>✕</button>
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Salva + Applica */}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn bs" style={{ flex: 1, fontSize: 13 }}
+                      onClick={async () => { await saveFiltersAmazon(); setShowFilters(false); loadAmzCache(); }}>
+                      💾 Salva e applica
+                    </button>
+                    <button className="btn bgh" style={{ flex: 1, fontSize: 13 }}
+                      onClick={() => { setShowFilters(false); loadAmzCache(); }}>
+                      Applica
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withErrorHandler, requireUserId, getUserId } from '../_utils.js';
-import { getToken, runAmazonSearch, MARKETPLACE_DOMAINS, MARKETPLACE_CURRENCY } from '../_amazonSearch.js';
+import { getToken, runAmazonSearch, runBrandKeywordsSearch, DEFAULT_BRAND_KEYWORDS, MARKETPLACE_DOMAINS, MARKETPLACE_CURRENCY } from '../_amazonSearch.js';
 import sql from '../../lib/db.js';
 
 function isCronRequest(req: VercelRequest): boolean {
@@ -19,6 +19,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const platform     = q.platform || 'amazon';
     const minDiscount  = parseInt(q.minDiscount ?? '0') || 0;
     const maxDiscount  = parseInt(q.maxDiscount ?? '0') || 0;
+    const minRating    = parseFloat(q.minRating ?? '0') || 0;
+    const minReviews   = parseInt(q.minReviews ?? '0') || 0;
+    const merchantFilter = q.merchantFilter || 'all';
     const searchIdxRaw = (q.searchIndexes ?? '').trim();
     const searchIdxs   = searchIdxRaw ? searchIdxRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
 
@@ -29,11 +32,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
              discount_percent AS "discountPercent",
              currency, category, search_index AS "searchIndex",
              url, affiliate_url AS "affiliateUrl",
+             COALESCE(rating, 0)::float AS "reviewRating",
+             COALESCE(review_count, 0) AS "reviewCount",
+             COALESCE(brand_keyword, '') AS "brandKeyword",
              found_at AS "foundAt"
       FROM deals_cache
       WHERE user_id = ${userId} AND platform = ${platform}
         AND (${minDiscount} = 0 OR discount_percent >= ${minDiscount})
         AND (${maxDiscount} = 0 OR discount_percent <= ${maxDiscount})
+        AND (${minRating} = 0 OR rating >= ${minRating})
+        AND (${minReviews} = 0 OR review_count >= ${minReviews})
       ORDER BY discount_percent DESC
       LIMIT 800
     `;
@@ -122,12 +130,18 @@ async function refreshUserCache(userId: string): Promise<void> {
   const ds = cfg.dealSearch?.amazon ?? {};
   const searchIndexesRaw = (ds.searchIndexes ?? '').trim();
   const searchIndexes    = searchIndexesRaw ? searchIndexesRaw.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+  const brandKwRaw       = (ds.brandKeywords ?? '').trim();
+  const brandKeywords    = brandKwRaw
+    ? brandKwRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
+    : DEFAULT_BRAND_KEYWORDS;
+  const merchantFilter   = ds.merchantFilter || 'all';
+  const minRating        = ds.minRating || 0;
 
-  console.log(`[deals-cache] refresh userId=${userId} searchIndexes=${searchIndexes.join(',') || 'default'}`);
+  console.log(`[deals-cache] refresh userId=${userId} searchIndexes=${searchIndexes.join(',') || 'default'} brandKeywords=${brandKeywords.length}`);
 
   const token = await getToken(credentialId, credentialSecret, version);
 
-  // Scarica più blocchi di pagine per avere più risultati
+  // 1. Ricerca per categorie (3 blocchi di pagine)
   const allProducts: any[] = [];
   const seenAsins = new Set<string>();
 
@@ -143,14 +157,26 @@ async function refreshUserCache(userId: string): Promise<void> {
         searchIndexes,
         pageBlock: block,
         includeGoldbox: block === 1,
+        merchant: merchantFilter !== 'all' ? merchantFilter : undefined,
+        minRating: minRating > 0 ? minRating : undefined,
       }
     );
     for (const p of products) {
       if (!seenAsins.has(p.productId)) { seenAsins.add(p.productId); allProducts.push(p); }
     }
     if (!anyPageHadResults) break;
-    // Pausa tra blocchi per non sforare rate limit
     if (block < 3) await new Promise(r => setTimeout(r, 3000));
+  }
+
+  // 2. Ricerca per brand keyword (1 pagina per keyword)
+  if (brandKeywords.length > 0) {
+    const brandProducts = await runBrandKeywordsSearch(
+      token, marketplaceDomain, currency, affiliateTag, brandKeywords,
+      { merchant: merchantFilter !== 'all' ? merchantFilter : undefined, minRating: minRating > 0 ? minRating : undefined }
+    );
+    for (const p of brandProducts) {
+      if (!seenAsins.has(p.productId)) { seenAsins.add(p.productId); allProducts.push(p); }
+    }
   }
 
   // Upsert tutto in deals_cache
@@ -158,17 +184,20 @@ async function refreshUserCache(userId: string): Promise<void> {
     await sql`
       INSERT INTO deals_cache (id, user_id, platform, product_id, title, image,
         original_price, discounted_price, discount_percent, currency, category,
-        search_index, url, affiliate_url, found_at)
+        search_index, url, affiliate_url, rating, review_count, brand_keyword, found_at)
       VALUES (
         gen_random_uuid(), ${userId}, 'amazon', ${p.productId}, ${p.title}, ${p.image},
         ${p.originalPrice}, ${p.discountedPrice}, ${p.discountPercent}, ${p.currency},
-        ${p.category}, ${p.searchIndex ?? ''}, ${p.url}, ${p.affiliateUrl}, now()
+        ${p.category}, ${p.searchIndex ?? ''}, ${p.url}, ${p.affiliateUrl},
+        ${p.reviewRating ?? 0}, ${p.reviewCount ?? 0}, ${p.brandKeyword ?? ''}, now()
       )
       ON CONFLICT (user_id, platform, product_id) DO UPDATE SET
         title = EXCLUDED.title, image = EXCLUDED.image,
         original_price = EXCLUDED.original_price, discounted_price = EXCLUDED.discounted_price,
         discount_percent = EXCLUDED.discount_percent, category = EXCLUDED.category,
-        url = EXCLUDED.url, affiliate_url = EXCLUDED.affiliate_url, found_at = now()
+        url = EXCLUDED.url, affiliate_url = EXCLUDED.affiliate_url,
+        rating = EXCLUDED.rating, review_count = EXCLUDED.review_count,
+        brand_keyword = EXCLUDED.brand_keyword, found_at = now()
     `;
   }
 

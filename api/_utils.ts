@@ -124,6 +124,11 @@ async function ensureMigrated() {
   await sql`ALTER TABLE layouts ADD CONSTRAINT layouts_tipo_check CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress', 'aliexpress_historical_low', 'amazon'))`;
   // Tastiera associata per layout
   await sql`ALTER TABLE layouts ADD COLUMN IF NOT EXISTS keyboard_id TEXT`;
+  // Rating e recensioni per deals_cache
+  await sql`ALTER TABLE deals_cache ADD COLUMN IF NOT EXISTS rating NUMERIC(2,1) DEFAULT 0`;
+  await sql`ALTER TABLE deals_cache ADD COLUMN IF NOT EXISTS review_count INTEGER DEFAULT 0`;
+  // Keyword brand di provenienza per deals_cache
+  await sql`ALTER TABLE deals_cache ADD COLUMN IF NOT EXISTS brand_keyword TEXT DEFAULT ''`;
 
   _migrated = true;
   console.log('[DB] migrazione completata');

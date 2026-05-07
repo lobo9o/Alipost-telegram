@@ -26,6 +26,55 @@ export const DEFAULT_INDEXES = [
   'Baby', 'Books', 'Apparel', 'Shoes',
 ];
 
+export const DEFAULT_BRAND_KEYWORDS = [
+  'samsung','apple','mulino bianco','philips','gillette','acer','lenovo','blink','nespresso',
+  'bialetti','borbone',"kellogg's",'nescafé','kinder','peroni','misura','echo show','huawei',
+  'msi','pavesi','adidas','echo dot','braun','sandisk','pringles','kimbo','nestlé','tuborg',
+  "m&m's",'pan di stelle','aukey','pellini','honor','gran cereale','epson','lg','san carlo',
+  'lavazza','nike',"jack daniel's",'wd','jbl','galbusera','starbucks','riso scotti','xiaomi',
+  'fitbit','realme','fire tv','diadora','twinings','coca-cola','lipton','lindor','ferrero',
+  'kitkat','benq','hp','perugina','poretti','panasonic','kingston','crucial','paco rabanne',
+  'netac','amazfit','vergnano','chupa chups','bottega verde','calvin klein','tuc','microsoft',
+  'collistar','lexar','toshiba','fila','remington','sony','motta','belkin','fire hd','wilkinson',
+  "levi's",'diesel','hugo boss','nero giardini','laura biagiotti','bauli','snickers','dell',
+  'hisense','puma','amazon','oneplus','oppo','nutella','fossil','canon','google','garnier',
+  'nivea','logitech','tp-link','whirlpool','bosch','netgear','revlon','pantene','olaz','armani',
+  'hoover','imetec',"de'longhi",'rowenta','vileda','durex','seagate','irobot','illy','kenwood',
+  'sharp','geox','electrolux','ariete','veet','moulinex','spigen','candy','sennheiser',
+  'indesit','haier','pedigree','razer','asus','bayer','aigostar','gucci','dior','anker',
+  'eero','garmin','casio','dove','lacoste','vans','western digital','amuchina','cocolino',
+  'dash','dixan','fairy','finish','haribo','lenor','lindt','loacker','motorola','nintendo',
+  'corsair','ubisoft','steelseries','capcom','oreo','playstation','schwarzkopf','sodastream',
+  'timberland','vanish','xbox','chicco','disney','barilla',"l'oréal paris",'maybelline',
+  'morellato','oral-b','clementoni','kipling','colgate','brita','borotalco','de cecco',
+  'doritos','milka','olay','lego','marvel','pokémon','ray-ban','reolink','roborock','scholl',
+  'tena','gigabyte','govee','hasbro','hyperx','kodak','panini','converse','knorr','la molisana',
+  'garofalo','head & shoulders','hotpoint','lagostina','tapo','alpro','airwick','bacardi',
+  'cif','emporio armani','levoit','granarolo','tcl','konami','crocs','intex','superga','sonoff',
+  'hugo','labello','jabra','varta','eufy','intel','amd','ugreen','aoc','cerave','under armour',
+  'aperol','bandai','barbie','black+decker','renpho',"rubik's",'nzxt','logitech','pioneer',
+  'trust','anker','swarovski','duracell','frontline','dreame','ecovacs','the north face',
+  'versace','oral-b','ticwatch','nothing','asrock','cooler master','roborock','tineco',
+  'thun','voiello','sacla','olimpia splendid','severin','cecotec','eureka','thermalright',
+  'narwal','laica','sunsilk','tesori d\'oriente','vagisil','vidal','vivident','ciarra','dreo',
+  'patriot memory','intex','equilibra','aeg','united colors of benetton','creative','mars gaming',
+  'arctic','oversteel','sapphire','evga','powera','calgon','foppapedretti','protein works',
+  'aperol','polti','swiffer','scottex','red bull','san benedetto','purina','whiskas',
+  "l'oréal professionnel",'russel hobbs','cuisinart','merross','forno bonomi','bifinett',
+  'baileys','boss','david jones','funk','maalox','quasar','tristar','lamborghini',
+  'bellissima','der-franz','biffi','levoit','breil','electronic arts','sega','thq nordic',
+  'namco','nacon','warner bros','ubisoft','activision','milestones','codemasters',
+  'roblox','ring','bethesda','bonomelli','carrera','champion','chanteclair',
+  'herbal essence','amaro montenegro','daniel wellington','grisbi','hasbro gaming','listerine',
+  'absolut','astro gaming','baileys','bombay','cameo','gigabyte','hyperx','kodak',
+  'roscenic','reolink','scholl','tennent\'s','tineco','converse','knorr','raid',
+  'delicius','granbest','jaotto','la cafetiere','lydevo','v-tac','ultenic','versuni',
+  'calvé','cif','cuisinart','emporio armani','granarolo','sonoff','hugo','ambi pur',
+  'lines','tigullio','bistefani','ubena','comfee','jabra','be-total','goleador',
+  'vigorsol','vitalcare','vivident','citrosodina','dreo','magic the gathering',
+];
+
+
 export const PAGES_PER_CATEGORY = 3;
 
 export interface DealProduct {
@@ -41,6 +90,9 @@ export interface DealProduct {
   url: string;
   affiliateUrl: string;
   platform: 'amazon';
+  reviewRating: number;
+  reviewCount: number;
+  brandKeyword: string;
 }
 
 export async function getToken(credentialId: string, credentialSecret: string, version: string): Promise<string> {
@@ -165,7 +217,7 @@ export async function getItemsByAsins(
         },
         body: JSON.stringify({
           itemIds: batch, partnerTag: affiliateTag, partnerType: 'associates',
-          resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price', 'browseNodeInfo.browseNodes'],
+          resources: SEARCH_RESOURCES,
         }),
         signal: AbortSignal.timeout(10000),
       });
@@ -180,7 +232,8 @@ export async function getItemsByAsins(
 }
 
 export function parseItem(
-  item: any, currency: string, marketplaceDomain: string, affiliateTag: string, searchIndex = '',
+  item: any, currency: string, marketplaceDomain: string, affiliateTag: string,
+  searchIndex = '', brandKeyword = '',
 ): DealProduct | null {
   const asin = String(pick(item, 'asin', 'ASIN') ?? '');
   if (!asin) return null;
@@ -201,15 +254,18 @@ export function parseItem(
 
   if (discountedPrice <= 0) return null;
 
-  const browseNodes = (pick(pick(item, 'browseNodeInfo', 'BrowseNodeInfo'), 'browseNodes', 'BrowseNodes') as any[]) ?? [];
-  const category    = browseNodes[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
+  const browseNodes  = (pick(pick(item, 'browseNodeInfo', 'BrowseNodeInfo'), 'browseNodes', 'BrowseNodes') as any[]) ?? [];
+  const category     = browseNodes[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
+  const reviews      = pick(item, 'customerReviews', 'CustomerReviews') as any;
+  const reviewRating = Number(pick(reviews, 'starRating', 'StarRating') ?? 0);
+  const reviewCount  = Number(pick(reviews, 'count', 'Count') ?? 0);
 
   return {
     productId: asin, title: String(titleVal ?? ''), image: String(imageUrl ?? ''),
     originalPrice, discountedPrice, discountPercent, currency, category, searchIndex,
     url: `https://${marketplaceDomain}/dp/${asin}`,
     affiliateUrl: `https://${marketplaceDomain}/dp/${asin}?tag=${affiliateTag}`,
-    platform: 'amazon',
+    platform: 'amazon', reviewRating, reviewCount, brandKeyword,
   };
 }
 
@@ -223,7 +279,14 @@ export interface SearchParams {
   searchIndexes?: string[];
   pageBlock?: number;
   includeGoldbox?: boolean;
+  merchant?: string;   // 'Amazon' = sold by Amazon
+  minRating?: number;  // 1-5
 }
+
+const SEARCH_RESOURCES = [
+  'itemInfo.title', 'images.primary.large', 'offersV2.listings.price',
+  'browseNodeInfo.browseNodes', 'customerReviews.starRating', 'customerReviews.count',
+];
 
 // Esegue una ricerca completa e restituisce i prodotti trovati
 export async function runAmazonSearch(
@@ -237,17 +300,20 @@ export async function runAmazonSearch(
     keywords = '', minDiscount = 0, maxDiscount = 0,
     minPrice = 0, maxPrice = 0, sortBy = 'Featured',
     searchIndexes = [], pageBlock = 1, includeGoldbox = false,
+    merchant, minRating,
   } = params;
 
   const baseBody: Record<string, any> = {
     partnerTag: affiliateTag, partnerType: 'associates',
-    resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price', 'browseNodeInfo.browseNodes'],
+    resources: SEARCH_RESOURCES,
   };
   if (keywords)              baseBody.keywords         = keywords;
   baseBody.minSavingPercent  = minDiscount > 0 ? minDiscount : 1;
   if (minPrice > 0)          baseBody.minPrice         = Math.round(minPrice * 100);
   if (maxPrice > 0)          baseBody.maxPrice         = Math.round(maxPrice * 100);
   if (sortBy !== 'Featured') baseBody.sortBy           = sortBy;
+  if (merchant === 'amazon') baseBody.merchant         = 'Amazon';
+  if (minRating && minRating > 0) baseBody.minReviewsRating = minRating;
 
   const indexes = searchIndexes.length > 0
     ? searchIndexes
@@ -317,4 +383,47 @@ export async function runAmazonSearch(
   products.sort((a, b) => b.discountPercent - a.discountPercent);
 
   return { products, anyPageHadResults };
+}
+
+// Cerca per ogni brand keyword (1 pagina ciascuna) e restituisce tutti i prodotti trovati
+export async function runBrandKeywordsSearch(
+  token: string,
+  marketplaceDomain: string,
+  currency: string,
+  affiliateTag: string,
+  brandKeywords: string[],
+  opts: { merchant?: string; minRating?: number } = {},
+): Promise<DealProduct[]> {
+  const baseBody: Record<string, any> = {
+    partnerTag: affiliateTag, partnerType: 'associates',
+    resources: SEARCH_RESOURCES,
+    minSavingPercent: 1,
+    itemPage: 1,
+  };
+  if (opts.merchant === 'amazon') baseBody.merchant = 'Amazon';
+  if (opts.minRating && opts.minRating > 0) baseBody.minReviewsRating = opts.minRating;
+
+  const seen = new Set<string>();
+  const allProducts: DealProduct[] = [];
+
+  const tasks = brandKeywords.map(kw => () =>
+    searchOne(token, marketplaceDomain, { ...baseBody, keywords: kw })
+      .then(r => ({ items: r.products, kw }))
+      .catch(() => ({ items: [] as any[], kw }))
+  );
+
+  const results = await batchAll(tasks, 2, 600);
+
+  for (const { items, kw } of results) {
+    for (const item of items) {
+      const p = parseItem(item, currency, marketplaceDomain, affiliateTag, '', kw);
+      if (p && p.discountPercent >= 1 && !seen.has(p.productId)) {
+        seen.add(p.productId);
+        allProducts.push(p);
+      }
+    }
+  }
+
+  console.log(`[brand-search] ${brandKeywords.length} keyword → ${allProducts.length} prodotti`);
+  return allProducts;
 }

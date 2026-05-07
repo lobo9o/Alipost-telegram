@@ -220,7 +220,11 @@ export interface DealSearchAmazonSettings {
   minPrice: number;
   maxPrice: number;
   sort: string;
-  searchIndexes: string; // SearchIndex separati da virgola: 'Electronics,VideoGames'
+  searchIndexes: string;
+  brandKeywords?: string;   // comma-separated brand/keyword list for cache refresh
+  minRating?: number;       // 0 = no filter, 1-5
+  minReviews?: number;      // 0 = no filter
+  merchantFilter?: string;  // 'all' | 'amazon'
 }
 
 export interface DealSearchSettings {

@@ -150,6 +150,9 @@ export interface DealProduct {
   rating: string;
   url: string;
   affiliateUrl: string;
+  reviewRating?: number;
+  reviewCount?: number;
+  brandKeyword?: string;
 }
 
 export interface DealsResult {
@@ -213,11 +216,17 @@ export interface DealsCache {
 }
 
 export const dealsCacheApi = {
-  listAmazon: (params?: { minDiscount?: number; maxDiscount?: number; searchIndexes?: string }) => {
+  listAmazon: (params?: {
+    minDiscount?: number; maxDiscount?: number; searchIndexes?: string;
+    minRating?: number; minReviews?: number; merchantFilter?: string;
+  }) => {
     const qs = new URLSearchParams({ platform: 'amazon' });
-    if (params?.minDiscount) qs.set('minDiscount', String(params.minDiscount));
-    if (params?.maxDiscount) qs.set('maxDiscount', String(params.maxDiscount));
-    if (params?.searchIndexes) qs.set('searchIndexes', params.searchIndexes);
+    if (params?.minDiscount)    qs.set('minDiscount',    String(params.minDiscount));
+    if (params?.maxDiscount)    qs.set('maxDiscount',    String(params.maxDiscount));
+    if (params?.searchIndexes)  qs.set('searchIndexes',  params.searchIndexes);
+    if (params?.minRating)      qs.set('minRating',      String(params.minRating));
+    if (params?.minReviews)     qs.set('minReviews',     String(params.minReviews));
+    if (params?.merchantFilter && params.merchantFilter !== 'all') qs.set('merchantFilter', params.merchantFilter);
     return req<DealsCache>('GET', `/api/deals-cache?${qs.toString()}`);
   },
   refresh: () => req<{ ok: boolean; message: string }>('POST', '/api/deals-cache'),
