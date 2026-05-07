@@ -107,16 +107,6 @@ async function generateTerminataImageServer(
   return sharp(step1).composite([{ input: svg, blend: 'over' }]).jpeg({ quality: 88 }).toBuffer();
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const h = hex.replace('#', '');
-  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
-  return {
-    r: parseInt(full.slice(0, 2), 16) || 0,
-    g: parseInt(full.slice(2, 4), 16) || 0,
-    b: parseInt(full.slice(4, 6), 16) || 0,
-  };
-}
-
 function computeScore(
   p: { discountPercent: number; reviewRating?: number; reviewCount?: number },
   w: { discount: number; rating: number; reviews: number },
@@ -127,6 +117,8 @@ function computeScore(
   return (w.discount / 100) * normD + (w.rating / 100) * normR + (w.reviews / 100) * normV;
 }
 
+// Genera immagine con template usando node-canvas (stessa logica del browser, imageCompose.ts)
+// Richiede: npm install canvas  (ha binary precompilati per ARM64/RPi4)
 async function generateTemplateImageServer(
   template: any,
   productImageUrl: string,
@@ -134,100 +126,120 @@ async function generateTemplateImageServer(
   priceData: { prezzo: string; prezzoPrecedente: string; sconto: string },
 ): Promise<string | null> {
   try {
-    const sharpMod = await import('sharp').catch(() => null) as any;
-    if (!sharpMod) return null;
-    const sharp = (sharpMod.default ?? sharpMod) as any;
+    const canvasMod = await import('canvas').catch(() => null) as any;
+    if (!canvasMod) {
+      console.warn('[tpl] node-canvas non installato — esegui: npm install canvas');
+      return null;
+    }
+    const { createCanvas, loadImage } = canvasMod;
     const SIZE = 1024;
+    const canvas = createCanvas(SIZE, SIZE);
+    const ctx = canvas.getContext('2d');
 
     // Background
-    const bgRaw = String(template.bgColor || '#1a1a2e');
-    const bg = bgRaw.startsWith('#') ? hexToRgb(bgRaw) : { r: 26, g: 26, b: 46 };
-    const composites: any[] = [];
+    ctx.fillStyle = template.bgColor || '#ffffff';
+    ctx.fillRect(0, 0, SIZE, SIZE);
 
-    // Product image
-    if (productImageUrl && productImageUrl.startsWith('http')) {
+    // Helper: fetch immagine HTTP con User-Agent e restituisce Buffer
+    async function fetchImgBuf(url: string): Promise<Buffer | null> {
       try {
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 8000);
-        const r = await fetch(productImageUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
-        clearTimeout(timer);
-        if (r.ok) {
-          const buf = Buffer.from(await r.arrayBuffer());
-          const pp = template.product ?? { x: 5, y: 5, size: 90 };
-          const boxPx = Math.round((pp.size / 100) * SIZE);
-          const xPx   = Math.round((pp.x / 100) * SIZE);
-          const yPx   = Math.round((pp.y / 100) * SIZE);
-          const resized = await sharp(buf)
-            .resize(boxPx, boxPx, { fit: 'contain', background: { r: bg.r, g: bg.g, b: bg.b, alpha: 255 } })
-            .png().toBuffer();
-          composites.push({ input: resized, top: yPx, left: xPx });
-        }
-      } catch (e: any) { console.warn('[tpl] product img:', e.message); }
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' } });
+        clearTimeout(t);
+        if (!r.ok) return null;
+        return Buffer.from(await r.arrayBuffer());
+      } catch { return null; }
     }
 
-    // Overlay image (user logo/brand — can be base64 or URL)
+    // Prodotto — centrato nella box (identico a drawContained del browser)
+    if (productImageUrl?.startsWith('http')) {
+      try {
+        const buf = await fetchImgBuf(productImageUrl);
+        if (buf) {
+          const img = await loadImage(buf);
+          const el = template.product ?? { x: 5, y: 5, size: 90 };
+          const x = (el.x / 100) * SIZE;
+          const y = (el.y / 100) * SIZE;
+          const box = (el.size / 100) * SIZE;
+          const ratio = Math.min(box / img.width, box / img.height);
+          const dw = img.width * ratio;
+          const dh = img.height * ratio;
+          ctx.drawImage(img, x + (box - dw) / 2, y + (box - dh) / 2, dw, dh);
+        }
+      } catch (e: any) { console.warn('[tpl] product:', e.message); }
+    }
+
+    // Overlay (logo utente — base64 o URL)
     if (template.overlay?.enabled && template.overlay?.src) {
       try {
         const src = String(template.overlay.src);
-        let ovBuf: Buffer;
-        if (src.startsWith('data:')) {
-          ovBuf = Buffer.from(src.split(',')[1] ?? '', 'base64');
-        } else {
-          const r = await fetch(src, { signal: AbortSignal.timeout(5000) });
-          if (!r.ok) throw new Error('overlay fetch fail');
-          ovBuf = Buffer.from(await r.arrayBuffer());
-        }
-        const ov = template.overlay;
-        const sPx = Math.round((ov.size / 100) * SIZE);
-        const xPx = Math.round((ov.x / 100) * SIZE);
-        const yPx = Math.round((ov.y / 100) * SIZE);
-        const resized = await sharp(ovBuf)
-          .resize(sPx, sPx, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-          .png().toBuffer();
-        composites.push({ input: resized, top: yPx, left: xPx });
+        const img = await loadImage(src.startsWith('http') ? (await fetchImgBuf(src) ?? src) : src);
+        const el = template.overlay;
+        const s = (el.size / 100) * SIZE;
+        ctx.drawImage(img, (el.x / 100) * SIZE, (el.y / 100) * SIZE, s, s);
       } catch (e: any) { console.warn('[tpl] overlay:', e.message); }
     }
 
-    // Store badge (Amazon / AliExpress)
+    // Store badge — disegnato con canvas 2D primitives (no SVG, no font dependency)
     if (template.store?.enabled) {
-      const st = template.store;
-      const sPx = Math.max(16, Math.round((st.size / 100) * SIZE));
-      const xPx = Math.round((st.x / 100) * SIZE);
-      const yPx = Math.round((st.y / 100) * SIZE);
-      const storeColor = platform === 'amazon' ? '#FF9900' : '#E43226';
-      const storeSvg = platform === 'amazon'
-        ? `<svg xmlns="http://www.w3.org/2000/svg" width="${sPx}" height="${sPx}" viewBox="0 0 100 100"><rect width="100" height="100" rx="16" fill="${storeColor}"/><text x="50" y="78" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="72" fill="white">a</text></svg>`
-        : `<svg xmlns="http://www.w3.org/2000/svg" width="${sPx}" height="${sPx}" viewBox="0 0 100 100"><rect width="100" height="100" rx="16" fill="${storeColor}"/><text x="50" y="68" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="34" fill="white">Ali</text></svg>`;
-      composites.push({ input: Buffer.from(storeSvg), top: yPx, left: xPx });
+      try {
+        const el = template.store;
+        const s  = Math.max(16, (el.size / 100) * SIZE);
+        const bx = (el.x / 100) * SIZE;
+        const by = (el.y / 100) * SIZE;
+        const rc = s * 0.16;
+        ctx.beginPath();
+        ctx.moveTo(bx + rc, by); ctx.lineTo(bx + s - rc, by);
+        ctx.arcTo(bx + s, by, bx + s, by + rc, rc); ctx.lineTo(bx + s, by + s - rc);
+        ctx.arcTo(bx + s, by + s, bx + s - rc, by + s, rc); ctx.lineTo(bx + rc, by + s);
+        ctx.arcTo(bx, by + s, bx, by + s - rc, rc); ctx.lineTo(bx, by + rc);
+        ctx.arcTo(bx, by, bx + rc, by, rc); ctx.closePath();
+        ctx.fillStyle = platform === 'amazon' ? '#FF9900' : '#E43226';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.round(s * 0.55)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(platform === 'amazon' ? 'a' : 'Ali', bx + s / 2, by + s * 0.55);
+      } catch (e: any) { console.warn('[tpl] badge:', e.message); }
     }
 
-    // Text elements — usa due <text> separati (stroke + fill) invece di paint-order
-    // per massima compatibilità con librsvg su Raspberry Pi OS
-    const addTextSvg = (el: any, text: string) => {
+    // Testi — identico a drawTextEl del browser (imageCompose.ts)
+    const drawTextEl = (el: any, text: string) => {
       if (!el?.enabled || !text?.trim()) return;
-      const fs  = (Number(el.fontSize) || 36) * 3;
-      const xPx = Math.round((el.x / 100) * SIZE);
-      const yPx = Math.round((el.y / 100) * SIZE);
-      const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
-      const safe = String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const baseAttrs = `x="${xPx}" y="${yPx}" font-family="sans-serif" font-size="${fs}" font-weight="bold" text-anchor="${anchor}" dominant-baseline="hanging"`;
-      let inner = '';
-      // Stroke come testo separato (non usa paint-order — non supportato da vecchie librsvg)
+      const fs = (Number(el.fontSize) || 36) * 2;
+      const x  = (el.x / 100) * SIZE;
+      const y  = (el.y / 100) * SIZE;
+      ctx.save();
+      ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, sans-serif`;
+      ctx.textBaseline = 'top';
+      const tw = ctx.measureText(text).width;
+      const dx = el.textAnchor === 'right' ? x - tw : el.textAnchor === 'center' ? x - tw / 2 : x;
       if (el.strokeEnabled && el.strokeWidth > 0) {
-        const sw = (el.strokeWidth || 3) * 3;
-        inner += `<text ${baseAttrs} stroke="${el.strokeColor || '#000'}" stroke-width="${sw}" stroke-linejoin="round" fill="${el.strokeColor || '#000'}">${safe}</text>`;
+        ctx.strokeStyle = el.strokeColor || '#000';
+        ctx.lineWidth   = (el.strokeWidth || 3) * 2;
+        ctx.lineJoin    = 'round';
+        ctx.strokeText(text, dx, y);
       }
-      inner += `<text ${baseAttrs} fill="${el.color || '#fff'}">${safe}</text>`;
-      composites.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}">${inner}</svg>`), top: 0, left: 0 });
+      ctx.fillStyle = el.color || '#fff';
+      ctx.fillText(text, dx, y);
+      if (el.strikethrough) {
+        const sy = y + fs * 0.55;
+        ctx.strokeStyle = el.strikethroughColor || el.color || '#fff';
+        ctx.lineWidth   = Math.max(1, fs * 0.06);
+        ctx.beginPath(); ctx.moveTo(dx, sy); ctx.lineTo(dx + tw, sy); ctx.stroke();
+      }
+      ctx.restore();
     };
-    addTextSvg(template.prezzo,           priceData.prezzo);
-    addTextSvg(template.prezzoPrecedente, priceData.prezzoPrecedente);
-    addTextSvg(template.sconto,           priceData.sconto);
-    addTextSvg(template.testoCustom,      template.testoCustom?.text ?? '');
 
-    const result = await sharp({ create: { width: SIZE, height: SIZE, channels: 3, background: bg } })
-      .composite(composites).jpeg({ quality: 88 }).toBuffer();
-    return `data:image/jpeg;base64,${result.toString('base64')}`;
+    drawTextEl(template.prezzo,           priceData.prezzo);
+    drawTextEl(template.prezzoPrecedente, priceData.prezzoPrecedente);
+    drawTextEl(template.sconto,           priceData.sconto);
+    drawTextEl(template.testoCustom,      template.testoCustom?.text ?? '');
+
+    const buf = canvas.toBuffer('image/jpeg', { quality: 0.88 });
+    return `data:image/jpeg;base64,${buf.toString('base64')}`;
   } catch (e: any) {
     console.warn('[tpl] generate failed:', e.message);
     return null;
