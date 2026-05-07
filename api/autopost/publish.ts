@@ -201,18 +201,20 @@ async function generateTemplateImageServer(
       composites.push({ input: Buffer.from(storeSvg), top: yPx, left: xPx });
     }
 
-    // Text elements
+    // Text elements — font-size * 3 per compensare assenza Impact su Linux/RPi;
+    // font-weight 900 + fallback a fonts sempre disponibili su Debian/RPi OS
     const addTextSvg = (el: any, text: string) => {
       if (!el?.enabled || !text?.trim()) return;
-      const fs  = (Number(el.fontSize) || 36) * 2;
+      const fs  = (Number(el.fontSize) || 36) * 3;
       const xPx = Math.round((el.x / 100) * SIZE);
       const yPx = Math.round((el.y / 100) * SIZE);
       const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
       const strokeAttr = el.strokeEnabled && el.strokeWidth > 0
-        ? `stroke="${el.strokeColor || '#000'}" stroke-width="${(el.strokeWidth || 3) * 2}" stroke-linejoin="round" paint-order="stroke fill"`
+        ? `stroke="${el.strokeColor || '#000'}" stroke-width="${(el.strokeWidth || 3) * 3}" stroke-linejoin="round" paint-order="stroke fill"`
         : '';
+      const decoAttr = el.strikethrough ? `text-decoration="line-through"` : '';
       const safe = String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}"><text x="${xPx}" y="${yPx}" font-family="${el.fontFamily || 'Impact'},Arial Black,sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" fill="${el.color || '#fff'}" text-anchor="${anchor}" dominant-baseline="hanging" ${strokeAttr}>${safe}</text></svg>`;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}"><text x="${xPx}" y="${yPx}" font-family="Impact,Arial Black,DejaVu Sans Condensed Bold,DejaVu Sans Bold,Arial,sans-serif" font-size="${fs}" font-weight="900" fill="${el.color || '#fff'}" text-anchor="${anchor}" dominant-baseline="hanging" ${strokeAttr} ${decoAttr}>${safe}</text></svg>`;
       composites.push({ input: Buffer.from(svg), top: 0, left: 0 });
     };
     addTextSvg(template.prezzo,           priceData.prezzo);
@@ -694,6 +696,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const originalPrice   = Number(amzCandidate.original_price);
         const discountPercent = Number(amzCandidate.discount_percent);
 
+        const reviewRating  = Number(amzCandidate.review_rating  ?? 0);
+        const reviewCount   = Number(amzCandidate.review_count   ?? 0);
+
         post = {
           id: crypto.randomUUID(), platform: 'amazon',
           sourceUrl: amzCandidate.affiliate_url || amzCandidate.url,
@@ -702,6 +707,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           originalPrice, discountedPrice, discountPercent,
           customText: '', isHistoricalLow: false,
           templateId, layoutId, keyboardId: '', emoji: '🟡',
+          stelle:     reviewRating > 0 ? String(reviewRating.toFixed(1)) : undefined,
+          recensioni: reviewCount  > 0 ? String(reviewCount)             : undefined,
+          cat:        amzCandidate.category || undefined,
         };
 
         // Genera immagine template server-side (sharp)
