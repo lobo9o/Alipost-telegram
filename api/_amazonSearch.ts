@@ -257,7 +257,13 @@ export function parseItem(
   const browseNodes  = (pick(pick(item, 'browseNodeInfo', 'BrowseNodeInfo'), 'browseNodes', 'BrowseNodes') as any[]) ?? [];
   const category     = browseNodes[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
   const reviews      = pick(item, 'customerReviews', 'CustomerReviews') as any;
-  const reviewRating = Number(pick(reviews, 'starRating', 'StarRating') ?? 0);
+  // starRating è un oggetto { Value: 4.5, DisplayValue: "..." } — estrai .Value
+  const starRatingRaw = pick(reviews, 'starRating', 'StarRating') as any;
+  const reviewRating  = Number(
+    (starRatingRaw && typeof starRatingRaw === 'object')
+      ? (pick(starRatingRaw, 'value', 'Value') ?? 0)
+      : (starRatingRaw ?? 0)
+  );
   const reviewCount  = Number(pick(reviews, 'count', 'Count') ?? 0);
 
   return {

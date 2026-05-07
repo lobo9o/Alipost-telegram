@@ -219,30 +219,32 @@ async function generateTemplateImageServer(
       } catch (e: any) { console.warn('[tpl] badge:', e.message); }
     }
 
-    // Testi — identico a drawTextEl del browser (imageCompose.ts)
+    // Testi — usa ctx.textAlign per rispettare l'ancora indipendentemente dal font
     const drawTextEl = (el: any, text: string) => {
       if (!el?.enabled || !text?.trim()) return;
-      const fs = (Number(el.fontSize) || 36) * 2;
-      const x  = (el.x / 100) * SIZE;
-      const y  = (el.y / 100) * SIZE;
+      const fs     = (Number(el.fontSize) || 36) * 2;
+      const x      = (el.x / 100) * SIZE;
+      const y      = (el.y / 100) * SIZE;
+      const anchor = el.textAnchor === 'right' ? 'right' : el.textAnchor === 'center' ? 'center' : 'left';
       ctx.save();
-      ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, sans-serif`;
+      ctx.font         = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, sans-serif`;
       ctx.textBaseline = 'top';
-      const tw = ctx.measureText(text).width;
-      const dx = el.textAnchor === 'right' ? x - tw : el.textAnchor === 'center' ? x - tw / 2 : x;
+      ctx.textAlign    = anchor as CanvasTextAlign;
       if (el.strokeEnabled && el.strokeWidth > 0) {
         ctx.strokeStyle = el.strokeColor || '#000';
         ctx.lineWidth   = (el.strokeWidth || 3) * 2;
         ctx.lineJoin    = 'round';
-        ctx.strokeText(text, dx, y);
+        ctx.strokeText(text, x, y);
       }
       ctx.fillStyle = el.color || '#fff';
-      ctx.fillText(text, dx, y);
+      ctx.fillText(text, x, y);
       if (el.strikethrough) {
+        const tw = ctx.measureText(text).width;
+        const sx = anchor === 'right' ? x - tw : anchor === 'center' ? x - tw / 2 : x;
         const sy = y + fs * 0.55;
         ctx.strokeStyle = el.strikethroughColor || el.color || '#fff';
         ctx.lineWidth   = Math.max(1, fs * 0.06);
-        ctx.beginPath(); ctx.moveTo(dx, sy); ctx.lineTo(dx + tw, sy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + tw, sy); ctx.stroke();
       }
       ctx.restore();
     };
