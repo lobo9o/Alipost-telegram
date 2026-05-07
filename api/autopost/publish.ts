@@ -107,6 +107,128 @@ async function generateTerminataImageServer(
   return sharp(step1).composite([{ input: svg, blend: 'over' }]).jpeg({ quality: 88 }).toBuffer();
 }
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  return {
+    r: parseInt(full.slice(0, 2), 16) || 0,
+    g: parseInt(full.slice(2, 4), 16) || 0,
+    b: parseInt(full.slice(4, 6), 16) || 0,
+  };
+}
+
+function computeScore(
+  p: { discountPercent: number; reviewRating?: number; reviewCount?: number },
+  w: { discount: number; rating: number; reviews: number },
+): number {
+  const normD = Math.min(Number(p.discountPercent) || 0, 80) / 80;
+  const normR = (Number(p.reviewRating) || 0) / 5;
+  const normV = Math.min(Number(p.reviewCount) || 0, 2000) / 2000;
+  return (w.discount / 100) * normD + (w.rating / 100) * normR + (w.reviews / 100) * normV;
+}
+
+async function generateTemplateImageServer(
+  template: any,
+  productImageUrl: string,
+  platform: string,
+  priceData: { prezzo: string; prezzoPrecedente: string; sconto: string },
+): Promise<string | null> {
+  try {
+    const sharpMod = await import('sharp').catch(() => null) as any;
+    if (!sharpMod) return null;
+    const sharp = (sharpMod.default ?? sharpMod) as any;
+    const SIZE = 1024;
+
+    // Background
+    const bgRaw = String(template.bgColor || '#1a1a2e');
+    const bg = bgRaw.startsWith('#') ? hexToRgb(bgRaw) : { r: 26, g: 26, b: 46 };
+    const composites: any[] = [];
+
+    // Product image
+    if (productImageUrl && productImageUrl.startsWith('http')) {
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 8000);
+        const r = await fetch(productImageUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        clearTimeout(timer);
+        if (r.ok) {
+          const buf = Buffer.from(await r.arrayBuffer());
+          const pp = template.product ?? { x: 5, y: 5, size: 90 };
+          const boxPx = Math.round((pp.size / 100) * SIZE);
+          const xPx   = Math.round((pp.x / 100) * SIZE);
+          const yPx   = Math.round((pp.y / 100) * SIZE);
+          const resized = await sharp(buf)
+            .resize(boxPx, boxPx, { fit: 'contain', background: { r: bg.r, g: bg.g, b: bg.b, alpha: 255 } })
+            .png().toBuffer();
+          composites.push({ input: resized, top: yPx, left: xPx });
+        }
+      } catch (e: any) { console.warn('[tpl] product img:', e.message); }
+    }
+
+    // Overlay image (user logo/brand — can be base64 or URL)
+    if (template.overlay?.enabled && template.overlay?.src) {
+      try {
+        const src = String(template.overlay.src);
+        let ovBuf: Buffer;
+        if (src.startsWith('data:')) {
+          ovBuf = Buffer.from(src.split(',')[1] ?? '', 'base64');
+        } else {
+          const r = await fetch(src, { signal: AbortSignal.timeout(5000) });
+          if (!r.ok) throw new Error('overlay fetch fail');
+          ovBuf = Buffer.from(await r.arrayBuffer());
+        }
+        const ov = template.overlay;
+        const sPx = Math.round((ov.size / 100) * SIZE);
+        const xPx = Math.round((ov.x / 100) * SIZE);
+        const yPx = Math.round((ov.y / 100) * SIZE);
+        const resized = await sharp(ovBuf)
+          .resize(sPx, sPx, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+          .png().toBuffer();
+        composites.push({ input: resized, top: yPx, left: xPx });
+      } catch (e: any) { console.warn('[tpl] overlay:', e.message); }
+    }
+
+    // Store badge (Amazon / AliExpress)
+    if (template.store?.enabled) {
+      const st = template.store;
+      const sPx = Math.max(16, Math.round((st.size / 100) * SIZE));
+      const xPx = Math.round((st.x / 100) * SIZE);
+      const yPx = Math.round((st.y / 100) * SIZE);
+      const storeColor = platform === 'amazon' ? '#FF9900' : '#E43226';
+      const storeSvg = platform === 'amazon'
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="${sPx}" height="${sPx}" viewBox="0 0 100 100"><rect width="100" height="100" rx="16" fill="${storeColor}"/><text x="50" y="78" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="72" fill="white">a</text></svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" width="${sPx}" height="${sPx}" viewBox="0 0 100 100"><rect width="100" height="100" rx="16" fill="${storeColor}"/><text x="50" y="68" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="34" fill="white">Ali</text></svg>`;
+      composites.push({ input: Buffer.from(storeSvg), top: yPx, left: xPx });
+    }
+
+    // Text elements
+    const addTextSvg = (el: any, text: string) => {
+      if (!el?.enabled || !text?.trim()) return;
+      const fs  = (Number(el.fontSize) || 36) * 2;
+      const xPx = Math.round((el.x / 100) * SIZE);
+      const yPx = Math.round((el.y / 100) * SIZE);
+      const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
+      const strokeAttr = el.strokeEnabled && el.strokeWidth > 0
+        ? `stroke="${el.strokeColor || '#000'}" stroke-width="${(el.strokeWidth || 3) * 2}" stroke-linejoin="round" paint-order="stroke fill"`
+        : '';
+      const safe = String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}"><text x="${xPx}" y="${yPx}" font-family="${el.fontFamily || 'Impact'},Arial Black,sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" fill="${el.color || '#fff'}" text-anchor="${anchor}" dominant-baseline="hanging" ${strokeAttr}>${safe}</text></svg>`;
+      composites.push({ input: Buffer.from(svg), top: 0, left: 0 });
+    };
+    addTextSvg(template.prezzo,           priceData.prezzo);
+    addTextSvg(template.prezzoPrecedente, priceData.prezzoPrecedente);
+    addTextSvg(template.sconto,           priceData.sconto);
+    addTextSvg(template.testoCustom,      template.testoCustom?.text ?? '');
+
+    const result = await sharp({ create: { width: SIZE, height: SIZE, channels: 3, background: bg } })
+      .composite(composites).jpeg({ quality: 88 }).toBuffer();
+    return `data:image/jpeg;base64,${result.toString('base64')}`;
+  } catch (e: any) {
+    console.warn('[tpl] generate failed:', e.message);
+    return null;
+  }
+}
+
 function safeCaption(html: string, maxLen: number): string {
   if (html.length <= maxLen) return html;
   const stack: string[] = [];
@@ -486,11 +608,28 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     // ── Auto-publish Amazon dal pool deals_cache ─────────────────────────────
     if (!queueItem && cfg.dealSearch?.autoPublishAmazon) {
-      const dsAmz = cfg.dealSearch?.amazon ?? {};
-      const minDisc  = Number(dsAmz.minDiscount ?? 0);
-      const maxDisc  = Number(dsAmz.maxDiscount ?? 0);
-      const searchIdxRaw = (dsAmz.searchIndexes ?? '').trim();
-      const searchIdxs   = searchIdxRaw ? searchIdxRaw.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+      const dsAmz       = cfg.dealSearch?.amazon ?? {};
+      const minDisc     = Number(dsAmz.minDiscount ?? 0);
+      const maxDisc     = Number(dsAmz.maxDiscount ?? 0);
+      const searchIdxs  = (dsAmz.searchIndexes ?? '').trim()
+        ? (dsAmz.searchIndexes as string).split(',').map((s: string) => s.trim()).filter(Boolean)
+        : [];
+      const sortMode    = cfg.dealSearch?.autoPublishSort ?? 'discount';
+      const wDiscount   = Number(cfg.dealSearch?.scoreWeightDiscount ?? 50);
+      const wRating     = Number(cfg.dealSearch?.scoreWeightRating   ?? 30);
+      const wReviews    = Number(cfg.dealSearch?.scoreWeightReviews  ?? 20);
+      const noDupeCat   = cfg.dealSearch?.noDupeCategory ?? false;
+
+      // Categoria dell'ultimo post pubblicato (per evitare consecutivi)
+      let lastCategory = '';
+      if (noDupeCat) {
+        const [lastPubAmz] = await sql`
+          SELECT category FROM published_posts
+          WHERE user_id = ${userId} AND platform = 'amazon'
+          ORDER BY published_at DESC LIMIT 1
+        `.catch(() => []);
+        lastCategory = String(lastPubAmz?.category ?? '');
+      }
 
       // Escludi prodotti già pubblicati nelle ultime 48h
       const recentAmz = await sql`
@@ -502,20 +641,41 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
       const cacheRows = await sql`
         SELECT product_id, title, image, original_price::float, discounted_price::float,
-               discount_percent, currency, category, search_index, url, affiliate_url
+               discount_percent, currency, category, search_index, url, affiliate_url,
+               COALESCE(rating, 0)::float AS review_rating,
+               COALESCE(review_count, 0) AS review_count
         FROM deals_cache
         WHERE user_id = ${userId} AND platform = 'amazon'
           AND (${minDisc} = 0 OR discount_percent >= ${minDisc})
           AND (${maxDisc} = 0 OR discount_percent <= ${maxDisc})
-        ORDER BY discount_percent DESC
-        LIMIT 200
+        LIMIT 500
       `;
 
-      const amzCandidate = cacheRows.find((r: any) => {
+      // Filtra per categoria, già pubblicati, no dupe categoria
+      let candidates = cacheRows.filter((r: any) => {
         if (recentAmzIds.has(String(r.product_id))) return false;
         if (searchIdxs.length > 0 && r.search_index && !searchIdxs.includes(r.search_index)) return false;
+        if (noDupeCat && lastCategory && String(r.category) === lastCategory) return false;
         return true;
       });
+
+      // Ordina per score o per sconto
+      if (sortMode === 'score') {
+        candidates = candidates.sort((a: any, b: any) =>
+          computeScore(
+            { discountPercent: b.discount_percent, reviewRating: b.review_rating, reviewCount: b.review_count },
+            { discount: wDiscount, rating: wRating, reviews: wReviews },
+          ) -
+          computeScore(
+            { discountPercent: a.discount_percent, reviewRating: a.review_rating, reviewCount: a.review_count },
+            { discount: wDiscount, rating: wRating, reviews: wReviews },
+          )
+        );
+      } else {
+        candidates = candidates.sort((a: any, b: any) => b.discount_percent - a.discount_percent);
+      }
+
+      const amzCandidate = candidates[0] ?? null;
 
       if (amzCandidate) {
         const amzLayouts = await sql`
@@ -524,24 +684,41 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ORDER BY tipo = 'amazon' DESC, created_at ASC LIMIT 1
         `;
         const layoutId = amzLayouts[0]?.id ?? '';
-        const tplRow = await sql`SELECT id FROM templates WHERE user_id = ${userId} LIMIT 1`;
-        const templateId = tplRow[0]?.id ?? 'tpl1';
+        const tplRow = await sql`SELECT id, * FROM templates WHERE user_id = ${userId} LIMIT 1`;
+        const templateId  = tplRow[0]?.id ?? 'tpl1';
+        const templateCfg = tplRow[0] ?? null;
+
+        const discountedPrice = Number(amzCandidate.discounted_price);
+        const originalPrice   = Number(amzCandidate.original_price);
+        const discountPercent = Number(amzCandidate.discount_percent);
 
         post = {
           id: crypto.randomUUID(), platform: 'amazon',
           sourceUrl: amzCandidate.affiliate_url || amzCandidate.url,
           productId: String(amzCandidate.product_id),
           title: amzCandidate.title ?? '', image: amzCandidate.image ?? '',
-          originalPrice: Number(amzCandidate.original_price),
-          discountedPrice: Number(amzCandidate.discounted_price),
-          discountPercent: Number(amzCandidate.discount_percent),
+          originalPrice, discountedPrice, discountPercent,
           customText: '', isHistoricalLow: false,
           templateId, layoutId, keyboardId: '', emoji: '🟡',
         };
+
+        // Genera immagine template server-side (sharp)
+        if (templateCfg && amzCandidate.image) {
+          const genImg = await generateTemplateImageServer(templateCfg, String(amzCandidate.image), 'amazon', {
+            prezzo:           discountedPrice.toFixed(2),
+            prezzoPrecedente: originalPrice.toFixed(2),
+            sconto:           `-${discountPercent}%`,
+          });
+          if (genImg) post = { ...post, generatedImage: genImg };
+        }
+
         queueItem = { id: crypto.randomUUID(), posts: [post], silenzioso: null };
         postsArr  = [post];
         isMulti   = false;
-        console.log(`[autopost] Amazon pool: ${post.title?.slice(0, 50)} (${post.discountPercent}%)`);
+        const scoreLog = sortMode === 'score'
+          ? ` score=${computeScore({ discountPercent, reviewRating: amzCandidate.review_rating, reviewCount: amzCandidate.review_count }, { discount: wDiscount, rating: wRating, reviews: wReviews }).toFixed(2)}`
+          : '';
+        console.log(`[autopost] Amazon pool: ${post.title?.slice(0, 50)} (${discountPercent}%${scoreLog})`);
       } else {
         console.log(`[autopost] Amazon pool vuoto o tutti già pubblicati userId=${userId}`);
       }

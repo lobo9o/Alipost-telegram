@@ -1260,6 +1260,49 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
             </select>
           </div>
         )}
+        {s.dealSearch?.autoPublishAmazon && (
+          <div style={{ padding: '8px 14px 12px', borderTop: '1px solid var(--bdr)' }}>
+            <label className="lbl">Criterio di selezione post Amazon</label>
+            <select className="sel"
+              value={s.dealSearch?.autoPublishSort ?? 'discount'}
+              onChange={e => setS(prev => ({ ...prev, dealSearch: { ...prev.dealSearch!, autoPublishSort: e.target.value as 'discount' | 'score' } }))}>
+              <option value="discount">% sconto più alto</option>
+              <option value="score">Score pesato (sconto + stelle + recensioni)</option>
+            </select>
+            {(s.dealSearch?.autoPublishSort ?? 'discount') === 'score' && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 8 }}>
+                  Somma dei pesi: {(s.dealSearch?.scoreWeightDiscount ?? 50) + (s.dealSearch?.scoreWeightRating ?? 30) + (s.dealSearch?.scoreWeightReviews ?? 20)}% (ideale 100%)
+                </div>
+                <label className="lbl">Peso % sconto — {s.dealSearch?.scoreWeightDiscount ?? 50}%</label>
+                <input type="range" min={0} max={100} step={5}
+                  value={s.dealSearch?.scoreWeightDiscount ?? 50}
+                  onChange={e => setS(prev => ({ ...prev, dealSearch: { ...prev.dealSearch!, scoreWeightDiscount: parseInt(e.target.value) } }))}
+                  style={{ width: '100%', accentColor: 'var(--a1)' }} />
+                <label className="lbl" style={{ marginTop: 8 }}>Peso stelle — {s.dealSearch?.scoreWeightRating ?? 30}%</label>
+                <input type="range" min={0} max={100} step={5}
+                  value={s.dealSearch?.scoreWeightRating ?? 30}
+                  onChange={e => setS(prev => ({ ...prev, dealSearch: { ...prev.dealSearch!, scoreWeightRating: parseInt(e.target.value) } }))}
+                  style={{ width: '100%', accentColor: 'var(--a1)' }} />
+                <label className="lbl" style={{ marginTop: 8 }}>Peso numero recensioni — {s.dealSearch?.scoreWeightReviews ?? 20}%</label>
+                <input type="range" min={0} max={100} step={5}
+                  value={s.dealSearch?.scoreWeightReviews ?? 20}
+                  onChange={e => setS(prev => ({ ...prev, dealSearch: { ...prev.dealSearch!, scoreWeightReviews: parseInt(e.target.value) } }))}
+                  style={{ width: '100%', accentColor: 'var(--a1)' }} />
+              </div>
+            )}
+          </div>
+        )}
+        {s.dealSearch?.autoPublishAmazon && (
+          <div style={{ borderTop: '1px solid var(--bdr)' }}>
+            <ToggleRow
+              label="Evita categoria ripetuta"
+              sub="Non pubblicare due post consecutivi della stessa categoria Amazon"
+              value={s.dealSearch?.noDupeCategory ?? false}
+              onChange={v => setS(prev => ({ ...prev, dealSearch: { ...prev.dealSearch!, noDupeCategory: v } }))}
+            />
+          </div>
+        )}
       </div>
       <div style={{ height: 8 }} />
       <div style={{ height: 12 }} />

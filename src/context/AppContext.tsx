@@ -70,6 +70,11 @@ function mergeSettings(fetched: unknown): AppSettings {
         deliveryDays: typeof r.dealSearch?.ali?.deliveryDays === 'number' ? r.dealSearch.ali.deliveryDays : 0,
         categoryIds: typeof r.dealSearch?.ali?.categoryIds === 'string' ? r.dealSearch.ali.categoryIds : '',
       },
+      autoPublishSort:      (r.dealSearch?.autoPublishSort === 'score' ? 'score' : 'discount') as 'discount' | 'score',
+      scoreWeightDiscount:  typeof r.dealSearch?.scoreWeightDiscount === 'number' ? r.dealSearch.scoreWeightDiscount : 50,
+      scoreWeightRating:    typeof r.dealSearch?.scoreWeightRating === 'number' ? r.dealSearch.scoreWeightRating : 30,
+      scoreWeightReviews:   typeof r.dealSearch?.scoreWeightReviews === 'number' ? r.dealSearch.scoreWeightReviews : 20,
+      noDupeCategory:       typeof r.dealSearch?.noDupeCategory === 'boolean' ? r.dealSearch.noDupeCategory : false,
       amazon: r.dealSearch?.amazon ? {
         keywords:       typeof r.dealSearch.amazon.keywords === 'string' ? r.dealSearch.amazon.keywords : '',
         minDiscount:    typeof r.dealSearch.amazon.minDiscount === 'number' ? r.dealSearch.amazon.minDiscount : 0,

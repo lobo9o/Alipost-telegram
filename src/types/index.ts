@@ -230,9 +230,14 @@ export interface DealSearchAmazonSettings {
 export interface DealSearchSettings {
   autoPublishAliexpress: boolean;
   autoPublishAmazon: boolean;
-  publishPattern: string; // '1:1' | '2:1' | '3:1' | 'ali-only' | 'amazon-only'
+  publishPattern: string;
   ali: DealSearchAliSettings;
   amazon?: DealSearchAmazonSettings;
+  autoPublishSort?: 'discount' | 'score';
+  scoreWeightDiscount?: number;  // 0-100
+  scoreWeightRating?: number;    // 0-100
+  scoreWeightReviews?: number;   // 0-100
+  noDupeCategory?: boolean;
 }
 
 export interface AppSettings {
