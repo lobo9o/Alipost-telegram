@@ -684,9 +684,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ORDER BY tipo = 'amazon' DESC, created_at ASC LIMIT 1
         `;
         const layoutId = amzLayouts[0]?.id ?? '';
-        const tplRow = await sql`SELECT id, * FROM templates WHERE user_id = ${userId} LIMIT 1`;
+        const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
         const templateId  = tplRow[0]?.id ?? 'tpl1';
-        const templateCfg = tplRow[0] ?? null;
+        const templateCfg = tplRow[0]
+          ? { id: tplRow[0].id, ...(typeof tplRow[0].config === 'string' ? JSON.parse(tplRow[0].config) : (tplRow[0].config ?? {})) }
+          : null;
 
         const discountedPrice = Number(amzCandidate.discounted_price);
         const originalPrice   = Number(amzCandidate.original_price);
