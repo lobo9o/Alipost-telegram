@@ -201,21 +201,24 @@ async function generateTemplateImageServer(
       composites.push({ input: Buffer.from(storeSvg), top: yPx, left: xPx });
     }
 
-    // Text elements — font-size * 3 per compensare assenza Impact su Linux/RPi;
-    // font-weight 900 + fallback a fonts sempre disponibili su Debian/RPi OS
+    // Text elements — usa due <text> separati (stroke + fill) invece di paint-order
+    // per massima compatibilità con librsvg su Raspberry Pi OS
     const addTextSvg = (el: any, text: string) => {
       if (!el?.enabled || !text?.trim()) return;
       const fs  = (Number(el.fontSize) || 36) * 3;
       const xPx = Math.round((el.x / 100) * SIZE);
       const yPx = Math.round((el.y / 100) * SIZE);
       const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
-      const strokeAttr = el.strokeEnabled && el.strokeWidth > 0
-        ? `stroke="${el.strokeColor || '#000'}" stroke-width="${(el.strokeWidth || 3) * 3}" stroke-linejoin="round" paint-order="stroke fill"`
-        : '';
-      const decoAttr = el.strikethrough ? `text-decoration="line-through"` : '';
       const safe = String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}"><text x="${xPx}" y="${yPx}" font-family="Impact,Arial Black,DejaVu Sans Condensed Bold,DejaVu Sans Bold,Arial,sans-serif" font-size="${fs}" font-weight="900" fill="${el.color || '#fff'}" text-anchor="${anchor}" dominant-baseline="hanging" ${strokeAttr} ${decoAttr}>${safe}</text></svg>`;
-      composites.push({ input: Buffer.from(svg), top: 0, left: 0 });
+      const baseAttrs = `x="${xPx}" y="${yPx}" font-family="sans-serif" font-size="${fs}" font-weight="bold" text-anchor="${anchor}" dominant-baseline="hanging"`;
+      let inner = '';
+      // Stroke come testo separato (non usa paint-order — non supportato da vecchie librsvg)
+      if (el.strokeEnabled && el.strokeWidth > 0) {
+        const sw = (el.strokeWidth || 3) * 3;
+        inner += `<text ${baseAttrs} stroke="${el.strokeColor || '#000'}" stroke-width="${sw}" stroke-linejoin="round" fill="${el.strokeColor || '#000'}">${safe}</text>`;
+      }
+      inner += `<text ${baseAttrs} fill="${el.color || '#fff'}">${safe}</text>`;
+      composites.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}">${inner}</svg>`), top: 0, left: 0 });
     };
     addTextSvg(template.prezzo,           priceData.prezzo);
     addTextSvg(template.prezzoPrecedente, priceData.prezzoPrecedente);
