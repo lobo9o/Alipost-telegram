@@ -70,6 +70,19 @@ function mergeSettings(fetched: unknown): AppSettings {
         deliveryDays: typeof r.dealSearch?.ali?.deliveryDays === 'number' ? r.dealSearch.ali.deliveryDays : 0,
         categoryIds: typeof r.dealSearch?.ali?.categoryIds === 'string' ? r.dealSearch.ali.categoryIds : '',
       },
+      amazon: r.dealSearch?.amazon ? {
+        keywords:       typeof r.dealSearch.amazon.keywords === 'string' ? r.dealSearch.amazon.keywords : '',
+        minDiscount:    typeof r.dealSearch.amazon.minDiscount === 'number' ? r.dealSearch.amazon.minDiscount : 0,
+        maxDiscount:    typeof r.dealSearch.amazon.maxDiscount === 'number' ? r.dealSearch.amazon.maxDiscount : 0,
+        minPrice:       typeof r.dealSearch.amazon.minPrice === 'number' ? r.dealSearch.amazon.minPrice : 0,
+        maxPrice:       typeof r.dealSearch.amazon.maxPrice === 'number' ? r.dealSearch.amazon.maxPrice : 0,
+        sort:           typeof r.dealSearch.amazon.sort === 'string' ? r.dealSearch.amazon.sort : 'Featured',
+        searchIndexes:  typeof r.dealSearch.amazon.searchIndexes === 'string' ? r.dealSearch.amazon.searchIndexes : '',
+        brandKeywords:  typeof r.dealSearch.amazon.brandKeywords === 'string' ? r.dealSearch.amazon.brandKeywords : undefined,
+        minRating:      typeof r.dealSearch.amazon.minRating === 'number' ? r.dealSearch.amazon.minRating : 0,
+        minReviews:     typeof r.dealSearch.amazon.minReviews === 'number' ? r.dealSearch.amazon.minReviews : 0,
+        merchantFilter: typeof r.dealSearch.amazon.merchantFilter === 'string' ? r.dealSearch.amazon.merchantFilter : 'all',
+      } : undefined,
     },
   };
 }
