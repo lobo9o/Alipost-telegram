@@ -713,11 +713,12 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     setAmzErr('');
     try {
       await dealsCacheApi.refresh();
-      // Polling finché la cache viene aggiornata (max 90s)
+      // Polling finché refreshedAt cambia (max 240s — incluse chiamate GetItems per le stelle)
       const start = Date.now();
       const prevAt = amzRefreshedAt;
-      while (Date.now() - start < 90000) {
-        await new Promise(r => setTimeout(r, 4000));
+      let updated = false;
+      while (Date.now() - start < 240000) {
+        await new Promise(r => setTimeout(r, 5000));
         const data = await dealsCacheApi.listAmazon({
           minDiscount: amzMinDiscount, maxDiscount: amzMaxDiscount,
           searchIndexes: Array.from(amzSearchIndexes).join(',') || undefined,
@@ -725,14 +726,17 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
           minReviews: amzMinReviews || undefined,
           merchantFilter: amzMerchantFilter !== 'all' ? amzMerchantFilter : undefined,
         });
-        if (data.refreshedAt !== prevAt || (data.products.length > 0 && Date.now() - start > 15000)) {
+        if (data.refreshedAt && data.refreshedAt !== prevAt) {
           setAmzResults(data.products);
           setAmzTotal(data.total);
           setAmzRefreshedAt(data.refreshedAt);
           setAmzSearched(true);
+          updated = true;
           break;
         }
       }
+      // Se scaduto il timeout ricarica comunque (il refresh potrebbe aver finito dopo)
+      if (!updated) await loadAmzCache();
     } catch (e: any) {
       setAmzErr(e.message ?? 'Errore durante l\'aggiornamento');
     } finally {
