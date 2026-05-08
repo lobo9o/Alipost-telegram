@@ -77,19 +77,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       return;
     }
 
-    // Modalità cron: aggiorna tutti gli utenti con auto-publish attivo
+    // Modalità cron: aggiorna tutti gli utenti con auto-publish attivo (fire-and-forget)
     const activeUsers = await sql`
       SELECT user_id FROM settings
       WHERE (data->>'dealSearch')::jsonb->>'autoPublishAmazon' = 'true'
          OR (data->>'dealSearch')::jsonb->>'autoPublishAliexpress' = 'true'
     `;
-    console.log(`[deals-cache] cron refresh per ${activeUsers.length} utenti`);
+    console.log(`[deals-cache] cron refresh avviato per ${activeUsers.length} utenti`);
     for (const u of activeUsers) {
-      try { await refreshUserCache(String(u.user_id)); } catch (e: any) {
-        console.error(`[deals-cache] cron error userId=${u.user_id}:`, e.message);
-      }
+      refreshUserCache(String(u.user_id)).catch((e: any) =>
+        console.error(`[deals-cache] cron error userId=${u.user_id}:`, e.message)
+      );
     }
-    res.json({ ok: true, refreshed: activeUsers.length });
+    res.json({ ok: true, started: activeUsers.length });
     return;
   }
 

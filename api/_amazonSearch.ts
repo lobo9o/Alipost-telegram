@@ -222,7 +222,6 @@ export async function getItemsByAsins(
           'User-Agent': 'creatorsapi-nodejs-sdk/1.2.0',
         },
         body,
-        signal: AbortSignal.timeout(10000),
       });
       if (!apiRes.ok) {
         const errText = await apiRes.text().catch(() => '');
