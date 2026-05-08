@@ -726,6 +726,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const discountedPrice = Number(amzCandidate.discounted_price);
         const originalPrice   = Number(amzCandidate.original_price);
         const discountPercent = Number(amzCandidate.discount_percent);
+        const CURRENCY_SYM: Record<string, string> = {
+          EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽',
+        };
+        const currSym = CURRENCY_SYM[String(amzCandidate.currency ?? 'EUR').toUpperCase()] ?? '€';
 
         const reviewRating  = Number(amzCandidate.review_rating  ?? 0);
         const reviewCount   = Number(amzCandidate.review_count   ?? 0);
@@ -746,8 +750,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         // Genera immagine template server-side (sharp)
         if (templateCfg && amzCandidate.image) {
           const genImg = await generateTemplateImageServer(templateCfg, String(amzCandidate.image), 'amazon', {
-            prezzo:           discountedPrice.toFixed(2),
-            prezzoPrecedente: originalPrice.toFixed(2),
+            prezzo:           `${currSym}${discountedPrice.toFixed(2)}`,
+            prezzoPrecedente: `${currSym}${originalPrice.toFixed(2)}`,
             sconto:           `-${discountPercent}%`,
           });
           if (genImg) post = { ...post, generatedImage: genImg };
