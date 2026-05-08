@@ -200,13 +200,19 @@ export async function fetchGoldboxAsins(marketplaceDomain: string): Promise<stri
 
 export async function getItemsByAsins(
   token: string, marketplaceDomain: string, asins: string[], affiliateTag: string,
+  resourcesOverride?: string[],
 ): Promise<any[]> {
   if (!asins.length) return [];
   const BATCH = 10;
+  const resources = resourcesOverride ?? GETITEMS_RESOURCES;
   const results: any[] = [];
   for (let i = 0; i < asins.length; i += BATCH) {
     const batch = asins.slice(i, i + BATCH);
     try {
+      const body = JSON.stringify({
+        itemIds: batch, partnerTag: affiliateTag, partnerType: 'associates',
+        resources,
+      });
       const apiRes = await fetch('https://creatorsapi.amazon/catalog/v1/getItems', {
         method: 'POST',
         headers: {
@@ -215,17 +221,26 @@ export async function getItemsByAsins(
           'x-marketplace': marketplaceDomain,
           'User-Agent': 'creatorsapi-nodejs-sdk/1.2.0',
         },
-        body: JSON.stringify({
-          itemIds: batch, partnerTag: affiliateTag, partnerType: 'associates',
-          resources: SEARCH_RESOURCES,
-        }),
+        body,
         signal: AbortSignal.timeout(10000),
       });
-      if (!apiRes.ok) continue;
+      if (!apiRes.ok) {
+        const errText = await apiRes.text().catch(() => '');
+        console.warn(`[getItems] HTTP ${apiRes.status} batch ${i/BATCH}: ${errText.slice(0, 200)}`);
+        continue;
+      }
       const data = await apiRes.json() as any;
       const items = (data.itemsResult?.items ?? data.ItemsResult?.Items ?? []) as any[];
+      if (i === 0 && items.length > 0) {
+        // Log struttura primo item per debug
+        const first = items[0];
+        console.log('[getItems] primo item keys:', Object.keys(first).join(','));
+        console.log('[getItems] customerReviews:', JSON.stringify(first.customerReviews ?? first.CustomerReviews ?? null));
+      }
       results.push(...items);
-    } catch {}
+    } catch (e: any) {
+      console.warn(`[getItems] exception batch ${i/BATCH}:`, e?.message ?? e);
+    }
     if (i + BATCH < asins.length) await new Promise(r => setTimeout(r, 300));
   }
   return results;
@@ -292,6 +307,12 @@ export interface SearchParams {
 const SEARCH_RESOURCES = [
   'itemInfo.title', 'images.primary.large', 'offersV2.listings.price',
   'browseNodeInfo.browseNodes', 'customerReviews.starRating', 'customerReviews.count',
+];
+
+// GetItems supporta customerReviews a differenza di SearchItems
+const GETITEMS_RESOURCES = [
+  'itemInfo.title', 'images.primary.large', 'offersV2.listings.price',
+  'customerReviews.starRating', 'customerReviews.count',
 ];
 
 // Esegue una ricerca completa e restituisce i prodotti trovati

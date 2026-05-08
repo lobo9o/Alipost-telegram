@@ -181,8 +181,14 @@ async function refreshUserCache(userId: string): Promise<void> {
 
   // Arricchisci con stelle/recensioni via GetItems (SearchItems non supporta customerReviews)
   if (allProducts.length > 0) {
+    // Usa prima i dati già estratti da parseItem (SearchItems a volte li include)
+    let withRating = allProducts.filter((p: any) => Number(p.reviewRating) > 0).length;
+    console.log(`[deals-cache] rating da SearchItems: ${withRating}/${allProducts.length}`);
+
     const asins = allProducts.map((p: any) => p.productId);
+    console.log(`[deals-cache] avvio GetItems enrichment per ${asins.length} ASIN`);
     const enrichedItems = await getItemsByAsins(token, marketplaceDomain, asins, affiliateTag);
+    console.log(`[deals-cache] GetItems restituito ${enrichedItems.length} items`);
     const reviewMap = new Map<string, { rating: number; count: number }>();
     for (const item of enrichedItems) {
       const asin = String(item.asin ?? item.ASIN ?? '');
@@ -198,7 +204,8 @@ async function refreshUserCache(userId: string): Promise<void> {
       const d = reviewMap.get(p.productId);
       if (d) { p.reviewRating = d.rating; p.reviewCount = d.count; }
     }
-    console.log(`[deals-cache] stelle arricchite: ${reviewMap.size}/${allProducts.length} prodotti con rating`);
+    withRating = allProducts.filter((p: any) => Number(p.reviewRating) > 0).length;
+    console.log(`[deals-cache] stelle arricchite: ${reviewMap.size}/${allProducts.length} prodotti con rating (totale con rating: ${withRating})`);
   }
 
   // Upsert tutto in deals_cache
