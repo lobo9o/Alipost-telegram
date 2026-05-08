@@ -117,6 +117,35 @@ function computeScore(
   return (w.discount / 100) * normD + (w.rating / 100) * normR + (w.reviews / 100) * normV;
 }
 
+// Scraping stelle/recensioni dalla pagina prodotto Amazon (Creators API non supporta customerReviews)
+async function scrapeAmazonRating(asin: string, domain: string): Promise<{ stelle: string; recensioni: string }> {
+  const empty = { stelle: '', recensioni: '' };
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(`https://${domain}/dp/${asin}`, {
+      signal: ctrl.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+    });
+    clearTimeout(t);
+    if (!r.ok) return empty;
+    const html = await r.text();
+    const starM = html.match(/class="a-icon-alt">\s*([\d,.]+)\s*(?:su|out of)/i)
+      ?? html.match(/"ratingValue"\s*:\s*"([\d,.]+)"/)
+      ?? html.match(/(\d[,.]\d)\s*(?:su|out of)\s*5\s*stel/i);
+    const stelle = starM ? starM[1].replace(',', '.') : '';
+    const revM = html.match(/id="acrCustomerReviewText"[^>]*>([^<]+)/i)
+      ?? html.match(/data-hook="total-review-count"[^>]*>([^<]+)/i);
+    const recensioni = revM ? (revM[1].match(/[\d.,]+/)?.[0] ?? '') : '';
+    console.log(`[autopost] scrape ${asin}: stelle=${stelle||'-'} rec=${recensioni||'-'}`);
+    return { stelle, recensioni };
+  } catch { return empty; }
+}
+
 // Genera immagine con template usando node-canvas (stessa logica del browser, imageCompose.ts)
 // Richiede: npm install canvas  (ha binary precompilati per ARM64/RPi4)
 async function generateTemplateImageServer(
@@ -734,6 +763,28 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const reviewRating  = Number(amzCandidate.review_rating  ?? 0);
         const reviewCount   = Number(amzCandidate.review_count   ?? 0);
 
+        let stelleStr     = reviewRating > 0 ? String(reviewRating.toFixed(1)) : '';
+        let recensioniStr = reviewCount  > 0 ? String(reviewCount)             : '';
+
+        // Creators API non supporta customerReviews → scraping dalla pagina prodotto
+        if (!stelleStr) {
+          const mktCode   = (cfg.amazon?.marketplace || 'IT').toUpperCase();
+          const mktDomain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+          const scraped   = await scrapeAmazonRating(String(amzCandidate.product_id), mktDomain);
+          if (scraped.stelle) {
+            stelleStr     = scraped.stelle;
+            recensioniStr = scraped.recensioni;
+            // Aggiorna cache per evitare scraping al prossimo giro
+            const nr = parseFloat(scraped.stelle) || 0;
+            const nc = parseInt(scraped.recensioni.replace(/\D/g, '')) || 0;
+            if (nr > 0 || nc > 0) {
+              sql`UPDATE deals_cache SET rating = ${nr}, review_count = ${nc}
+                  WHERE user_id = ${userId} AND platform = 'amazon'
+                    AND product_id = ${String(amzCandidate.product_id)}`.catch(() => {});
+            }
+          }
+        }
+
         post = {
           id: crypto.randomUUID(), platform: 'amazon',
           sourceUrl: amzCandidate.affiliate_url || amzCandidate.url,
@@ -742,8 +793,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           originalPrice, discountedPrice, discountPercent,
           customText: '', isHistoricalLow: false,
           templateId, layoutId, keyboardId: '', emoji: '🟡',
-          stelle:     reviewRating > 0 ? String(reviewRating.toFixed(1)) : undefined,
-          recensioni: reviewCount  > 0 ? String(reviewCount)             : undefined,
+          stelle:     stelleStr     || undefined,
+          recensioni: recensioniStr || undefined,
           cat:        amzCandidate.category || undefined,
         };
 

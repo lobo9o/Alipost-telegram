@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withErrorHandler, requireUserId, getUserId } from '../_utils.js';
-import { getToken, runAmazonSearch, runBrandKeywordsSearch, getItemsByAsins, DEFAULT_BRAND_KEYWORDS, MARKETPLACE_DOMAINS, MARKETPLACE_CURRENCY } from '../_amazonSearch.js';
+import { getToken, runAmazonSearch, runBrandKeywordsSearch, DEFAULT_BRAND_KEYWORDS, MARKETPLACE_DOMAINS, MARKETPLACE_CURRENCY } from '../_amazonSearch.js';
 import sql from '../../lib/db.js';
 
 function isCronRequest(req: VercelRequest): boolean {
@@ -179,34 +179,8 @@ async function refreshUserCache(userId: string): Promise<void> {
     }
   }
 
-  // Arricchisci con stelle/recensioni via GetItems (SearchItems non supporta customerReviews)
-  if (allProducts.length > 0) {
-    // Usa prima i dati già estratti da parseItem (SearchItems a volte li include)
-    let withRating = allProducts.filter((p: any) => Number(p.reviewRating) > 0).length;
-    console.log(`[deals-cache] rating da SearchItems: ${withRating}/${allProducts.length}`);
-
-    const asins = allProducts.map((p: any) => p.productId);
-    console.log(`[deals-cache] avvio GetItems enrichment per ${asins.length} ASIN`);
-    const enrichedItems = await getItemsByAsins(token, marketplaceDomain, asins, affiliateTag);
-    console.log(`[deals-cache] GetItems restituito ${enrichedItems.length} items`);
-    const reviewMap = new Map<string, { rating: number; count: number }>();
-    for (const item of enrichedItems) {
-      const asin = String(item.asin ?? item.ASIN ?? '');
-      if (!asin) continue;
-      const rev = item.customerReviews ?? item.CustomerReviews;
-      if (!rev) continue;
-      const starRaw = rev.starRating ?? rev.StarRating;
-      const rating  = Number(starRaw && typeof starRaw === 'object' ? (starRaw.value ?? starRaw.Value ?? 0) : (starRaw ?? 0));
-      const count   = Number(rev.count ?? rev.Count ?? 0);
-      if (rating > 0 || count > 0) reviewMap.set(asin, { rating, count });
-    }
-    for (const p of allProducts) {
-      const d = reviewMap.get(p.productId);
-      if (d) { p.reviewRating = d.rating; p.reviewCount = d.count; }
-    }
-    withRating = allProducts.filter((p: any) => Number(p.reviewRating) > 0).length;
-    console.log(`[deals-cache] stelle arricchite: ${reviewMap.size}/${allProducts.length} prodotti con rating (totale con rating: ${withRating})`);
-  }
+  // Nota: Creators API non supporta customerReviews — le stelle vengono scaricate
+  // dalla pagina prodotto in autopost/publish.ts al momento della pubblicazione
 
   // Upsert tutto in deals_cache
   for (const p of allProducts) {

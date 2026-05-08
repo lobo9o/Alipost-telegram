@@ -223,23 +223,11 @@ export async function getItemsByAsins(
         },
         body,
       });
-      if (!apiRes.ok) {
-        const errText = await apiRes.text().catch(() => '');
-        console.warn(`[getItems] HTTP ${apiRes.status} batch ${i/BATCH}: ${errText.slice(0, 200)}`);
-        continue;
-      }
+      if (!apiRes.ok) continue;
       const data = await apiRes.json() as any;
       const items = (data.itemsResult?.items ?? data.ItemsResult?.Items ?? []) as any[];
-      if (i === 0 && items.length > 0) {
-        // Log struttura primo item per debug
-        const first = items[0];
-        console.log('[getItems] primo item keys:', Object.keys(first).join(','));
-        console.log('[getItems] customerReviews:', JSON.stringify(first.customerReviews ?? first.CustomerReviews ?? null));
-      }
       results.push(...items);
-    } catch (e: any) {
-      console.warn(`[getItems] exception batch ${i/BATCH}:`, e?.message ?? e);
-    }
+    } catch { }
     if (i + BATCH < asins.length) await new Promise(r => setTimeout(r, 300));
   }
   return results;
