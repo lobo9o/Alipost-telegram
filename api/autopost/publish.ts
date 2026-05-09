@@ -424,6 +424,8 @@ function buildMessage(
   for (const [tag, val] of Object.entries(tags)) {
     t = t.split(tag).join(val);
   }
+  // Tag {emoji_...} non risolti (emoji non salvata nel DB) → rimuovi silenziosamente
+  t = t.replace(/\{emoji_[a-z0-9_]+\}/g, '');
   t = t.replace(/~~([^~]+)~~/g, '<s>$1</s>');
   t = t.split('\n').filter(line => {
     if (!line.includes(SENTINEL)) return true;

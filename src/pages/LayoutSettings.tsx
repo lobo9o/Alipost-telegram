@@ -32,13 +32,15 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
   const [nome, setNome] = useState('');
   const [emojiId, setEmojiId] = useState('');
   const [fallback, setFallback] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState('');
   const [trovando, setTrovando] = useState(false);
   const [trovati, setTrovati] = useState<{ emojiId: string; fallback: string }[]>([]);
   const [trovaErr, setTrovaErr] = useState('');
 
   const animatedEmojis = tags.filter(t => t.name.startsWith('{emoji_'));
 
-  const add = () => {
+  const add = async () => {
     const n = nome.trim();
     const id = emojiId.trim();
     if (!n || !id) return;
@@ -46,9 +48,19 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
     if (tags.some(t => t.name === tagName)) { alert(`Il tag ${tagName} esiste già`); return; }
     const tagValue = `<tg-emoji emoji-id="${id}">${fallback.trim() || '✨'}</tg-emoji>`;
     const newTag: Tag = { id: genId(), name: tagName, value: tagValue };
-    setTags(ts => [...ts, newTag]);
-    tagsApi.create(newTag).catch(() => {});
-    setNome(''); setEmojiId(''); setFallback(''); setTrovati([]);
+    setSaving(true);
+    setSaveErr('');
+    try {
+      await tagsApi.create(newTag);
+      setTags(ts => [...ts, newTag]);
+      // Rimuovi dalla lista "trovati" l'emoji appena salvata
+      setTrovati(ts => ts.filter(e => e.emojiId !== id));
+      setNome(''); setEmojiId(''); setFallback('');
+    } catch (e: any) {
+      setSaveErr(`Errore salvataggio: ${e?.message ?? 'riprova'}. Assicurati di usare l'app da Telegram.`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const remove = (tagId: string) => {
@@ -79,7 +91,7 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
 
       <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <InfoBanner>
-          Usa <code style={{ background: 'var(--bg2)', padding: '1px 4px', borderRadius: 4 }}>{'{emoji_nome}'}</code> nel testo del layout per inserire un'emoji animata Telegram. Le emoji animate appaiono solo nell'app Telegram.
+          Usa <code style={{ background: 'var(--bg2)', padding: '1px 4px', borderRadius: 4 }}>{'{emoji_nome}'}</code> nel testo del layout. Le emoji animate appaiono solo nell'app Telegram.
         </InfoBanner>
 
         {/* ── Sblocca ID dal bot ── */}
@@ -87,7 +99,7 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
           <div style={{ fontWeight: 600, fontSize: 13 }}>🔓 Sblocca emoji</div>
           <div style={{ fontSize: 12, color: 'var(--fg2)', lineHeight: 1.6 }}>
             1. Apri Telegram e manda un'emoji animata direttamente al tuo bot<br />
-            2. Clicca il pulsante qui sotto — il bot legge l'ID e cancella il messaggio automaticamente
+            2. Clicca il pulsante — il bot legge l'ID e cancella il messaggio automaticamente
           </div>
           <button className="btn bp bfull" onClick={trovaDalBot} disabled={trovando}>
             {trovando ? '⏳ Cerco…' : '🔍 Sblocca emoji dal bot'}
@@ -118,7 +130,10 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
         <input className="inp" placeholder="Nome (es. fuoco)" value={nome} onChange={e => setNome(e.target.value)} />
         <input className="inp" placeholder="ID emoji Telegram" value={emojiId} onChange={e => setEmojiId(e.target.value)} />
         <input className="inp" placeholder="Emoji fallback (es. 🔥)" value={fallback} onChange={e => setFallback(e.target.value)} />
-        <button className="btn bp bfull" onClick={add} disabled={!nome.trim() || !emojiId.trim()}>+ Aggiungi emoji animata</button>
+        {saveErr && <div style={{ fontSize: 12, color: 'var(--re)', lineHeight: 1.4 }}>{saveErr}</div>}
+        <button className="btn bp bfull" onClick={add} disabled={!nome.trim() || !emojiId.trim() || saving}>
+          {saving ? '⏳ Salvo…' : '+ Aggiungi emoji animata'}
+        </button>
       </div>
 
       {/* ── Lista emoji salvate ── */}
