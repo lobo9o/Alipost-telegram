@@ -130,8 +130,9 @@ async function refreshUserCache(userId: string): Promise<void> {
   const ds = cfg.dealSearch?.amazon ?? {};
   const searchIndexesRaw = (ds.searchIndexes ?? '').trim();
   const searchIndexes    = searchIndexesRaw ? searchIndexesRaw.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-  const brandKwRaw       = (ds.brandKeywords ?? '').trim();
-  const brandKeywords    = brandKwRaw
+  const brandKwRaw           = (ds.brandKeywords ?? '').trim();
+  const userHasCustomBrandKw = brandKwRaw.length > 0;
+  const brandKeywords        = userHasCustomBrandKw
     ? brandKwRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
     : DEFAULT_BRAND_KEYWORDS;
   const merchantFilter   = ds.merchantFilter || 'all';
@@ -168,11 +169,20 @@ async function refreshUserCache(userId: string): Promise<void> {
     if (block < 3) await new Promise(r => setTimeout(r, 3000));
   }
 
-  // 2. Ricerca per brand keyword (1 pagina per keyword)
-  if (brandKeywords.length > 0) {
+  // 2. Ricerca per brand keyword
+  // Con categorie specificate + brand default: skip (200 kw × N cat = troppe chiamate)
+  // Con categorie specificate + brand personalizzati: cerca in ogni categoria selezionata
+  const skipBrandSearch = searchIndexes.length > 0 && !userHasCustomBrandKw;
+  if (skipBrandSearch) {
+    console.log(`[deals-cache] brand keyword skip (categorie specifiche senza brand personalizzati)`);
+  } else if (brandKeywords.length > 0) {
     const brandProducts = await runBrandKeywordsSearch(
       token, marketplaceDomain, currency, affiliateTag, brandKeywords,
-      { merchant: merchantFilter !== 'all' ? merchantFilter : undefined, minRating: minRating > 0 ? minRating : undefined }
+      {
+        merchant: merchantFilter !== 'all' ? merchantFilter : undefined,
+        minRating: minRating > 0 ? minRating : undefined,
+        searchIndexes: searchIndexes.length > 0 ? searchIndexes : undefined,
+      }
     );
     for (const p of brandProducts) {
       if (!seenAsins.has(p.productId)) { seenAsins.add(p.productId); allProducts.push(p); }

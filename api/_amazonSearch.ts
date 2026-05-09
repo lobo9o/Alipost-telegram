@@ -406,7 +406,7 @@ export async function runBrandKeywordsSearch(
   currency: string,
   affiliateTag: string,
   brandKeywords: string[],
-  opts: { merchant?: string; minRating?: number } = {},
+  opts: { merchant?: string; minRating?: number; searchIndexes?: string[] } = {},
 ): Promise<DealProduct[]> {
   const baseBody: Record<string, any> = {
     partnerTag: affiliateTag, partnerType: 'associates',
@@ -417,20 +417,25 @@ export async function runBrandKeywordsSearch(
   if (opts.merchant === 'amazon') baseBody.merchant = 'Amazon';
   if (opts.minRating && opts.minRating > 0) baseBody.minReviewsRating = opts.minRating;
 
+  // Se categorie specificate: cerca ogni keyword × ogni categoria
+  const indexes = opts.searchIndexes?.length ? opts.searchIndexes : [''];
+
   const seen = new Set<string>();
   const allProducts: DealProduct[] = [];
 
-  const tasks = brandKeywords.map(kw => () =>
-    searchOne(token, marketplaceDomain, { ...baseBody, keywords: kw })
-      .then(r => ({ items: r.products, kw }))
-      .catch(() => ({ items: [] as any[], kw }))
+  const tasks = brandKeywords.flatMap(kw =>
+    indexes.map(idx => () =>
+      searchOne(token, marketplaceDomain, { ...baseBody, keywords: kw, ...(idx ? { searchIndex: idx } : {}) })
+        .then(r => ({ items: r.products, kw, idx }))
+        .catch(() => ({ items: [] as any[], kw, idx }))
+    )
   );
 
   const results = await batchAll(tasks, 2, 600);
 
-  for (const { items, kw } of results) {
+  for (const { items, kw, idx } of results) {
     for (const item of items) {
-      const p = parseItem(item, currency, marketplaceDomain, affiliateTag, '', kw);
+      const p = parseItem(item, currency, marketplaceDomain, affiliateTag, idx || '', kw);
       if (p && p.discountPercent >= 1 && !seen.has(p.productId)) {
         seen.add(p.productId);
         allProducts.push(p);
@@ -438,6 +443,6 @@ export async function runBrandKeywordsSearch(
     }
   }
 
-  console.log(`[brand-search] ${brandKeywords.length} keyword → ${allProducts.length} prodotti`);
+  console.log(`[brand-search] ${brandKeywords.length} keyword × ${indexes.length} categorie → ${allProducts.length} prodotti`);
   return allProducts;
 }
