@@ -55,29 +55,25 @@ function AnimatedEmojiSection() {
 
   return (
     <>
-      <div style={{ padding: '12px 16px 0' }}>
-        <div style={{ fontSize: 13, color: 'var(--fg2)', marginBottom: 10, lineHeight: 1.5 }}>
-          Le emoji animate di Telegram si usano nel testo con il tag <code style={{ background: 'var(--bg2)', padding: '1px 4px', borderRadius: 4 }}>{'{emoji_nome}'}</code>.<br />
-          Per ottenere l'ID: manda l'emoji animata a <b>@getidsbot</b> su Telegram e copia il <i>custom_emoji_id</i>.
+      <div className="stit" style={{ marginTop: 8 }}>EMOJI ANIMATE ({animatedEmojis.length})</div>
+      <div style={{ padding: '0 16px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: 12, color: 'var(--fg2)', lineHeight: 1.5 }}>
+          Usa <code style={{ background: 'var(--bg2)', padding: '1px 4px', borderRadius: 4 }}>{'{emoji_nome}'}</code> nel layout per inserire un'emoji animata Telegram.
+          ID: manda l'emoji a <b>@getidsbot</b> su Telegram.
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-          <input className="inp" placeholder="Nome (es. fuoco, cuore, fuochi...)" value={nome} onChange={e => setNome(e.target.value)} />
-          <input className="inp" placeholder="ID emoji Telegram (es. 5368324170671202286)" value={emojiId} onChange={e => setEmojiId(e.target.value)} />
-          <input className="inp" placeholder="Emoji fallback (es. 🔥)" value={fallback} onChange={e => setFallback(e.target.value)} />
-          <button className="btn bp" onClick={add} disabled={!nome.trim() || !emojiId.trim()}>+ Aggiungi emoji animata</button>
-        </div>
+        <input className="inp" placeholder="Nome (es. fuoco)" value={nome} onChange={e => setNome(e.target.value)} />
+        <input className="inp" placeholder="ID emoji Telegram" value={emojiId} onChange={e => setEmojiId(e.target.value)} />
+        <input className="inp" placeholder="Emoji fallback (es. 🔥)" value={fallback} onChange={e => setFallback(e.target.value)} />
+        <button className="btn bp" onClick={add} disabled={!nome.trim() || !emojiId.trim()}>+ Aggiungi emoji animata</button>
       </div>
-      {animatedEmojis.length === 0 && (
-        <div style={{ textAlign: 'center', color: 'var(--fg2)', fontSize: 13, padding: '20px 16px' }}>Nessuna emoji animata salvata</div>
-      )}
       {animatedEmojis.map(t => {
         const fb = t.value.match(/>([^<]*)<\/tg-emoji>/)?.[1] ?? '✨';
         const id = t.value.match(/emoji-id="([^"]+)"/)?.[1] ?? '';
         return (
-          <div key={t.id} className="lc" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 28, lineHeight: 1 }}>{fb}</span>
+          <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 26 }}>{fb}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{t.name}</div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
               <div style={{ fontSize: 11, color: 'var(--fg2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ID: {id}</div>
             </div>
             <button className="btn bgh bsm" style={{ color: 'var(--re)' }} onClick={() => remove(t.id)}>×</button>
