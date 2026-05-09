@@ -144,6 +144,10 @@ function TextLayoutSection() {
   const { layouts, setLayouts, keyboards } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<TextLayout, 'id'>>({ nome: '', tipo: 'normal', contenuto: '', keyboardId: undefined });
+  const [emojiPanel, setEmojiPanel] = useState(false);
+  const [emojiId, setEmojiId] = useState('');
+  const [emojiFallback, setEmojiFallback] = useState('');
+  const taRef = useRef<HTMLTextAreaElement>(null);
 
   const startNew = () => { setForm({ nome: '', tipo: 'normal', contenuto: '', keyboardId: undefined }); setEditing('new'); };
   const startEdit = (l: TextLayout) => { setForm({ nome: l.nome, tipo: l.tipo, contenuto: l.contenuto, keyboardId: l.keyboardId }); setEditing(l.id); };
@@ -158,6 +162,22 @@ function TextLayoutSection() {
       if (editing) layoutsApi.update(editing, form).catch(() => {});
     }
     setEditing(null);
+  };
+
+  const insertAnimatedEmoji = () => {
+    const id = emojiId.trim();
+    if (!id) return;
+    const fallback = emojiFallback.trim() || '✨';
+    const tag = `<tg-emoji emoji-id="${id}">${fallback}</tg-emoji>`;
+    const ta = taRef.current;
+    const start = ta?.selectionStart ?? form.contenuto.length;
+    const end = ta?.selectionEnd ?? start;
+    const newContenuto = form.contenuto.slice(0, start) + tag + form.contenuto.slice(end);
+    setForm(f => ({ ...f, contenuto: newContenuto }));
+    setEmojiPanel(false);
+    setEmojiId('');
+    setEmojiFallback('');
+    setTimeout(() => { ta?.focus(); ta?.setSelectionRange(start + tag.length, start + tag.length); }, 0);
   };
 
   if (editing) {
@@ -179,8 +199,21 @@ function TextLayoutSection() {
           </select>
         </div>
         <div className="fld">
-          <label className="lbl">Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{custom}'}</label>
-          <textarea className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={8} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <label className="lbl" style={{ margin: 0 }}>Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{custom}'}</label>
+            <button className="btn bgh bsm" style={{ fontSize: 12, whiteSpace: 'nowrap' }} onClick={() => setEmojiPanel(p => !p)}>🎞️ Emoji animata</button>
+          </div>
+          {emojiPanel && (
+            <div style={{ background: 'var(--bg2)', borderRadius: 8, padding: 10, marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 12, color: 'var(--fg2)' }}>
+                Per ottenere l'ID: manda l'emoji animata a <b>@getidsbot</b> su Telegram → copia il <i>custom_emoji_id</i>
+              </div>
+              <input className="inp" placeholder="ID emoji (es. 5368324170671202286)" value={emojiId} onChange={e => setEmojiId(e.target.value)} style={{ fontSize: 13 }} />
+              <input className="inp" placeholder="Emoji fallback (es. 🔥)" value={emojiFallback} onChange={e => setEmojiFallback(e.target.value)} style={{ fontSize: 13 }} />
+              <button className="btn bp bsm" onClick={insertAnimatedEmoji} disabled={!emojiId.trim()}>Inserisci nel testo</button>
+            </div>
+          )}
+          <textarea ref={taRef} className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={8} />
         </div>
         <div className="fld">
           <label className="lbl">Tastiera associata</label>
