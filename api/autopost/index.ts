@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
+import { checkAndMarkHistoricalLow } from '../_historicalLow.js';
 
 // Aggiunge la colonna silenzioso se non esiste ancora (migrazione automatica)
 async function ensureSilenziosoColumn() {
@@ -57,6 +58,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // Salviamo generatedImage nel DB — serve al cron per pubblicare con overlay
   // Viene strippato solo dalla risposta GET per non appesantire il polling
   const postsForDb = posts as any[];
+  await checkAndMarkHistoricalLow(userId, postsForDb);
   const [row] = await sql`
     INSERT INTO autopost_queue (id, user_id, posts, status, scheduled, silenzioso)
     VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled}, ${silenzioso})

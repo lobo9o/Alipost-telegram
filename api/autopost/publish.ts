@@ -832,6 +832,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       `.catch(() => [null]);
       if (histRow && Number(histRow.cnt) > 0 && Number(post.discountedPrice) <= Number(histRow.min_price)) {
         post = { ...post, isHistoricalLow: true };
+        // Usa layout "minimo storico" se disponibile
+        const [hlLayout] = await sql`
+          SELECT id FROM layouts WHERE user_id = ${userId} AND tipo = 'historical_low'
+          ORDER BY created_at ASC LIMIT 1
+        `.catch(() => [null]);
+        if (hlLayout?.id) post = { ...post, layoutId: String(hlLayout.id) };
+        console.log(`[autopost] MINIMO STORICO userId=${userId} productId=${post.productId} price=${post.discountedPrice} minPrice=${histRow.min_price} hlLayout=${hlLayout?.id ?? 'nessuno'}`);
       }
     }
 
