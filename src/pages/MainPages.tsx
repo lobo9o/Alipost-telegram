@@ -324,6 +324,7 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
     { id: 'queue', ic: '🗓️', lb: 'Coda AutoPost', sub: `${stats.inCoda} in coda`, c: 'var(--or)' },
     { id: 'published', ic: '✅', lb: 'Pubblicati', sub: `${stats.pub} oggi`, c: 'var(--gr)' },
     { id: 'layout', ic: '🎨', lb: 'Layout', sub: 'tag · testo · template', c: 'var(--a2)' },
+    { id: 'emoji', ic: '✨', lb: 'Emoji Animate', sub: 'sblocca dal bot Telegram', c: 'var(--a3)' },
     { id: 'settings', ic: '⚙️', lb: 'Impostazioni', sub: 'API · canali · orari', c: 'var(--t2)' },
   ];
   return (

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { AppProvider } from './context/AppContext';
 import { NavPage } from './types';
 import { Dashboard, SearchPage, NewPostPage, QueuePage, PublishedPage } from './pages/MainPages';
-import { LayoutPage, SettingsPage } from './pages/LayoutSettings';
+import { LayoutPage, SettingsPage, EmojiPage } from './pages/LayoutSettings';
 
 // ── Bottom Nav Icons ──────────────────────────────────────────
 const NavIcons: Record<string, React.ReactElement> = {
@@ -49,6 +49,7 @@ function AppInner() {
     published: <PublishedPage nav={nav} />,
     layout: <LayoutPage nav={nav} />,
     settings: <SettingsPage nav={nav} />,
+    emoji: <EmojiPage nav={nav} />,
   };
 
   return (

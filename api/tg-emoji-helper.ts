@@ -12,8 +12,10 @@ export default async function handler(req: IncomingMessage & { query?: any }, re
     return;
   }
 
+  const tgBase = `https://api.telegram.org/bot${botToken}`;
+
   try {
-    const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?limit=50&allowed_updates=["message"]`);
+    const tgRes = await fetch(`${tgBase}/getUpdates?limit=50&allowed_updates=["message"]`);
     if (!tgRes.ok) {
       const txt = await tgRes.text();
       res.writeHead(502).end(JSON.stringify({ error: `Telegram error ${tgRes.status}: ${txt}` }));
@@ -25,32 +27,48 @@ export default async function handler(req: IncomingMessage & { query?: any }, re
       return;
     }
 
-    // Estrai custom_emoji_id da tutte le entities dei messaggi recenti
     const found: Array<{ emojiId: string; fallback: string }> = [];
     const seen = new Set<string>();
+    const toDelete: Array<{ chatId: number | string; messageId: number }> = [];
 
     for (const update of (data.result ?? [])) {
       const msg = update.message ?? update.edited_message;
       if (!msg) continue;
 
-      // Le custom emoji arrivano sia in entities che in caption_entities
       const entities: any[] = [
         ...(msg.entities ?? []),
         ...(msg.caption_entities ?? []),
       ];
 
+      let hasCustomEmoji = false;
       for (const ent of entities) {
         if (ent.type === 'custom_emoji' && ent.custom_emoji_id) {
+          hasCustomEmoji = true;
           if (!seen.has(ent.custom_emoji_id)) {
             seen.add(ent.custom_emoji_id);
-            // Estrai il carattere fallback dal testo del messaggio
             const txt: string = msg.text ?? msg.caption ?? '';
             const fallback = txt.slice(ent.offset, ent.offset + ent.length) || '✨';
             found.push({ emojiId: ent.custom_emoji_id, fallback });
           }
         }
       }
+
+      // Segna per cancellazione tutti i messaggi con emoji custom (tieni la chat pulita)
+      if (hasCustomEmoji && msg.chat?.id && msg.message_id) {
+        toDelete.push({ chatId: msg.chat.id, messageId: msg.message_id });
+      }
     }
+
+    // Cancella i messaggi in parallelo (ignora errori — potrebbero essere già cancellati)
+    await Promise.allSettled(
+      toDelete.map(({ chatId, messageId }) =>
+        fetch(`${tgBase}/deleteMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+        })
+      )
+    );
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, emojis: found.reverse() }));

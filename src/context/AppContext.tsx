@@ -125,7 +125,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       tmplPromise,
     ]).then(([q, t, l, kb, s, pub, tmplResult]) => {
       setQueue((q as QueueItem[]).filter(x => x.status === 'draft'));
-      if (t.length > 0) setTags(t);
+      // Merge: i tag di sistema da INITIAL_TAGS sono sempre presenti, i tag DB sovrascrivono per id
+      {
+        const dbById = new Map((t as Tag[]).map((x: Tag) => [x.id, x]));
+        const dbByName = new Map((t as Tag[]).map((x: Tag) => [x.name, x]));
+        // Parti dai tag di sistema (INITIAL_TAGS), aggiorna con versione DB se esiste
+        const systemMerged = INITIAL_TAGS.map(d => dbById.get(d.id) ?? dbByName.get(d.name) ?? d);
+        // Aggiungi i tag custom presenti solo nel DB (non in INITIAL_TAGS)
+        const extra = (t as Tag[]).filter((x: Tag) => !INITIAL_TAGS.some(d => d.id === x.id || d.name === x.name));
+        setTags([...systemMerged, ...extra]);
+      }
       // Merge DB layouts with defaults: DB ha la precedenza per ID corrispondenti,
       // i default riempiono i gap (così layout mai modificati rimangono visibili)
       {
