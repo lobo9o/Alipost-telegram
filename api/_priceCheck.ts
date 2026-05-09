@@ -103,8 +103,9 @@ export interface PriceCheckResult {
   currentPrice?: number;
 }
 
-// Soglia: se il prezzo attuale supera il prezzo scontato di più del 15%, l'offerta è scaduta
-const PRICE_TOLERANCE = 0.15;
+// Soglia: se il prezzo attuale supera il prezzo scontato di più dell'8%, l'offerta è scaduta
+// (8% copre offerte dal ~7% di sconto in su; 15% era troppo permissivo per sconti piccoli)
+const PRICE_TOLERANCE = 0.08;
 
 export async function checkPostPrice(
   post: Record<string, any>,
@@ -145,7 +146,31 @@ export async function checkPostPrice(
       );
     }
 
-    if (currentPrice === null) return { valid: true }; // API non disponibile → pubblica lo stesso
+    if (currentPrice === null) {
+      // API non ha restituito prezzo → scrape pagina per verificare disponibilità
+      if (post.platform === 'amazon' && post.productId) {
+        const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
+        const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 8000);
+          const r = await fetch(`https://${domain}/dp/${post.productId}`, {
+            signal: ctrl.signal,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', 'Accept-Language': 'it-IT,it;q=0.9' },
+          });
+          clearTimeout(t);
+          if (r.ok) {
+            const html = await r.text();
+            const unavailable = /attualmente non disponibile|currently unavailable|non è disponibile|temporaneamente esaurito/i.test(html);
+            const hasPrice = /class="a-price-whole"|"priceAmount"|id="priceblock_ourprice"|id="priceblock_dealprice"/i.test(html);
+            if (unavailable || !hasPrice) {
+              return { valid: false, reason: 'Prodotto non più disponibile (scrape)' };
+            }
+          }
+        } catch { /* ignora — fallisce silenziosamente */ }
+      }
+      return { valid: true }; // impossibile verificare → considera valido
+    }
 
     const increase = (currentPrice - storedPrice) / storedPrice;
     if (increase > PRICE_TOLERANCE) {

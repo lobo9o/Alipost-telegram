@@ -1939,32 +1939,42 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     // 1. Aggiorna UI subito
     updateQueuePost(itemId, changes);
 
-    // 2. Salva nel DB — la risposta contiene isHistoricalLow/layoutId calcolati dal server
-    let finalPost = updatedPost;
-    try {
-      const saved = await autopostApi.update(itemId, { posts: [updatedPost], status: currentItem.status });
-      const sp = (saved?.posts as any)?.[0];
-      if (sp && sp.isHistoricalLow !== updatedPost.isHistoricalLow) {
-        finalPost = { ...updatedPost, isHistoricalLow: sp.isHistoricalLow, layoutId: sp.layoutId ?? updatedPost.layoutId };
-        updateQueuePost(itemId, { isHistoricalLow: finalPost.isHistoricalLow, layoutId: finalPost.layoutId });
-      }
-    } catch {}
+    const tpl = templates.find(t => t.id === updatedPost.templateId);
+    const cur = updatedPost.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+    const priceData = {
+      prezzo: `${cur}${Number(updatedPost.discountedPrice).toFixed(2)}`,
+      prezzoPrecedente: `${cur}${Number(updatedPost.originalPrice).toFixed(2)}`,
+      sconto: `-${updatedPost.discountPercent}%`,
+      testoCustom: updatedPost.customText,
+    };
 
-    // 3. Rigenera immagine in background con i nuovi valori (incluso isHistoricalLow corretto)
-    const tpl = templates.find(t => t.id === finalPost.templateId);
-    if (!tpl) return;
-    try {
-      const cur = finalPost.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-      const generatedImage = await generatePostImage(tpl, finalPost.image, finalPost.isHistoricalLow ?? false, finalPost.platform, {
-        prezzo: `${cur}${Number(finalPost.discountedPrice).toFixed(2)}`,
-        prezzoPrecedente: `${cur}${Number(finalPost.originalPrice).toFixed(2)}`,
-        sconto: `-${finalPost.discountPercent}%`,
-        testoCustom: finalPost.customText,
-      });
-      pregenImages.current[itemId] = generatedImage;
-      updateQueuePost(itemId, { generatedImage });
-      autopostApi.update(itemId, { posts: [{ ...finalPost, generatedImage }], status: currentItem.status }).catch(() => {});
-    } catch {}
+    // 2. Salva nel DB + genera immagine in parallelo (non aspettare uno per l'altro)
+    const savePromise = autopostApi.update(itemId, { posts: [updatedPost], status: currentItem.status }).catch(() => null);
+    const imgPromise = tpl
+      ? generatePostImage(tpl, updatedPost.image, updatedPost.isHistoricalLow ?? false, updatedPost.platform, priceData)
+          .then(gi => { pregenImages.current[itemId] = gi; updateQueuePost(itemId, { generatedImage: gi }); return gi; })
+          .catch(() => null)
+      : Promise.resolve(null);
+
+    const [saved, gi] = await Promise.all([savePromise, imgPromise]);
+
+    // 3. Se il server ha cambiato isHistoricalLow, aggiorna UI e rigenera immagine
+    const sp = (saved?.posts as any)?.[0];
+    if (sp && sp.isHistoricalLow !== updatedPost.isHistoricalLow) {
+      const finalPost = { ...updatedPost, isHistoricalLow: sp.isHistoricalLow, layoutId: sp.layoutId ?? updatedPost.layoutId };
+      updateQueuePost(itemId, { isHistoricalLow: finalPost.isHistoricalLow, layoutId: finalPost.layoutId });
+      if (tpl) {
+        generatePostImage(tpl, finalPost.image, finalPost.isHistoricalLow ?? false, finalPost.platform, priceData)
+          .then(newGi => {
+            pregenImages.current[itemId] = newGi;
+            updateQueuePost(itemId, { generatedImage: newGi });
+            autopostApi.update(itemId, { posts: [{ ...finalPost, generatedImage: newGi }], status: currentItem.status }).catch(() => {});
+          }).catch(() => {});
+      }
+    } else if (gi) {
+      // Salva immagine nel DB (fire-and-forget)
+      autopostApi.update(itemId, { posts: [{ ...updatedPost, generatedImage: gi }], status: currentItem.status }).catch(() => {});
+    }
   };
 
   // Cache immagini pre-generate: key = queue item id, value = base64 jpeg

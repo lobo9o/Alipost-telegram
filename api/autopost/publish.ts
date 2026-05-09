@@ -86,7 +86,7 @@ async function generateTerminataImageServer(
   if (config.grayscale !== false) pipeline = pipeline.grayscale();
   const step1 = await pipeline.jpeg({ quality: 95 }).toBuffer();
 
-  // Step 2: composita testo SVG sopra l'immagine in scala di grigi
+  // Step 2: testo overlay con canvas (supporta emoji) — fallback SVG senza emoji
   if (!config.overlayText) return step1;
 
   const fs  = Math.round(((Number(config.overlayTextSize) || 7) / 100) * SIZE);
@@ -94,7 +94,32 @@ async function generateTerminataImageServer(
   const ty  = Math.round(((Number(config.overlayTextY)    || 50) / 100) * SIZE);
   const sw  = Math.round(fs * 0.08);
   const col = String(config.overlayTextColor ?? '#ff0000');
-  const txt = String(config.overlayText).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const rawTxt = String(config.overlayText);
+
+  const canvasMod = await import('canvas').catch(() => null) as any;
+  if (canvasMod) {
+    const { createCanvas, loadImage } = canvasMod.default ?? canvasMod;
+    const canvas = createCanvas(SIZE, SIZE);
+    const ctx = canvas.getContext('2d');
+    const baseImg = await loadImage(step1);
+    ctx.drawImage(baseImg, 0, 0, SIZE, SIZE);
+    ctx.save();
+    ctx.font = `bold ${fs}px Impact, "Noto Color Emoji", "Segoe UI Emoji", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = sw;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(rawTxt, tx, ty);
+    ctx.fillStyle = col;
+    ctx.fillText(rawTxt, tx, ty);
+    ctx.restore();
+    return canvas.toBuffer('image/jpeg', { quality: 0.88 });
+  }
+
+  // Fallback SVG (senza emoji)
+  const txt = rawTxt.replace(/[^\x00-\x7F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+  if (!txt) return step1;
   const svg = Buffer.from(
     `<svg width="${SIZE}" height="${SIZE}">` +
     `<text x="${tx}" y="${ty}" font-family="Impact,Arial Black,sans-serif"` +
@@ -103,7 +128,6 @@ async function generateTerminataImageServer(
     ` text-anchor="middle" dominant-baseline="middle">${txt}</text>` +
     `</svg>`,
   );
-
   return sharp(step1).composite([{ input: svg, blend: 'over' }]).jpeg({ quality: 88 }).toBuffer();
 }
 
