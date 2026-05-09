@@ -32,6 +32,9 @@ function AnimatedEmojiSection() {
   const [nome, setNome] = useState('');
   const [emojiId, setEmojiId] = useState('');
   const [fallback, setFallback] = useState('');
+  const [trovando, setTrovando] = useState(false);
+  const [trovati, setTrovati] = useState<{ emojiId: string; fallback: string }[]>([]);
+  const [trovaErr, setTrovaErr] = useState('');
 
   const animatedEmojis = tags.filter(t => t.name.startsWith('{emoji_'));
 
@@ -45,7 +48,7 @@ function AnimatedEmojiSection() {
     const newTag: Tag = { id: genId(), name: tagName, value: tagValue };
     setTags(ts => [...ts, newTag]);
     tagsApi.create(newTag).catch(() => {});
-    setNome(''); setEmojiId(''); setFallback('');
+    setNome(''); setEmojiId(''); setFallback(''); setTrovati([]);
   };
 
   const remove = (tagId: string) => {
@@ -53,14 +56,55 @@ function AnimatedEmojiSection() {
     tagsApi.delete(tagId).catch(() => {});
   };
 
+  const trovaDalBot = async () => {
+    setTrovando(true);
+    setTrovaErr('');
+    setTrovati([]);
+    try {
+      const r = await fetch('/api/tg-emoji-helper');
+      const json = await r.json();
+      if (!r.ok || !json.ok) { setTrovaErr(json.error ?? 'Errore'); return; }
+      if (json.emojis.length === 0) setTrovaErr('Nessuna emoji animata trovata. Mandane una al bot, poi riprova.');
+      else setTrovati(json.emojis);
+    } catch (e: any) {
+      setTrovaErr(e?.message ?? 'Errore di rete');
+    } finally {
+      setTrovando(false);
+    }
+  };
+
   return (
     <>
       <div className="stit" style={{ marginTop: 8 }}>EMOJI ANIMATE ({animatedEmojis.length})</div>
       <div style={{ padding: '0 16px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontSize: 12, color: 'var(--fg2)', lineHeight: 1.5 }}>
-          Usa <code style={{ background: 'var(--bg2)', padding: '1px 4px', borderRadius: 4 }}>{'{emoji_nome}'}</code> nel layout per inserire un'emoji animata Telegram.
-          ID: manda l'emoji a <b>@getidsbot</b> su Telegram.
+          Usa <code style={{ background: 'var(--bg2)', padding: '1px 4px', borderRadius: 4 }}>{'{emoji_nome}'}</code> nel testo del layout per inserire un'emoji animata Telegram.
         </div>
+
+        {/* ── Trova ID dal bot ── */}
+        <div style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--fg2)' }}>
+            <b>Come trovare l'ID:</b> manda un'emoji animata direttamente al tuo bot Telegram, poi clicca il pulsante qui sotto.
+          </div>
+          <button className="btn bs" onClick={trovaDalBot} disabled={trovando} style={{ alignSelf: 'flex-start' }}>
+            {trovando ? '⏳ Cerco…' : '🔍 Trova ID dal bot'}
+          </button>
+          {trovaErr && <div style={{ fontSize: 12, color: 'var(--re)' }}>{trovaErr}</div>}
+          {trovati.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600 }}>Trovate {trovati.length} emoji — clicca per usare l'ID:</div>
+              {trovati.map(e => (
+                <div key={e.emojiId} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+                  onClick={() => { setEmojiId(e.emojiId); setFallback(e.fallback); }}>
+                  <span style={{ fontSize: 22 }}>{e.fallback}</span>
+                  <span style={{ fontSize: 11, color: 'var(--fg2)', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.emojiId}</span>
+                  <span style={{ fontSize: 11, color: 'var(--a1)', flexShrink: 0 }}>← usa</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <input className="inp" placeholder="Nome (es. fuoco)" value={nome} onChange={e => setNome(e.target.value)} />
         <input className="inp" placeholder="ID emoji Telegram" value={emojiId} onChange={e => setEmojiId(e.target.value)} />
         <input className="inp" placeholder="Emoji fallback (es. 🔥)" value={fallback} onChange={e => setFallback(e.target.value)} />
