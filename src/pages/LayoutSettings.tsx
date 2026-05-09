@@ -15,14 +15,13 @@ export function LayoutPage({ nav }: { nav: (p: NavPage) => void }) {
     <div className="pg">
       <PageHeader title="Layout" onBack={() => nav('dash')} />
       <SwitchTabs
-        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['tastiera', '⌨️ Tastiera'], ['template', '🖼️ Template'], ['emoji', '🎞️ Emoji']]}
+        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['tastiera', '⌨️ Tastiera'], ['template', '🖼️ Template']]}
         value={tab} onChange={setTab}
       />
       {tab === 'tags' && <TagsSection />}
       {tab === 'testo' && <TextLayoutSection />}
       {tab === 'tastiera' && <KeyboardSection />}
       {tab === 'template' && <TemplateSection />}
-      {tab === 'emoji' && <AnimatedEmojiSection />}
     </div>
   );
 }
@@ -139,7 +138,7 @@ function TagsSection() {
   };
 
   const systemTags = tags.filter(t => SYSTEM_TAGS.has(t.name));
-  const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name));
+  const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name) && !t.name.startsWith('{emoji_'));
 
   const renderTag = (t: Tag, isSystem: boolean) => (
     <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
@@ -201,6 +200,9 @@ function TagsSection() {
         </div>
       </div>
       <InfoBanner>Usa <b>{'{_ testo {tag} _}'}</b> per nascondere automaticamente un blocco se il tag al suo interno è vuoto.</InfoBanner>
+
+      {/* ── Emoji animate ── */}
+      <AnimatedEmojiSection />
     </>
   );
 }
