@@ -425,7 +425,7 @@ function buildMessage(
     t = t.split(tag).join(val);
   }
   // Tag {emoji_...} non risolti (emoji non salvata nel DB) → rimuovi silenziosamente
-  t = t.replace(/\{emoji_[a-z0-9_]+\}/g, '');
+  t = t.replace(/\{emoji_[a-zA-Z0-9_]+\}/g, '');
   t = t.replace(/~~([^~]+)~~/g, '<s>$1</s>');
   t = t.split('\n').filter(line => {
     if (!line.includes(SENTINEL)) return true;
@@ -905,6 +905,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const override = post.tagOverrides?.[t.name as string];
         customTags[t.name as string] = override !== undefined ? override : (t.value as string);
       }
+      const emojiTagsInDb = Object.keys(customTags).filter(k => k.startsWith('{emoji_'));
+      console.log(`[autopost] customTags emoji trovati nel DB (${emojiTagsInDb.length}):`, emojiTagsInDb);
 
       // Costruisce URL affiliato (primo post)
       let affiliateUrl: string = post.sourceUrl ?? '';

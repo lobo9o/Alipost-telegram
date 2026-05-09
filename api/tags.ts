@@ -39,6 +39,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   const { id: newId, name, value = '' } = req.body ?? {};
   if (!newId || !name) { res.status(400).json({ error: 'id and name required' }); return; }
+  console.log(`[tags] POST userId=${userId} name=${name}`);
   const [row] = await sql`
     INSERT INTO tags (id, user_id, name, value) VALUES (${newId}, ${userId}, ${name}, ${value})
     RETURNING id, name, value
