@@ -15,13 +15,96 @@ export function LayoutPage({ nav }: { nav: (p: NavPage) => void }) {
     <div className="pg">
       <PageHeader title="Layout" onBack={() => nav('dash')} />
       <SwitchTabs
-        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['tastiera', '⌨️ Tastiera'], ['template', '🖼️ Template']]}
+        options={[['tags', '🏷️ Tag'], ['testo', '📝 Testo'], ['tastiera', '⌨️ Tastiera'], ['template', '🖼️ Template'], ['emoji', '🎞️ Emoji']]}
         value={tab} onChange={setTab}
       />
       {tab === 'tags' && <TagsSection />}
       {tab === 'testo' && <TextLayoutSection />}
       {tab === 'tastiera' && <KeyboardSection />}
       {tab === 'template' && <TemplateSection />}
+      {tab === 'emoji' && <AnimatedEmojiSection />}
+    </div>
+  );
+}
+
+// ── Animated Emoji ───────────────────────────────────────────
+function AnimatedEmojiSection() {
+  const { tags, setTags } = useApp();
+  const [nome, setNome] = useState('');
+  const [emojiId, setEmojiId] = useState('');
+  const [fallback, setFallback] = useState('');
+
+  const animatedEmojis = tags.filter(t => t.name.startsWith('{emoji_'));
+
+  const add = () => {
+    const n = nome.trim();
+    const id = emojiId.trim();
+    if (!n || !id) return;
+    const tagName = `{emoji_${n.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}}`;
+    if (tags.some(t => t.name === tagName)) { alert(`Il tag ${tagName} esiste già`); return; }
+    const tagValue = `<tg-emoji emoji-id="${id}">${fallback.trim() || '✨'}</tg-emoji>`;
+    const newTag: Tag = { id: genId(), name: tagName, value: tagValue };
+    setTags(ts => [...ts, newTag]);
+    tagsApi.create(newTag).catch(() => {});
+    setNome(''); setEmojiId(''); setFallback('');
+  };
+
+  const remove = (tagId: string) => {
+    setTags(ts => ts.filter(t => t.id !== tagId));
+    tagsApi.delete(tagId).catch(() => {});
+  };
+
+  return (
+    <>
+      <div style={{ padding: '12px 16px 0' }}>
+        <div style={{ fontSize: 13, color: 'var(--fg2)', marginBottom: 10, lineHeight: 1.5 }}>
+          Le emoji animate di Telegram si usano nel testo con il tag <code style={{ background: 'var(--bg2)', padding: '1px 4px', borderRadius: 4 }}>{'{emoji_nome}'}</code>.<br />
+          Per ottenere l'ID: manda l'emoji animata a <b>@getidsbot</b> su Telegram e copia il <i>custom_emoji_id</i>.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          <input className="inp" placeholder="Nome (es. fuoco, cuore, fuochi...)" value={nome} onChange={e => setNome(e.target.value)} />
+          <input className="inp" placeholder="ID emoji Telegram (es. 5368324170671202286)" value={emojiId} onChange={e => setEmojiId(e.target.value)} />
+          <input className="inp" placeholder="Emoji fallback (es. 🔥)" value={fallback} onChange={e => setFallback(e.target.value)} />
+          <button className="btn bp" onClick={add} disabled={!nome.trim() || !emojiId.trim()}>+ Aggiungi emoji animata</button>
+        </div>
+      </div>
+      {animatedEmojis.length === 0 && (
+        <div style={{ textAlign: 'center', color: 'var(--fg2)', fontSize: 13, padding: '20px 16px' }}>Nessuna emoji animata salvata</div>
+      )}
+      {animatedEmojis.map(t => {
+        const fb = t.value.match(/>([^<]*)<\/tg-emoji>/)?.[1] ?? '✨';
+        const id = t.value.match(/emoji-id="([^"]+)"/)?.[1] ?? '';
+        return (
+          <div key={t.id} className="lc" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 28, lineHeight: 1 }}>{fb}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{t.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--fg2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ID: {id}</div>
+            </div>
+            <button className="btn bgh bsm" style={{ color: 'var(--re)' }} onClick={() => remove(t.id)}>×</button>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// ── Picker emoji animate (riga cliccabile sopra i textarea) ──
+export function AnimatedEmojiPicker({ onInsert }: { onInsert: (tag: string) => void }) {
+  const { tags } = useApp();
+  const animatedEmojis = tags.filter(t => t.name.startsWith('{emoji_'));
+  if (!animatedEmojis.length) return null;
+  return (
+    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 0', marginBottom: 4 }}>
+      {animatedEmojis.map(t => {
+        const fb = t.value.match(/>([^<]*)<\/tg-emoji>/)?.[1] ?? '✨';
+        return (
+          <button key={t.id} title={t.name} onClick={() => onInsert(t.name)}
+            style={{ fontSize: 22, lineHeight: 1, cursor: 'pointer', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 8, padding: '4px 8px', flexShrink: 0 }}>
+            {fb}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -144,9 +227,6 @@ function TextLayoutSection() {
   const { layouts, setLayouts, keyboards } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<TextLayout, 'id'>>({ nome: '', tipo: 'normal', contenuto: '', keyboardId: undefined });
-  const [emojiPanel, setEmojiPanel] = useState(false);
-  const [emojiId, setEmojiId] = useState('');
-  const [emojiFallback, setEmojiFallback] = useState('');
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const startNew = () => { setForm({ nome: '', tipo: 'normal', contenuto: '', keyboardId: undefined }); setEditing('new'); };
@@ -164,19 +244,12 @@ function TextLayoutSection() {
     setEditing(null);
   };
 
-  const insertAnimatedEmoji = () => {
-    const id = emojiId.trim();
-    if (!id) return;
-    const fallback = emojiFallback.trim() || '✨';
-    const tag = `<tg-emoji emoji-id="${id}">${fallback}</tg-emoji>`;
+  const insertTag = (tag: string) => {
     const ta = taRef.current;
     const start = ta?.selectionStart ?? form.contenuto.length;
     const end = ta?.selectionEnd ?? start;
     const newContenuto = form.contenuto.slice(0, start) + tag + form.contenuto.slice(end);
     setForm(f => ({ ...f, contenuto: newContenuto }));
-    setEmojiPanel(false);
-    setEmojiId('');
-    setEmojiFallback('');
     setTimeout(() => { ta?.focus(); ta?.setSelectionRange(start + tag.length, start + tag.length); }, 0);
   };
 
@@ -199,20 +272,8 @@ function TextLayoutSection() {
           </select>
         </div>
         <div className="fld">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <label className="lbl" style={{ margin: 0 }}>Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{custom}'}</label>
-            <button className="btn bgh bsm" style={{ fontSize: 12, whiteSpace: 'nowrap' }} onClick={() => setEmojiPanel(p => !p)}>🎞️ Emoji animata</button>
-          </div>
-          {emojiPanel && (
-            <div style={{ background: 'var(--bg2)', borderRadius: 8, padding: 10, marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 12, color: 'var(--fg2)' }}>
-                Per ottenere l'ID: manda l'emoji animata a <b>@getidsbot</b> su Telegram → copia il <i>custom_emoji_id</i>
-              </div>
-              <input className="inp" placeholder="ID emoji (es. 5368324170671202286)" value={emojiId} onChange={e => setEmojiId(e.target.value)} style={{ fontSize: 13 }} />
-              <input className="inp" placeholder="Emoji fallback (es. 🔥)" value={emojiFallback} onChange={e => setEmojiFallback(e.target.value)} style={{ fontSize: 13 }} />
-              <button className="btn bp bsm" onClick={insertAnimatedEmoji} disabled={!emojiId.trim()}>Inserisci nel testo</button>
-            </div>
-          )}
+          <label className="lbl">Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{custom}'}</label>
+          <AnimatedEmojiPicker onInsert={insertTag} />
           <textarea ref={taRef} className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={8} />
         </div>
         <div className="fld">

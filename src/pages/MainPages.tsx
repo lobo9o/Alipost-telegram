@@ -7,6 +7,31 @@ import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, DealProduct } from '../lib/api';
 import { generatePostImage, generateMultiPostImage, generateTerminataImage } from '../utils/imageCompose';
+import { AnimatedEmojiPicker } from './LayoutSettings';
+
+// Editor testo personalizzato con picker emoji animate
+function CustomTextEditor({ initialValue, onSave, rows = 2 }: { initialValue: string; onSave: (v: string) => void; rows?: number }) {
+  const [val, setVal] = useState(initialValue);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const insertTag = (tag: string) => {
+    const ta = taRef.current;
+    const start = ta?.selectionStart ?? val.length;
+    const end = ta?.selectionEnd ?? start;
+    const nv = val.slice(0, start) + tag + val.slice(end);
+    setVal(nv);
+    onSave(nv);
+    setTimeout(() => { ta?.focus(); ta?.setSelectionRange(start + tag.length, start + tag.length); }, 0);
+  };
+  return (
+    <div>
+      <AnimatedEmojiPicker onInsert={insertTag} />
+      <textarea ref={taRef} className="txta" rows={rows} value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={e => onSave(e.target.value)}
+        placeholder="Testo aggiuntivo..." />
+    </div>
+  );
+}
 
 // ── Template image preview (reused in PostCard + standalone) ──
 const CANVAS_SIZE_PREVIEW = 1024;
@@ -2799,10 +2824,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               {layout?.contenuto.includes('{custom}') && (
                 <div style={{ marginBottom: 10 }}>
                   <div className="lbl">TESTO PERSONALIZZATO <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{custom}'}</span></div>
-                  <textarea className="txta" rows={2} key={item.id + '-custom'}
-                    defaultValue={p.customText}
-                    onBlur={e => updatePostWithImage(item.id, { customText: e.target.value })}
-                    placeholder="Testo aggiuntivo..." />
+                  <CustomTextEditor key={item.id + '-custom'} initialValue={p.customText || ''}
+                    onSave={v => updatePostWithImage(item.id, { customText: v })} />
                 </div>
               )}
               {/* 5. Coupon — solo se {coupon}/{boxcoupon} è nel layout */}
