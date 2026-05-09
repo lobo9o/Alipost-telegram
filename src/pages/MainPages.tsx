@@ -659,7 +659,14 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
         if (gi) post = { ...post, generatedImage: gi };
       }
       const qItem: QueueItem = { id: genId(), tipo: 'single', sched: 'Auto', status: 'draft', sel: false, posts: [post] };
-      try { await autopostApi.create(qItem); addedItems.push(qItem); } catch {}
+      try {
+        const resp = await autopostApi.create(qItem);
+        const sp = (resp?.posts as any)?.[0];
+        const mergedItem: QueueItem = sp?.isHistoricalLow
+          ? { ...qItem, posts: [{ ...post, isHistoricalLow: true, layoutId: sp.layoutId ?? post.layoutId }] }
+          : qItem;
+        addedItems.push(mergedItem);
+      } catch {}
     }
     if (addedItems.length) setQueue(prev => [...prev, ...addedItems]);
     setSelectedIds(new Set());
@@ -798,7 +805,14 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
         if (gi) post = { ...post, generatedImage: gi };
       }
       const qItem: QueueItem = { id: genId(), tipo: 'single', sched: 'Auto', status: 'draft', sel: false, posts: [post] };
-      try { await autopostApi.create(qItem); addedItems.push(qItem); } catch {}
+      try {
+        const resp = await autopostApi.create(qItem);
+        const sp = (resp?.posts as any)?.[0];
+        const mergedItem: QueueItem = sp?.isHistoricalLow
+          ? { ...qItem, posts: [{ ...post, isHistoricalLow: true, layoutId: sp.layoutId ?? post.layoutId }] }
+          : qItem;
+        addedItems.push(mergedItem);
+      } catch {}
     }
     if (addedItems.length) setQueue(prev => [...prev, ...addedItems]);
     setAmzSelectedIds(new Set());
@@ -1467,7 +1481,18 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
 
       const saved: QueueItem[] = [];
       for (const qi of queueItems) {
-        try { await autopostApi.create(qi); saved.push(qi); }
+        try {
+          const resp = await autopostApi.create(qi);
+          if (qi.tipo === 'single') {
+            const sp = (resp?.posts as any)?.[0];
+            const mergedItem: QueueItem = sp?.isHistoricalLow
+              ? { ...qi, posts: [{ ...(qi.posts[0] as CreatedPost), isHistoricalLow: true, layoutId: sp.layoutId ?? (qi.posts[0] as CreatedPost).layoutId }] }
+              : qi;
+            saved.push(mergedItem);
+          } else {
+            saved.push(qi);
+          }
+        }
         catch (e) { console.error('[creaPost]', e); }
       }
 
@@ -1914,23 +1939,31 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     // 1. Aggiorna UI subito
     updateQueuePost(itemId, changes);
 
-    // 2. Salva nel DB subito — così il polling non riporta i valori vecchi
-    await autopostApi.update(itemId, { posts: [updatedPost], status: currentItem.status }).catch(() => {});
+    // 2. Salva nel DB — la risposta contiene isHistoricalLow/layoutId calcolati dal server
+    let finalPost = updatedPost;
+    try {
+      const saved = await autopostApi.update(itemId, { posts: [updatedPost], status: currentItem.status });
+      const sp = (saved?.posts as any)?.[0];
+      if (sp && sp.isHistoricalLow !== updatedPost.isHistoricalLow) {
+        finalPost = { ...updatedPost, isHistoricalLow: sp.isHistoricalLow, layoutId: sp.layoutId ?? updatedPost.layoutId };
+        updateQueuePost(itemId, { isHistoricalLow: finalPost.isHistoricalLow, layoutId: finalPost.layoutId });
+      }
+    } catch {}
 
-    // 3. Rigenera immagine in background con i nuovi valori
-    const tpl = templates.find(t => t.id === updatedPost.templateId);
+    // 3. Rigenera immagine in background con i nuovi valori (incluso isHistoricalLow corretto)
+    const tpl = templates.find(t => t.id === finalPost.templateId);
     if (!tpl) return;
     try {
-      const cur = updatedPost.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-      const generatedImage = await generatePostImage(tpl, updatedPost.image, updatedPost.isHistoricalLow, updatedPost.platform, {
-        prezzo: `${cur}${Number(updatedPost.discountedPrice).toFixed(2)}`,
-        prezzoPrecedente: `${cur}${Number(updatedPost.originalPrice).toFixed(2)}`,
-        sconto: `-${updatedPost.discountPercent}%`,
-        testoCustom: updatedPost.customText,
+      const cur = finalPost.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+      const generatedImage = await generatePostImage(tpl, finalPost.image, finalPost.isHistoricalLow ?? false, finalPost.platform, {
+        prezzo: `${cur}${Number(finalPost.discountedPrice).toFixed(2)}`,
+        prezzoPrecedente: `${cur}${Number(finalPost.originalPrice).toFixed(2)}`,
+        sconto: `-${finalPost.discountPercent}%`,
+        testoCustom: finalPost.customText,
       });
       pregenImages.current[itemId] = generatedImage;
       updateQueuePost(itemId, { generatedImage });
-      autopostApi.update(itemId, { posts: [{ ...updatedPost, generatedImage }], status: currentItem.status }).catch(() => {});
+      autopostApi.update(itemId, { posts: [{ ...finalPost, generatedImage }], status: currentItem.status }).catch(() => {});
     } catch {}
   };
 
