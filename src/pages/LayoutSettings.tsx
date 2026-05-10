@@ -37,8 +37,26 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
   const [trovando, setTrovando] = useState(false);
   const [trovati, setTrovati] = useState<{ emojiId: string; fallback: string }[]>([]);
   const [trovaErr, setTrovaErr] = useState('');
+  const [dbEmojis, setDbEmojis] = useState<Tag[] | null>(null);
+  const [dbLoading, setDbLoading] = useState(false);
 
+  // Carica sempre dallo stato React (che viene dal DB all'avvio)
   const animatedEmojis = tags.filter(t => t.name.startsWith('{emoji_'));
+
+  // Verifica diretta nel DB
+  const checkDb = async () => {
+    setDbLoading(true);
+    try {
+      const all = await tagsApi.list();
+      setDbEmojis(all.filter((t: Tag) => t.name.startsWith('{emoji_')));
+    } catch (e: any) {
+      setDbEmojis([]);
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  useEffect(() => { checkDb(); }, []);
 
   const add = async () => {
     const n = nome.trim();
@@ -136,24 +154,37 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
         </button>
       </div>
 
-      {/* ── Lista emoji salvate ── */}
-      {animatedEmojis.length > 0 && <>
-        <div className="stit">EMOJI SALVATE ({animatedEmojis.length})</div>
-        {animatedEmojis.map(t => {
+      {/* ── Stato nel DB ── */}
+      <div style={{ padding: '0 16px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <div className="stit" style={{ margin: 0, flex: 1 }}>
+            NEL DATABASE ({dbEmojis === null ? '…' : dbEmojis.length})
+          </div>
+          <button className="btn bs bsm" onClick={checkDb} disabled={dbLoading} style={{ flexShrink: 0 }}>
+            {dbLoading ? '⏳' : '↺ Ricarica'}
+          </button>
+        </div>
+        {dbEmojis !== null && dbEmojis.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--re)', padding: '6px 0' }}>
+            ❌ Nessun tag emoji nel DB — il salvataggio non ha funzionato. Riprova ad aggiungere l'emoji.
+          </div>
+        )}
+        {dbEmojis !== null && dbEmojis.map(t => {
           const fb = t.value.match(/>([^<]*)<\/tg-emoji>/)?.[1] ?? '✨';
           const id = t.value.match(/emoji-id="([^"]+)"/)?.[1] ?? '';
           return (
-            <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 30, lineHeight: 1 }}>{fb}</span>
+            <div key={t.id} className="card" style={{ padding: '9px 12px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 26 }}>{fb}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--fg2)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ID: {id}</div>
+                <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--gr)' }}>✓ {t.name}</div>
+                <div style={{ fontSize: 10, color: 'var(--fg2)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ID: {id}</div>
               </div>
-              <button className="btn bgh bsm" style={{ color: 'var(--re)' }} onClick={() => remove(t.id)}>×</button>
+              <button className="btn bgh bsm" style={{ color: 'var(--re)' }}
+                onClick={() => { setTags(ts => ts.filter(x => x.id !== t.id)); tagsApi.delete(t.id).catch(() => {}); setDbEmojis(ds => ds ? ds.filter(x => x.id !== t.id) : ds); }}>×</button>
             </div>
           );
         })}
-      </>}
+      </div>
     </div>
   );
 }

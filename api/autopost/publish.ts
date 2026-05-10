@@ -971,6 +971,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           layoutRow?.body || defaultLayout,
           post, affiliateUrl, aliCurrency, customTags,
         );
+        console.log(`[autopost] messageText preview (100ch): ${messageText.slice(0, 100).replace(/\n/g, '↵')}`);
         replyMarkup = buildKeyboard(keyboardRow?.body, post, affiliateUrl)
           ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
       }
