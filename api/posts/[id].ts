@@ -48,7 +48,7 @@ const ALI_CURRENCY_SYM: Record<string, string> = {
   US: '$', BR: 'R$', UK: '£', RU: '₽', PL: 'zł',
 };
 
-function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string, currency?: string): string {
+function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string, currency?: string, customTags: Record<string, string> = {}): string {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const pad = (n: number) => n < 10 ? `0${n}` : String(n);
@@ -85,6 +85,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       post.coupon || '',
     '{checkout}':        '',
+    ...customTags,
   };
 
   // Aggiunge tagOverrides per tag non già in tags (custom per-post)
@@ -125,6 +126,8 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
   for (const [tag, val] of Object.entries(tags)) {
     t = t.split(tag).join(val);
   }
+  // Tag {emoji_...} non risolti → rimuovi silenziosamente
+  t = t.replace(/\{emoji_[a-zA-Z0-9_]+\}/g, '');
   t = t.replace(/~~([^~]+)~~/g, '<s>$1</s>');
 
   // Rimuovi righe che contenevano solo blocchi condizionali vuoti
@@ -307,7 +310,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const aliCurrency = post.platform === 'aliexpress'
     ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
     : '€';
-  const messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl, aliCurrency);
+
+  // Carica tag personalizzati dal DB (incluse emoji animate)
+  const tagRows = await sql`
+    SELECT name, value FROM tags
+    WHERE user_id = ${userId} OR user_id = 'legacy'
+    ORDER BY (user_id = ${userId}) ASC
+  `;
+  const customTags: Record<string, string> = {};
+  for (const tr of tagRows) {
+    customTags[tr.name as string] = tr.value as string;
+  }
+
+  const messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl, aliCurrency, customTags);
 
   const replyMarkup = buildKeyboard(keyboardContenuto, post, affiliateUrl)
     ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);

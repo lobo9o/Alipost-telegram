@@ -13,6 +13,7 @@ const sql = postgres(connectionString, {
   ssl: isLocal ? false : { rejectUnauthorized: false },
   idle_timeout: 20,
   max_lifetime: 60 * 30,
+  onnotice: () => {},
 });
 
 export default sql;
