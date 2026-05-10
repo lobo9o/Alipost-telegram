@@ -864,7 +864,29 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ORDER BY created_at ASC LIMIT 1
         `.catch(() => [null]);
         if (hlLayout?.id) post = { ...post, layoutId: String(hlLayout.id) };
-        console.log(`[autopost] MINIMO STORICO userId=${userId} productId=${post.productId} price=${post.discountedPrice} minPrice=${histRow.min_price} hlLayout=${hlLayout?.id ?? 'nessuno'}`);
+
+        // Rigenera immagine con template "minimo storico" se disponibile
+        const [hlTpl] = await sql`
+          SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo = 'historical_low'
+          ORDER BY created_at ASC LIMIT 1
+        `.catch(() => [null]);
+        if (hlTpl && post.image && String(post.image).startsWith('http')) {
+          const hlCfg = { id: hlTpl.id, ...(typeof hlTpl.config === 'string' ? JSON.parse(hlTpl.config) : (hlTpl.config ?? {})) };
+          const discountedPrice = Number(post.discountedPrice);
+          const originalPrice   = Number(post.originalPrice);
+          const discountPercent = Number(post.discountPercent);
+          const currSym = post.platform === 'aliexpress'
+            ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
+            : '€';
+          const genImg = await generateTemplateImageServer(hlCfg, String(post.image), post.platform, {
+            prezzo:           `${currSym}${discountedPrice.toFixed(2)}`,
+            prezzoPrecedente: `${currSym}${originalPrice.toFixed(2)}`,
+            sconto:           `-${discountPercent}%`,
+          }).catch(() => null);
+          if (genImg) post = { ...post, generatedImage: genImg };
+        }
+
+        console.log(`[autopost] MINIMO STORICO userId=${userId} productId=${post.productId} price=${post.discountedPrice} minPrice=${histRow.min_price} hlLayout=${hlLayout?.id ?? 'nessuno'} hlTpl=${hlTpl?.id ?? 'nessuno'}`);
       }
     }
 
