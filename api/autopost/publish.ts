@@ -898,15 +898,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         SELECT body FROM keyboards WHERE id = ${effectiveKeyboardId} AND user_id = ${userId}
       ` : [null];
 
-      // Carica tag personalizzati dell'utente + applica eventuali override per-post
-      const tagRows = await sql`SELECT name, value FROM tags WHERE user_id = ${userId}`;
+      // Carica tag personalizzati: prima 'legacy' (vecchio default), poi user-specifici (sovrascrivono)
+      const tagRows = await sql`
+        SELECT name, value FROM tags
+        WHERE user_id = ${userId} OR user_id = 'legacy'
+        ORDER BY (user_id = ${userId}) ASC
+      `;
       const customTags: Record<string, string> = {};
       for (const t of tagRows) {
         const override = post.tagOverrides?.[t.name as string];
         customTags[t.name as string] = override !== undefined ? override : (t.value as string);
       }
       const emojiTagsInDb = Object.keys(customTags).filter(k => k.startsWith('{emoji_'));
-      console.log(`[autopost] customTags emoji trovati nel DB (${emojiTagsInDb.length}):`, emojiTagsInDb);
+      console.log(`[autopost] userId=${userId} totalTags=${tagRows.length} emojiTags(${emojiTagsInDb.length}):`, emojiTagsInDb);
 
       // Costruisce URL affiliato (primo post)
       let affiliateUrl: string = post.sourceUrl ?? '';
