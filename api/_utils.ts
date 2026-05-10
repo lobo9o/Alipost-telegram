@@ -5,8 +5,16 @@ import sql from '../lib/db.js';
 type Handler = (req: VercelRequest, res: VercelResponse) => Promise<void>;
 
 let _migrated = false;
+let _migrating: Promise<void> | null = null;
 
 async function ensureMigrated() {
+  if (_migrated) return;
+  if (_migrating) { await _migrating; return; }
+  _migrating = runMigration();
+  try { await _migrating; } finally { _migrating = null; }
+}
+
+async function runMigration() {
   if (_migrated) return;
   console.log('[DB] migrazione avviata');
   await sql`CREATE TABLE IF NOT EXISTS settings (
@@ -121,7 +129,11 @@ async function ensureMigrated() {
 
   // Aggiunge 'aliexpress' e 'aliexpress_historical_low' ai valori validi per layouts.tipo
   await sql`ALTER TABLE layouts DROP CONSTRAINT IF EXISTS layouts_tipo_check`;
-  await sql`ALTER TABLE layouts ADD CONSTRAINT layouts_tipo_check CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress', 'aliexpress_historical_low', 'amazon'))`;
+  try {
+    await sql`ALTER TABLE layouts ADD CONSTRAINT layouts_tipo_check CHECK (tipo IN ('normal', 'historical_low', 'multi', 'aliexpress', 'aliexpress_historical_low', 'amazon'))`;
+  } catch (e: any) {
+    if (e?.code !== '42710') throw e; // 42710 = constraint già esiste (race condition), ignora
+  }
   // Tastiera associata per layout
   await sql`ALTER TABLE layouts ADD COLUMN IF NOT EXISTS keyboard_id TEXT`;
   // Rating e recensioni per deals_cache
