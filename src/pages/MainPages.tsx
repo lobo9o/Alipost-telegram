@@ -7,29 +7,14 @@ import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, DealProduct } from '../lib/api';
 import { generatePostImage, generateMultiPostImage, generateTerminataImage } from '../utils/imageCompose';
-import { AnimatedEmojiPicker } from './LayoutSettings';
-
-// Editor testo personalizzato con picker emoji animate
 function CustomTextEditor({ initialValue, onSave, rows = 2 }: { initialValue: string; onSave: (v: string) => void; rows?: number }) {
   const [val, setVal] = useState(initialValue);
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const insertTag = (tag: string) => {
-    const ta = taRef.current;
-    const start = ta?.selectionStart ?? val.length;
-    const end = ta?.selectionEnd ?? start;
-    const nv = val.slice(0, start) + tag + val.slice(end);
-    setVal(nv);
-    onSave(nv);
-    setTimeout(() => { ta?.focus(); ta?.setSelectionRange(start + tag.length, start + tag.length); }, 0);
-  };
   return (
-    <div>
-      <AnimatedEmojiPicker onInsert={insertTag} />
-      <textarea ref={taRef} className="txta" rows={rows} value={val}
-        onChange={e => setVal(e.target.value)}
-        onBlur={e => onSave(e.target.value)}
-        placeholder="Testo aggiuntivo..." />
-    </div>
+    <textarea ref={taRef} className="txta" rows={rows} value={val}
+      onChange={e => { setVal(e.target.value); onSave(e.target.value); }}
+      onBlur={e => onSave(e.target.value)}
+      placeholder="Testo aggiuntivo..." />
   );
 }
 
@@ -324,7 +309,6 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
     { id: 'queue', ic: '🗓️', lb: 'Coda AutoPost', sub: `${stats.inCoda} in coda`, c: 'var(--or)' },
     { id: 'published', ic: '✅', lb: 'Pubblicati', sub: `${stats.pub} oggi`, c: 'var(--gr)' },
     { id: 'layout', ic: '🎨', lb: 'Layout', sub: 'tag · testo · template', c: 'var(--a2)' },
-    { id: 'emoji', ic: '✨', lb: 'Emoji Animate', sub: 'sblocca dal bot Telegram', c: 'var(--a3)' },
     { id: 'settings', ic: '⚙️', lb: 'Impostazioni', sub: 'API · canali · orari', c: 'var(--t2)' },
   ];
   return (

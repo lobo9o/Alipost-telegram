@@ -42,7 +42,6 @@ async function main() {
     dealsHandler,
     amazonDealsHandler,
     dealsCacheHandler,
-    tgEmojiHelperHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -60,7 +59,6 @@ async function main() {
     loadHandler('api/deals/index.ts'),
     loadHandler('api/amazon-deals/index.ts'),
     loadHandler('api/deals-cache/index.ts'),
-    loadHandler('api/tg-emoji-helper.ts'),
   ]);
 
   const app = express();
@@ -87,7 +85,6 @@ async function main() {
   app.all('/api/deals', dealsHandler);
   app.all('/api/amazon-deals', amazonDealsHandler);
   app.all('/api/deals-cache', dealsCacheHandler);
-  app.all('/api/tg-emoji-helper', tgEmojiHelperHandler);
 
   app.get('*', (_req, res) => {
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
