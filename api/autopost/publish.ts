@@ -66,117 +66,54 @@ interface TgEntity {
   url?: string; custom_emoji_id?: string;
 }
 
-function sanitizeEntities(text: string, entities: TgEntity[]): TgEntity[] {
-  return entities.map(e => {
-    if (e.offset >= text.length) return null;
-    let len = Math.min(e.length, text.length - e.offset);
-    if (len > 0 && (text.charCodeAt(e.offset + len - 1) & 0xFC00) === 0xD800) len--;
-    return len > 0 ? { ...e, length: len } : null;
-  }).filter(Boolean) as TgEntity[];
+function htmlStrip(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
 }
 
-function parseHtmlToEntities(
-  html: string,
-  emojiIdMap?: Record<string, string>,
-): { text: string; entities: TgEntity[] } {
-  const fmtEntities: TgEntity[] = [];
-  let text = '';
-  let utf16Off = 0;
-  const stack: Array<{ type: string; offset: number; url?: string; emojiId?: string }> = [];
-  const HTML_ENT: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" };
-  const TYPE_MAP: Record<string, string> = {
-    b: 'bold', strong: 'bold', i: 'italic', em: 'italic',
-    u: 'underline', s: 'strikethrough', strike: 'strikethrough', del: 'strikethrough',
-    code: 'code', pre: 'pre', a: 'text_link',
-  };
-  let i = 0;
-  while (i < html.length) {
-    if (html[i] === '<') {
-      const end = html.indexOf('>', i);
-      if (end === -1) { text += html[i]; utf16Off++; i++; continue; }
-      const inner = html.slice(i + 1, end);
-      const isClose = inner.startsWith('/');
-      const tagStr  = isClose ? inner.slice(1).trim() : inner.trim();
-      const tagName = tagStr.split(/[\s>/]/)[0].toLowerCase();
-      if (isClose) {
-        for (let j = stack.length - 1; j >= 0; j--) {
-          if (stack[j].type === tagName) {
-            const e = stack.splice(j, 1)[0];
-            const len = utf16Off - e.offset;
-            if (len > 0) {
-              const etype = e.emojiId ? 'custom_emoji' : (TYPE_MAP[tagName] ?? null);
-              if (etype) {
-                const ent: TgEntity = { type: etype, offset: e.offset, length: len };
-                if (e.url)     ent.url             = e.url;
-                if (e.emojiId) ent.custom_emoji_id = e.emojiId;
-                fmtEntities.push(ent);
-              }
-            }
-            break;
-          }
-        }
-      } else {
-        const urlMatch   = inner.match(/href="([^"]+)"/);
-        const emojiMatch = inner.match(/data-emoji-id="([^"]+)"/);
-        stack.push({ type: tagName, offset: utf16Off, url: urlMatch?.[1], emojiId: emojiMatch?.[1] });
+function findEmojiEntities(text: string, idMap: Record<string, string>): TgEntity[] {
+  const all: TgEntity[] = [];
+  for (const [ch, id] of Object.entries(idMap)) {
+    if (!ch || !id) continue;
+    let pos = 0;
+    while ((pos = text.indexOf(ch, pos)) !== -1) {
+      const end = pos + ch.length;
+      if ((text.charCodeAt(pos) & 0xFC00) !== 0xDC00 &&
+          (text.charCodeAt(end - 1) & 0xFC00) !== 0xD800) {
+        all.push({ type: 'custom_emoji', offset: pos, length: ch.length, custom_emoji_id: id });
       }
-      i = end + 1;
-    } else if (html[i] === '&') {
-      const semi = html.indexOf(';', i);
-      if (semi !== -1 && semi - i <= 6) {
-        const raw = html.slice(i, semi + 1);
-        if (HTML_ENT[raw]) { text += HTML_ENT[raw]; utf16Off++; i = semi + 1; continue; }
-      }
-      text += html[i]; utf16Off++; i++;
-    } else {
-      const cp = html.codePointAt(i)!;
-      const isSuppl = cp > 0xFFFF;
-      const chLen = isSuppl ? 2 : 1;
-      const nextCp = html.codePointAt(i + chLen);
-      const hasVS = nextCp === 0xFE0F || nextCp === 0xFE0E;
-      const seqLen = chLen + (hasVS ? 1 : 0);
-      text += html.slice(i, i + seqLen);
-      utf16Off += seqLen;
-      i        += seqLen;
+      pos = end;
     }
   }
-
-  // Scansione separata del testo finale per trovare emoji animate — offset sempre corretti
-  const emojiEntities: TgEntity[] = [];
-  if (emojiIdMap) {
-    const keys = Object.keys(emojiIdMap).sort((a, b) => b.length - a.length);
-    let ti = 0;
-    while (ti < text.length) {
-      let matched = false;
-      for (const key of keys) {
-        if (key.length > 0 && ti + key.length <= text.length && text.slice(ti, ti + key.length) === key) {
-          emojiEntities.push({ type: 'custom_emoji', offset: ti, length: key.length, custom_emoji_id: emojiIdMap[key] });
-          ti += key.length;
-          matched = true;
-          break;
-        }
-      }
-      if (!matched) {
-        const code = text.charCodeAt(ti);
-        ti += (code >= 0xD800 && code <= 0xDBFF) ? 2 : 1;
-      }
-    }
+  all.sort((a, b) => a.offset - b.offset);
+  const result: TgEntity[] = [];
+  let prev = 0;
+  for (const e of all) {
+    if (e.offset >= prev) { result.push(e); prev = e.offset + e.length; }
   }
-
-  return { text, entities: sanitizeEntities(text, [...fmtEntities, ...emojiEntities]) };
+  return result;
 }
 
 function capWithEntities(text: string, entities: TgEntity[], maxLen: number): { text: string; entities: TgEntity[] } {
-  if (text.length <= maxLen) return { text, entities: sanitizeEntities(text, entities) };
-  let cut = maxLen - 1;
-  if ((text.charCodeAt(cut) & 0xFC00) === 0xDC00) cut--;
-  const trimmed = text.slice(0, cut) + '…';
-  return {
-    text: trimmed,
-    entities: sanitizeEntities(trimmed, entities
-      .filter(e => e.offset < cut)
-      .map(e => ({ ...e, length: Math.min(e.length, cut - e.offset) }))),
-  };
+  let t = text;
+  if (t.length > maxLen) {
+    let cut = maxLen - 1;
+    if ((t.charCodeAt(cut) & 0xFC00) === 0xDC00) cut--;
+    t = t.slice(0, cut) + '…';
+  }
+  const ents = entities.filter(e => {
+    const end = e.offset + e.length;
+    if (e.offset < 0 || e.length <= 0 || end > t.length) return false;
+    if ((t.charCodeAt(e.offset) & 0xFC00) === 0xDC00) return false;
+    if ((t.charCodeAt(end - 1) & 0xFC00) === 0xD800) return false;
+    return true;
+  });
+  return { text: t, entities: ents };
 }
 
 // Genera immagine terminata server-side: grayscale + testo overlay (usa sharp)
@@ -1133,11 +1070,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       // disable_notification: incluso SOLO quando true — omesso = Telegram notifica per default
       console.log(`[autopost] disable_notification: ${disableNotification} (sil=${silenzioso} disc=${post.discountPercent} threshold=${notifThreshold})`);
 
-      // Parsa HTML → testo piano + entità (necessario per custom emoji animate)
-      // Usiamo solo le entità custom_emoji (non quelle di formattazione) per evitare
-      // l'errore Telegram "ends in the middle of a UTF-16 symbol" sui surrogate pair.
-      const parsedMsg = parseHtmlToEntities(messageText, emojiIdMap);
-      const customEmojiEntities = parsedMsg.entities.filter(e => e.type === 'custom_emoji');
+      // Testo piano + entità custom emoji (strip HTML via regex + indexOf nativo)
+      const plainText = htmlStrip(messageText);
+      const customEmojiEntities = findEmojiEntities(plainText, emojiIdMap);
       const hasCustomEmoji = customEmojiEntities.length > 0;
 
       let tgRes: Response;
@@ -1148,7 +1083,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         formData.append('chat_id', channel);
         formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
         if (hasCustomEmoji) {
-          const { text: ct, entities: ce } = capWithEntities(parsedMsg.text, customEmojiEntities, 1024);
+          const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
           formData.append('caption', ct);
           formData.append('caption_entities', JSON.stringify(ce));
         } else {
@@ -1160,7 +1095,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
       } else if (hasUrlImage) {
         const captionFields = hasCustomEmoji
-          ? (() => { const { text: ct, entities: ce } = capWithEntities(parsedMsg.text, customEmojiEntities, 1024); return { caption: ct, caption_entities: ce }; })()
+          ? (() => { const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024); return { caption: ct, caption_entities: ce }; })()
           : { caption: safeCaption(messageText, 1024), parse_mode: 'HTML' };
         tgRes = await fetch(`${tgBase}/sendPhoto`, {
           method: 'POST',
@@ -1175,7 +1110,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         });
       } else {
         const textFields = hasCustomEmoji
-          ? (() => { const { text: mt, entities: me } = capWithEntities(parsedMsg.text, customEmojiEntities, 4096); return { text: mt, entities: me }; })()
+          ? (() => { const { text: mt, entities: me } = capWithEntities(plainText, customEmojiEntities, 4096); return { text: mt, entities: me }; })()
           : { text: messageText.slice(0, 4096), parse_mode: 'HTML' };
         tgRes = await fetch(`${tgBase}/sendMessage`, {
           method: 'POST',
