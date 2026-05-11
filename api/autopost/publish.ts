@@ -60,6 +60,85 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// ── Telegram entities per custom emoji animate ────────────────────────────────
+interface TgEntity {
+  type: string; offset: number; length: number;
+  url?: string; custom_emoji_id?: string;
+}
+
+function parseHtmlToEntities(html: string): { text: string; entities: TgEntity[] } {
+  const entities: TgEntity[] = [];
+  let text = '';
+  let utf16Off = 0;
+  const stack: Array<{ type: string; offset: number; url?: string; emojiId?: string }> = [];
+  const HTML_ENT: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" };
+  const TYPE_MAP: Record<string, string> = {
+    b: 'bold', strong: 'bold', i: 'italic', em: 'italic',
+    u: 'underline', s: 'strikethrough', strike: 'strikethrough', del: 'strikethrough',
+    code: 'code', pre: 'pre', a: 'text_link',
+  };
+  let i = 0;
+  while (i < html.length) {
+    if (html[i] === '<') {
+      const end = html.indexOf('>', i);
+      if (end === -1) { text += html[i]; utf16Off++; i++; continue; }
+      const inner = html.slice(i + 1, end);
+      const isClose = inner.startsWith('/');
+      const tagStr  = isClose ? inner.slice(1).trim() : inner.trim();
+      const tagName = tagStr.split(/[\s>/]/)[0].toLowerCase();
+      if (isClose) {
+        for (let j = stack.length - 1; j >= 0; j--) {
+          if (stack[j].type === tagName) {
+            const e = stack.splice(j, 1)[0];
+            const len = utf16Off - e.offset;
+            if (len > 0) {
+              const etype = e.emojiId ? 'custom_emoji' : (TYPE_MAP[tagName] ?? null);
+              if (etype) {
+                const ent: TgEntity = { type: etype, offset: e.offset, length: len };
+                if (e.url)     ent.url              = e.url;
+                if (e.emojiId) ent.custom_emoji_id  = e.emojiId;
+                entities.push(ent);
+              }
+            }
+            break;
+          }
+        }
+      } else {
+        const urlMatch    = inner.match(/href="([^"]+)"/);
+        const emojiMatch  = inner.match(/data-emoji-id="([^"]+)"/);
+        stack.push({ type: tagName, offset: utf16Off, url: urlMatch?.[1], emojiId: emojiMatch?.[1] });
+      }
+      i = end + 1;
+    } else if (html[i] === '&') {
+      const semi = html.indexOf(';', i);
+      if (semi !== -1 && semi - i <= 6) {
+        const raw = html.slice(i, semi + 1);
+        if (HTML_ENT[raw]) { text += HTML_ENT[raw]; utf16Off++; i = semi + 1; continue; }
+      }
+      text += html[i]; utf16Off++; i++;
+    } else {
+      const cp = html.codePointAt(i)!;
+      const ch = String.fromCodePoint(cp);
+      text += ch;
+      utf16Off += cp > 0xFFFF ? 2 : 1;
+      i        += cp > 0xFFFF ? 2 : 1;
+    }
+  }
+  return { text, entities };
+}
+
+function capWithEntities(text: string, entities: TgEntity[], maxLen: number): { text: string; entities: TgEntity[] } {
+  if (text.length <= maxLen) return { text, entities };
+  const cut = maxLen - 1;
+  return {
+    text: text.slice(0, cut) + '…',
+    entities: entities
+      .filter(e => e.offset < cut)
+      .map(e => ({ ...e, length: Math.min(e.length, cut - e.offset) }))
+      .filter(e => e.length > 0),
+  };
+}
+
 // Genera immagine terminata server-side: grayscale + testo overlay (usa sharp)
 async function generateTerminataImageServer(
   imageUrl: string,
@@ -395,6 +474,21 @@ function buildMessage(
   const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;
   for (const [tagName, val] of Object.entries(tagOverrides)) {
     if (!(tagName in tags)) tags[tagName] = val || '';
+  }
+
+  // Emoji animate: formato "🔥|123456789" → <span data-emoji-id="...">🔥</span>
+  for (const key of Object.keys(tags)) {
+    if (key.startsWith('{emoji_')) {
+      const v = tags[key] as string;
+      const bar = v.indexOf('|');
+      if (bar > 0) {
+        const char = v.slice(0, bar);
+        const id   = v.slice(bar + 1);
+        if (char && /^\d+$/.test(id)) {
+          tags[key] = `<span data-emoji-id="${id}">${char}</span>`;
+        }
+      }
+    }
   }
 
   const SENTINEL = '\x01';
@@ -1009,6 +1103,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       // disable_notification: incluso SOLO quando true — omesso = Telegram notifica per default
       console.log(`[autopost] disable_notification: ${disableNotification} (sil=${silenzioso} disc=${post.discountPercent} threshold=${notifThreshold})`);
 
+      // Parsa HTML → testo piano + entità (necessario per custom emoji animate)
+      const parsedMsg = parseHtmlToEntities(messageText);
+      const hasCustomEmoji = parsedMsg.entities.some(e => e.type === 'custom_emoji');
+
       let tgRes: Response;
       if (hasGeneratedImage) {
         const base64Data = String(post.generatedImage).replace(/^data:image\/\w+;base64,/, '');
@@ -1016,32 +1114,42 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const formData = new FormData();
         formData.append('chat_id', channel);
         formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
-        formData.append('caption', safeCaption(messageText, 1024));
-        formData.append('parse_mode', 'HTML');
+        if (hasCustomEmoji) {
+          const { text: ct, entities: ce } = capWithEntities(parsedMsg.text, parsedMsg.entities, 1024);
+          formData.append('caption', ct);
+          formData.append('caption_entities', JSON.stringify(ce));
+        } else {
+          formData.append('caption', safeCaption(messageText, 1024));
+          formData.append('parse_mode', 'HTML');
+        }
         if (disableNotification) formData.append('disable_notification', 'true');
         if (replyMarkup) formData.append('reply_markup', JSON.stringify(replyMarkup));
         tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
       } else if (hasUrlImage) {
+        const captionFields = hasCustomEmoji
+          ? (() => { const { text: ct, entities: ce } = capWithEntities(parsedMsg.text, parsedMsg.entities, 1024); return { caption: ct, caption_entities: ce }; })()
+          : { caption: safeCaption(messageText, 1024), parse_mode: 'HTML' };
         tgRes = await fetch(`${tgBase}/sendPhoto`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: channel,
             photo: post.image,
-            caption: safeCaption(messageText, 1024),
-            parse_mode: 'HTML',
+            ...captionFields,
             ...(disableNotification ? { disable_notification: true } : {}),
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
       } else {
+        const textFields = hasCustomEmoji
+          ? (() => { const { text: mt, entities: me } = capWithEntities(parsedMsg.text, parsedMsg.entities, 4096); return { text: mt, entities: me }; })()
+          : { text: messageText.slice(0, 4096), parse_mode: 'HTML' };
         tgRes = await fetch(`${tgBase}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: channel,
-            text: messageText.slice(0, 4096),
-            parse_mode: 'HTML',
+            ...textFields,
             ...(disableNotification ? { disable_notification: true } : {}),
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),

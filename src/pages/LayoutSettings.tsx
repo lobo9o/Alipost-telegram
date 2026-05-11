@@ -58,6 +58,7 @@ function TagsSection() {
 
   const systemTags = tags.filter(t => SYSTEM_TAGS.has(t.name));
   const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name) && !t.name.startsWith('{emoji_'));
+  const emojiTags  = tags.filter(t => t.name.startsWith('{emoji_'));
 
   const renderTag = (t: Tag, isSystem: boolean) => (
     <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
@@ -106,14 +107,25 @@ function TagsSection() {
       )}
       {customTags.map(t => renderTag(t, false))}
 
+      {emojiTags.length > 0 && (
+        <>
+          <div className="stit" style={{ marginTop: 8 }}>TAG EMOJI ({emojiTags.length})</div>
+          <div style={{ margin: '0 16px 6px', padding: '7px 12px', background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
+            Per emoji <b>animate</b>: imposta il valore come <code>🔥|ID_NUMERICO</code> (es. <code>🔥|5368324170671202286</code>).<br />
+            Per trovare l&apos;ID: invia l&apos;emoji animata direttamente a @JsonDumpBot (non inoltrata) e copia il <code>custom_emoji_id</code> dall&apos;array entities.
+          </div>
+          {emojiTags.map(t => renderTag(t, false))}
+        </>
+      )}
+
       <div className="stit">AGGIUNGI TAG</div>
       <div style={{ padding: '0 16px 8px' }}>
         <input className="inp" value={newName} onChange={e => setNewName(e.target.value)}
-          placeholder="{nome_tag}" style={{ marginBottom: 7 }}
+          placeholder="{nome_tag} oppure {emoji_fuoco}" style={{ marginBottom: 7 }}
           onKeyDown={e => e.key === 'Enter' && addTag()} />
         <div className="irow">
           <input className="inp" value={newValue} onChange={e => setNewValue(e.target.value)}
-            placeholder="Valore mostrato nel post"
+            placeholder="Valore (o 🔥|ID per emoji animate)"
             onKeyDown={e => e.key === 'Enter' && addTag()} />
           <button className="btn bp" onClick={addTag} style={{ padding: '0 16px', flexShrink: 0 }}>+ Aggiungi</button>
         </div>
