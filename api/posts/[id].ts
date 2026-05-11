@@ -442,18 +442,23 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     if (hasCustomEmoji && tgData.ok && tgData.result?.message_id) {
       const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
+      // Verifica emoji ID via getCustomEmojiStickers
+      const emojiCheckRes = await fetch(`${tgBase}/getCustomEmojiStickers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ custom_emoji_ids: ce.map(e => e.custom_emoji_id) }),
+      });
+      const emojiCheck = await emojiCheckRes.json() as any;
+      console.log('[emoji-check]', JSON.stringify(emojiCheck.result?.map((s: any) => ({ id: s.custom_emoji_id, animated: s.is_animated, emoji: s.emoji }))));
+      const editBody = { chat_id: channel, message_id: tgData.result.message_id, caption: ct, caption_entities: ce };
+      console.log('[emoji-edit-body]', JSON.stringify(editBody));
       const editRes = await fetch(`${tgBase}/editMessageCaption`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: channel,
-          message_id: tgData.result.message_id,
-          caption: ct,
-          caption_entities: ce,
-        }),
+        body: JSON.stringify(editBody),
       });
       const editData = await editRes.json() as TgResult;
-      console.log('[emoji-edit]', editData.ok ? 'ok' : editData.description);
+      console.log('[emoji-edit]', editData.ok ? 'ok' : editData.description, 'entities:', JSON.stringify((editData as any).result?.caption_entities));
       if (editData.ok) tgData = editData;
     }
   } else {
