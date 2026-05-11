@@ -54,6 +54,17 @@ interface TgEntity {
   url?: string; custom_emoji_id?: string;
 }
 
+// Rimuove entità che terminano su un high surrogate (spezzerebbe la coppia UTF-16)
+function sanitizeEntities(text: string, entities: TgEntity[]): TgEntity[] {
+  return entities.map(e => {
+    if (e.offset >= text.length) return null;
+    let len = Math.min(e.length, text.length - e.offset);
+    // Se l'ultimo char è un high surrogate (0xD800-0xDBFF), taglia prima
+    if (len > 0 && (text.charCodeAt(e.offset + len - 1) & 0xFC00) === 0xD800) len--;
+    return len > 0 ? { ...e, length: len } : null;
+  }).filter(Boolean) as TgEntity[];
+}
+
 function parseHtmlToEntities(html: string, emojiIdMap?: Record<string, string>): { text: string; entities: TgEntity[] } {
   const entities: TgEntity[] = [];
   let text = '';
@@ -122,18 +133,20 @@ function parseHtmlToEntities(html: string, emojiIdMap?: Record<string, string>):
       i        += seqLen;
     }
   }
-  return { text, entities };
+  return { text, entities: sanitizeEntities(text, entities) };
 }
 
 function capWithEntities(text: string, entities: TgEntity[], maxLen: number): { text: string; entities: TgEntity[] } {
-  if (text.length <= maxLen) return { text, entities };
-  const cut = maxLen - 1;
+  if (text.length <= maxLen) return { text, entities: sanitizeEntities(text, entities) };
+  let cut = maxLen - 1;
+  // Se cut cade su un low surrogate (0xDC00-0xDFFF), arretra di 1 per non spezzare la coppia
+  if ((text.charCodeAt(cut) & 0xFC00) === 0xDC00) cut--;
+  const trimmed = text.slice(0, cut) + '…';
   return {
-    text: text.slice(0, cut) + '…',
-    entities: entities
+    text: trimmed,
+    entities: sanitizeEntities(trimmed, entities
       .filter(e => e.offset < cut)
-      .map(e => ({ ...e, length: Math.min(e.length, cut - e.offset) }))
-      .filter(e => e.length > 0),
+      .map(e => ({ ...e, length: Math.min(e.length, cut - e.offset) }))),
   };
 }
 
