@@ -449,7 +449,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         body: JSON.stringify({ custom_emoji_ids: ce.map(e => e.custom_emoji_id) }),
       });
       const emojiCheck = await emojiCheckRes.json() as any;
-      console.log('[emoji-check]', JSON.stringify(emojiCheck.result?.map((s: any) => ({ id: s.custom_emoji_id, animated: s.is_animated, emoji: s.emoji }))));
+      console.log('[emoji-check]', JSON.stringify(emojiCheck.result?.map((s: any) => ({ id: s.custom_emoji_id, animated: s.is_animated, emoji: s.emoji, premium: s.is_premium, set: s.set_name }))));
       // Test: aggiungi bold entity oltre a custom_emoji per verificare se Telegram processa almeno qualche entity
       const testEntities = [...ce, { type: 'bold', offset: ce[0] ? ce[0].offset + ce[0].length + 2 : 4, length: 5 }];
       const editBody = { chat_id: channel, message_id: tgData.result.message_id, caption: ct, caption_entities: testEntities };
