@@ -1393,6 +1393,8 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
   const [err, setErr]             = useState('');
   const [manualChar, setManualChar] = useState('');
   const [manualId, setManualId]   = useState('');
+  const [packName, setPackName]   = useState('');
+  const [importingPack, setImportingPack] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -1423,6 +1425,18 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
       await load();
       setManualChar(''); setManualId(''); setMsg('✅ Emoji aggiunta');
     } catch (e: any) { setErr(e.message); }
+  };
+
+  const importFromPack = async () => {
+    if (!packName.trim()) return;
+    setImportingPack(true); setMsg(''); setErr('');
+    try {
+      const d = await emojiIdsApi.fromPack(packName.trim());
+      setEmoji(d.emoji);
+      setMsg(`✅ Importate ${d.imported} emoji custom da "${d.pack_title}" (${d.total_in_pack} sticker totali)`);
+      if (d.imported === 0) setErr('Nessuna emoji custom trovata in questo pack. Verifica che il pack contenga sticker di tipo "custom_emoji".');
+    } catch (e: any) { setErr(e.message ?? 'Errore'); }
+    finally { setImportingPack(false); }
   };
 
   const copy = (char: string) => {
@@ -1464,6 +1478,20 @@ export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
           <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }} onClick={() => remove(e.emoji_char)}>×</button>
         </div>
       ))}
+
+      <div className="stit" style={{ marginTop: 8 }}>IMPORTA DA STICKER PACK</div>
+      <div style={{ padding: '0 16px 8px' }}>
+        <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 6, lineHeight: 1.5 }}>
+          Inserisci il nome di un pack Telegram con emoji custom (es. <b>AnimatedEmojis</b>). Il bot importa automaticamente gli ID usabili. I pack premium/di terze parti potrebbero non funzionare.
+        </div>
+        <div className="irow">
+          <input className="inp" value={packName} onChange={e => setPackName(e.target.value)}
+            placeholder="Nome pack (es. AnimatedEmojis)" />
+          <button className="btn bp bsm" onClick={importFromPack} disabled={importingPack || !packName.trim()} style={{ flexShrink: 0 }}>
+            {importingPack ? '⏳' : '📦 Import'}
+          </button>
+        </div>
+      </div>
 
       <div className="stit" style={{ marginTop: 8 }}>AGGIUNTA MANUALE</div>
       <div style={{ padding: '0 16px 8px' }}>

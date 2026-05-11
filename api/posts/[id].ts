@@ -442,25 +442,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     if (hasCustomEmoji && tgData.ok && tgData.result?.message_id) {
       const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
-      // Verifica emoji ID via getCustomEmojiStickers
-      const emojiCheckRes = await fetch(`${tgBase}/getCustomEmojiStickers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ custom_emoji_ids: ce.map(e => e.custom_emoji_id) }),
-      });
-      const emojiCheck = await emojiCheckRes.json() as any;
-      console.log('[emoji-check]', JSON.stringify(emojiCheck.result?.map((s: any) => ({ id: s.custom_emoji_id, animated: s.is_animated, emoji: s.emoji, premium: s.is_premium, set: s.set_name }))));
-      // Test: aggiungi bold entity oltre a custom_emoji per verificare se Telegram processa almeno qualche entity
-      const testEntities = [...ce, { type: 'bold', offset: ce[0] ? ce[0].offset + ce[0].length + 2 : 4, length: 5 }];
-      const editBody = { chat_id: channel, message_id: tgData.result.message_id, caption: ct, caption_entities: testEntities };
-      console.log('[emoji-edit-body]', JSON.stringify(editBody));
+      const editBody = { chat_id: channel, message_id: tgData.result.message_id, caption: ct, caption_entities: ce };
       const editRes = await fetch(`${tgBase}/editMessageCaption`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editBody),
       });
       const editData = await editRes.json() as TgResult;
-      console.log('[emoji-edit]', editData.ok ? 'ok' : editData.description, 'entities:', JSON.stringify((editData as any).result?.caption_entities));
+      console.log('[emoji-edit]', editData.ok ? 'ok' : editData.description);
       if (editData.ok) tgData = editData;
     }
   } else {
@@ -497,7 +486,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     tgData = await tgRes.json() as TgResult;
     console.log('[publish]', channel, hasImage ? 'photo' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
   }
-  if (hasCustomEmoji) console.log('[emoji-result] entities in response:', JSON.stringify(tgData.result?.caption_entities ?? tgData.result?.entities ?? []));
 
   if (!tgData.ok) {
     res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore sconosciuto'}` });
