@@ -467,8 +467,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
   }
 
-  const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
+  const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number }; caption_entities?: any[]; entities?: any[] }; description?: string };
   console.log('[publish]', channel, hasImage ? 'photo' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
+  if (hasCustomEmoji) console.log('[emoji-result] entities in response:', JSON.stringify(tgData.result?.caption_entities ?? tgData.result?.entities ?? []));
 
   if (!tgData.ok) {
     res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore sconosciuto'}` });
