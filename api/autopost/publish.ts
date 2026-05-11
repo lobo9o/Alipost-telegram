@@ -1085,7 +1085,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const hasCustomEmoji = customEmojiEntities.length > 0;
       console.log(`[emoji] map=${Object.keys(emojiIdMap).length} entities=${customEmojiEntities.length} hasCustomEmoji=${hasCustomEmoji} ids=${JSON.stringify(customEmojiEntities.map(e => e.custom_emoji_id))}`);
 
-      let tgRes: Response;
+      type TgResult = { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
+      let tgData: TgResult;
+
       if (hasGeneratedImage) {
         const base64Data = String(post.generatedImage).replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
@@ -1093,21 +1095,39 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         formData.append('chat_id', channel);
         formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
         if (hasCustomEmoji) {
-          const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
+          // Telegram ignora caption_entities in FormData — plain text ora, entities via editMessageCaption dopo
+          const { text: ct } = capWithEntities(plainText, customEmojiEntities, 1024);
           formData.append('caption', ct);
-          formData.append('caption_entities', JSON.stringify(ce));
         } else {
           formData.append('caption', safeCaption(messageText, 1024));
           formData.append('parse_mode', 'HTML');
         }
         if (disableNotification) formData.append('disable_notification', 'true');
         if (replyMarkup) formData.append('reply_markup', JSON.stringify(replyMarkup));
-        tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
+        const step1Res = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
+        tgData = await step1Res.json() as TgResult;
+
+        if (hasCustomEmoji && tgData.ok && tgData.result?.message_id) {
+          const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
+          const editRes = await fetch(`${tgBase}/editMessageCaption`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: channel,
+              message_id: tgData.result.message_id,
+              caption: ct,
+              caption_entities: ce,
+            }),
+          });
+          const editData = await editRes.json() as TgResult;
+          console.log('[emoji-edit]', editData.ok ? 'ok' : editData.description);
+          if (editData.ok) tgData = editData;
+        }
       } else if (hasUrlImage) {
         const captionFields = hasCustomEmoji
           ? (() => { const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024); return { caption: ct, caption_entities: ce }; })()
           : { caption: safeCaption(messageText, 1024), parse_mode: 'HTML' };
-        tgRes = await fetch(`${tgBase}/sendPhoto`, {
+        const r = await fetch(`${tgBase}/sendPhoto`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1118,11 +1138,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
+        tgData = await r.json() as TgResult;
       } else {
         const textFields = hasCustomEmoji
           ? (() => { const { text: mt, entities: me } = capWithEntities(plainText, customEmojiEntities, 4096); return { text: mt, entities: me }; })()
           : { text: messageText.slice(0, 4096), parse_mode: 'HTML' };
-        tgRes = await fetch(`${tgBase}/sendMessage`, {
+        const r = await fetch(`${tgBase}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1132,13 +1153,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
+        tgData = await r.json() as TgResult;
       }
-
-      const tgData = await tgRes.json() as {
-        ok: boolean;
-        result?: { message_id: number; chat?: { id: number } };
-        description?: string;
-      };
 
       if (!tgData.ok) throw new Error(`Telegram: ${tgData.description ?? 'errore sconosciuto'}`);
 

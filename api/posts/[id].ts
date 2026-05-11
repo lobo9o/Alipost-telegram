@@ -417,6 +417,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const hasCustomEmoji = customEmojiEntities.length > 0;
   console.log(`[emoji] map=${Object.keys(emojiIdMap).length} entities=${customEmojiEntities.length} hasCustomEmoji=${hasCustomEmoji} ids=${JSON.stringify(customEmojiEntities.map(e => e.custom_emoji_id))}`);
 
+  type TgResult = { ok: boolean; result?: { message_id: number; chat?: { id: number }; caption_entities?: any[]; entities?: any[] }; description?: string };
+  let tgData: TgResult;
+
   if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {
     const base64 = generatedImage.replace(/^data:image\/\w+;base64,/, '');
     const imgBuffer = Buffer.from(base64, 'base64');
@@ -424,16 +427,35 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     form.append('chat_id', channel);
     form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'post.jpg');
     if (hasCustomEmoji) {
-      const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
+      // Telegram ignora caption_entities in FormData — plain text ora, entities via editMessageCaption dopo
+      const { text: ct } = capWithEntities(plainText, customEmojiEntities, 1024);
       form.append('caption', ct);
-      form.append('caption_entities', JSON.stringify(ce));
     } else {
       form.append('caption', safeCaption(messageText, 1024));
       form.append('parse_mode', 'HTML');
     }
     if (disableNotification) form.append('disable_notification', 'true');
     if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
-    tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
+    const step1Res = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
+    tgData = await step1Res.json() as TgResult;
+    console.log('[publish]', channel, 'photo(upload)', step1Res.status, tgData.ok ? 'ok' : tgData.description);
+
+    if (hasCustomEmoji && tgData.ok && tgData.result?.message_id) {
+      const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
+      const editRes = await fetch(`${tgBase}/editMessageCaption`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: channel,
+          message_id: tgData.result.message_id,
+          caption: ct,
+          caption_entities: ce,
+        }),
+      });
+      const editData = await editRes.json() as TgResult;
+      console.log('[emoji-edit]', editData.ok ? 'ok' : editData.description);
+      if (editData.ok) tgData = editData;
+    }
   } else {
     if (hasImage) {
       const captionFields = hasCustomEmoji
@@ -465,10 +487,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         }),
       });
     }
+    tgData = await tgRes.json() as TgResult;
+    console.log('[publish]', channel, hasImage ? 'photo' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
   }
-
-  const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number }; caption_entities?: any[]; entities?: any[] }; description?: string };
-  console.log('[publish]', channel, hasImage ? 'photo' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
   if (hasCustomEmoji) console.log('[emoji-result] entities in response:', JSON.stringify(tgData.result?.caption_entities ?? tgData.result?.entities ?? []));
 
   if (!tgData.ok) {
