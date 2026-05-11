@@ -1134,8 +1134,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       console.log(`[autopost] disable_notification: ${disableNotification} (sil=${silenzioso} disc=${post.discountPercent} threshold=${notifThreshold})`);
 
       // Parsa HTML → testo piano + entità (necessario per custom emoji animate)
+      // Usiamo solo le entità custom_emoji (non quelle di formattazione) per evitare
+      // l'errore Telegram "ends in the middle of a UTF-16 symbol" sui surrogate pair.
       const parsedMsg = parseHtmlToEntities(messageText, emojiIdMap);
-      const hasCustomEmoji = parsedMsg.entities.some(e => e.type === 'custom_emoji');
+      const customEmojiEntities = parsedMsg.entities.filter(e => e.type === 'custom_emoji');
+      const hasCustomEmoji = customEmojiEntities.length > 0;
 
       let tgRes: Response;
       if (hasGeneratedImage) {
@@ -1145,7 +1148,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         formData.append('chat_id', channel);
         formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
         if (hasCustomEmoji) {
-          const { text: ct, entities: ce } = capWithEntities(parsedMsg.text, parsedMsg.entities, 1024);
+          const { text: ct, entities: ce } = capWithEntities(parsedMsg.text, customEmojiEntities, 1024);
           formData.append('caption', ct);
           formData.append('caption_entities', JSON.stringify(ce));
         } else {
@@ -1157,7 +1160,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
       } else if (hasUrlImage) {
         const captionFields = hasCustomEmoji
-          ? (() => { const { text: ct, entities: ce } = capWithEntities(parsedMsg.text, parsedMsg.entities, 1024); return { caption: ct, caption_entities: ce }; })()
+          ? (() => { const { text: ct, entities: ce } = capWithEntities(parsedMsg.text, customEmojiEntities, 1024); return { caption: ct, caption_entities: ce }; })()
           : { caption: safeCaption(messageText, 1024), parse_mode: 'HTML' };
         tgRes = await fetch(`${tgBase}/sendPhoto`, {
           method: 'POST',
@@ -1172,7 +1175,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         });
       } else {
         const textFields = hasCustomEmoji
-          ? (() => { const { text: mt, entities: me } = capWithEntities(parsedMsg.text, parsedMsg.entities, 4096); return { text: mt, entities: me }; })()
+          ? (() => { const { text: mt, entities: me } = capWithEntities(parsedMsg.text, customEmojiEntities, 4096); return { text: mt, entities: me }; })()
           : { text: messageText.slice(0, 4096), parse_mode: 'HTML' };
         tgRes = await fetch(`${tgBase}/sendMessage`, {
           method: 'POST',
