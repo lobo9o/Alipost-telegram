@@ -415,7 +415,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const plainText = htmlStrip(messageText);
   const customEmojiEntities = findEmojiEntities(plainText, emojiIdMap);
   const hasCustomEmoji = customEmojiEntities.length > 0;
-  console.log(`[emoji] map=${Object.keys(emojiIdMap).length} entities=${customEmojiEntities.length} hasCustomEmoji=${hasCustomEmoji}`);
+  console.log(`[emoji] map=${Object.keys(emojiIdMap).length} entities=${customEmojiEntities.length} hasCustomEmoji=${hasCustomEmoji} ids=${JSON.stringify(customEmojiEntities.map(e => e.custom_emoji_id))}`);
 
   if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {
     const base64 = generatedImage.replace(/^data:image\/\w+;base64,/, '');
