@@ -54,7 +54,7 @@ interface TgEntity {
   url?: string; custom_emoji_id?: string;
 }
 
-function parseHtmlToEntities(html: string): { text: string; entities: TgEntity[] } {
+function parseHtmlToEntities(html: string, emojiIdMap?: Record<string, string>): { text: string; entities: TgEntity[] } {
   const entities: TgEntity[] = [];
   let text = '';
   let utf16Off = 0;
@@ -107,9 +107,19 @@ function parseHtmlToEntities(html: string): { text: string; entities: TgEntity[]
     } else {
       const cp = html.codePointAt(i)!;
       const ch = String.fromCodePoint(cp);
-      text += ch;
-      utf16Off += cp > 0xFFFF ? 2 : 1;
-      i        += cp > 0xFFFF ? 2 : 1;
+      const isSuppl = cp > 0xFFFF;
+      const chLen = isSuppl ? 2 : 1;
+      const nextCp = html.codePointAt(i + chLen);
+      const hasVS = nextCp === 0xFE0F || nextCp === 0xFE0E;
+      const fullSeq = hasVS ? ch + String.fromCodePoint(nextCp!) : ch;
+      const seqLen = chLen + (hasVS ? 1 : 0);
+      const emojiId = emojiIdMap ? (emojiIdMap[fullSeq] ?? emojiIdMap[ch]) : undefined;
+      if (emojiId) {
+        entities.push({ type: 'custom_emoji', offset: utf16Off, length: seqLen, custom_emoji_id: emojiId });
+      }
+      text += fullSeq;
+      utf16Off += seqLen;
+      i        += seqLen;
     }
   }
   return { text, entities };
@@ -173,20 +183,6 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     if (!(tagName in tags)) tags[tagName] = val || '';
   }
 
-  // Emoji animate: formato "🔥|123456789" → <span data-emoji-id="...">🔥</span>
-  for (const key of Object.keys(tags)) {
-    if (key.startsWith('{emoji_')) {
-      const v = tags[key] as string;
-      const bar = v.indexOf('|');
-      if (bar > 0) {
-        const char = v.slice(0, bar);
-        const id   = v.slice(bar + 1);
-        if (char && /^\d+$/.test(id)) {
-          tags[key] = `<span data-emoji-id="${id}">${char}</span>`;
-        }
-      }
-    }
-  }
 
   const SENTINEL = '\x01';
   const knownTagNames = new Set(Object.keys(tags));
@@ -426,11 +422,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   let tgRes: Response;
   const hasImage = post.image && post.image !== 'placeholder.jpg' && post.image.startsWith('http');
 
+  // Carica mappa emoji animate per questo utente
+  const emojiRows = await sql`SELECT emoji_char, custom_emoji_id FROM emoji_ids WHERE user_id = ${userId}`.catch(() => []);
+  const emojiIdMap: Record<string, string> = {};
+  for (const er of emojiRows) emojiIdMap[er.emoji_char as string] = er.custom_emoji_id as string;
+
   // disable_notification: lo includiamo SOLO quando true (silenzioso).
   console.log('[publish] disable_notification final:', disableNotification);
 
   // Parsa HTML → testo piano + entità (necessario per custom emoji animate)
-  const parsedMsg = parseHtmlToEntities(messageText);
+  const parsedMsg = parseHtmlToEntities(messageText, emojiIdMap);
   const hasCustomEmoji = parsedMsg.entities.some(e => e.type === 'custom_emoji');
 
   if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {

@@ -66,7 +66,10 @@ interface TgEntity {
   url?: string; custom_emoji_id?: string;
 }
 
-function parseHtmlToEntities(html: string): { text: string; entities: TgEntity[] } {
+function parseHtmlToEntities(
+  html: string,
+  emojiIdMap?: Record<string, string>,
+): { text: string; entities: TgEntity[] } {
   const entities: TgEntity[] = [];
   let text = '';
   let utf16Off = 0;
@@ -95,8 +98,8 @@ function parseHtmlToEntities(html: string): { text: string; entities: TgEntity[]
               const etype = e.emojiId ? 'custom_emoji' : (TYPE_MAP[tagName] ?? null);
               if (etype) {
                 const ent: TgEntity = { type: etype, offset: e.offset, length: len };
-                if (e.url)     ent.url              = e.url;
-                if (e.emojiId) ent.custom_emoji_id  = e.emojiId;
+                if (e.url)     ent.url             = e.url;
+                if (e.emojiId) ent.custom_emoji_id = e.emojiId;
                 entities.push(ent);
               }
             }
@@ -104,8 +107,8 @@ function parseHtmlToEntities(html: string): { text: string; entities: TgEntity[]
           }
         }
       } else {
-        const urlMatch    = inner.match(/href="([^"]+)"/);
-        const emojiMatch  = inner.match(/data-emoji-id="([^"]+)"/);
+        const urlMatch   = inner.match(/href="([^"]+)"/);
+        const emojiMatch = inner.match(/data-emoji-id="([^"]+)"/);
         stack.push({ type: tagName, offset: utf16Off, url: urlMatch?.[1], emojiId: emojiMatch?.[1] });
       }
       i = end + 1;
@@ -119,9 +122,21 @@ function parseHtmlToEntities(html: string): { text: string; entities: TgEntity[]
     } else {
       const cp = html.codePointAt(i)!;
       const ch = String.fromCodePoint(cp);
-      text += ch;
-      utf16Off += cp > 0xFFFF ? 2 : 1;
-      i        += cp > 0xFFFF ? 2 : 1;
+      const isSuppl = cp > 0xFFFF;
+      const chLen = isSuppl ? 2 : 1;
+      // Controlla se c'è un variation selector (U+FE0F/FE0E) dopo questo carattere
+      const nextCp = html.codePointAt(i + chLen);
+      const hasVS = nextCp === 0xFE0F || nextCp === 0xFE0E;
+      const fullSeq = hasVS ? ch + String.fromCodePoint(nextCp!) : ch;
+      const seqLen = chLen + (hasVS ? 1 : 0);
+      // Riconosci emoji animate registrate
+      const emojiId = emojiIdMap ? (emojiIdMap[fullSeq] ?? emojiIdMap[ch]) : undefined;
+      if (emojiId) {
+        entities.push({ type: 'custom_emoji', offset: utf16Off, length: seqLen, custom_emoji_id: emojiId });
+      }
+      text += fullSeq;
+      utf16Off += seqLen;
+      i        += seqLen;
     }
   }
   return { text, entities };
@@ -474,21 +489,6 @@ function buildMessage(
   const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;
   for (const [tagName, val] of Object.entries(tagOverrides)) {
     if (!(tagName in tags)) tags[tagName] = val || '';
-  }
-
-  // Emoji animate: formato "🔥|123456789" → <span data-emoji-id="...">🔥</span>
-  for (const key of Object.keys(tags)) {
-    if (key.startsWith('{emoji_')) {
-      const v = tags[key] as string;
-      const bar = v.indexOf('|');
-      if (bar > 0) {
-        const char = v.slice(0, bar);
-        const id   = v.slice(bar + 1);
-        if (char && /^\d+$/.test(id)) {
-          tags[key] = `<span data-emoji-id="${id}">${char}</span>`;
-        }
-      }
-    }
   }
 
   const SENTINEL = '\x01';
@@ -1028,6 +1028,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const emojiTagsInDb = Object.keys(customTags).filter(k => k.startsWith('{emoji_'));
       console.log(`[autopost] userId=${userId} totalTags=${tagRows.length} emojiTags(${emojiTagsInDb.length}):`, emojiTagsInDb);
 
+      // Carica mappa emoji animate (char → custom_emoji_id)
+      const emojiRows = await sql`SELECT emoji_char, custom_emoji_id FROM emoji_ids WHERE user_id = ${userId}`.catch(() => []);
+      const emojiIdMap: Record<string, string> = {};
+      for (const er of emojiRows) emojiIdMap[er.emoji_char as string] = er.custom_emoji_id as string;
+
       // Costruisce URL affiliato (primo post)
       let affiliateUrl: string = post.sourceUrl ?? '';
       if (!affiliateUrl && post.platform === 'amazon' && post.productId) {
@@ -1104,7 +1109,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       console.log(`[autopost] disable_notification: ${disableNotification} (sil=${silenzioso} disc=${post.discountPercent} threshold=${notifThreshold})`);
 
       // Parsa HTML → testo piano + entità (necessario per custom emoji animate)
-      const parsedMsg = parseHtmlToEntities(messageText);
+      const parsedMsg = parseHtmlToEntities(messageText, emojiIdMap);
       const hasCustomEmoji = parsedMsg.entities.some(e => e.type === 'custom_emoji');
 
       let tgRes: Response;

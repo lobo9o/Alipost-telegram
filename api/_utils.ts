@@ -142,6 +142,14 @@ async function runMigration() {
   // Keyword brand di provenienza per deals_cache
   await sql`ALTER TABLE deals_cache ADD COLUMN IF NOT EXISTS brand_keyword TEXT DEFAULT ''`;
 
+  await sql`CREATE TABLE IF NOT EXISTS emoji_ids (
+    user_id          TEXT NOT NULL,
+    emoji_char       TEXT NOT NULL,
+    custom_emoji_id  TEXT NOT NULL,
+    created_at       TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    PRIMARY KEY (user_id, emoji_char)
+  )`;
+
   _migrated = true;
   console.log('[DB] migrazione completata');
 }

@@ -232,3 +232,12 @@ export const dealsCacheApi = {
   refresh: () => req<{ ok: boolean; message: string }>('POST', '/api/deals-cache'),
   clearAmazon: () => req<{ ok: boolean }>('DELETE', '/api/deals-cache?platform=amazon'),
 };
+
+
+export interface EmojiEntry { emoji_char: string; custom_emoji_id: string; }
+export const emojiIdsApi = {
+  list: () => req<{ emoji: EmojiEntry[] }>('GET', '/api/emoji-ids'),
+  discover: () => req<{ discovered: number; emoji: EmojiEntry[] }>('POST', '/api/emoji-ids', { action: 'discover' }),
+  add: (emoji_char: string, custom_emoji_id: string) => req<{ ok: boolean }>('POST', '/api/emoji-ids', { emoji_char, custom_emoji_id }),
+  remove: (emoji_char: string) => req<{ ok: boolean }>('DELETE', '/api/emoji-ids', { emoji_char }),
+};

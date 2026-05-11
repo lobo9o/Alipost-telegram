@@ -2,7 +2,7 @@ export type Platform = 'amazon' | 'aliexpress';
 export type PostType = 'single' | 'multi';
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'error';
 export type LayoutType = 'normal' | 'historical_low' | 'multi' | 'aliexpress' | 'aliexpress_historical_low' | 'amazon';
-export type NavPage = 'dash' | 'search' | 'newpost' | 'queue' | 'published' | 'layout' | 'settings';
+export type NavPage = 'dash' | 'search' | 'newpost' | 'queue' | 'published' | 'layout' | 'settings' | 'emoji';
 
 export interface LinkItem { id: string; url: string; platform: Platform; }
 
