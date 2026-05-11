@@ -66,7 +66,7 @@ function sanitizeEntities(text: string, entities: TgEntity[]): TgEntity[] {
 }
 
 function parseHtmlToEntities(html: string, emojiIdMap?: Record<string, string>): { text: string; entities: TgEntity[] } {
-  const entities: TgEntity[] = [];
+  const fmtEntities: TgEntity[] = [];
   let text = '';
   let utf16Off = 0;
   const stack: Array<{ type: string; offset: number; url?: string; emojiId?: string }> = [];
@@ -96,7 +96,7 @@ function parseHtmlToEntities(html: string, emojiIdMap?: Record<string, string>):
                 const ent: TgEntity = { type: etype, offset: e.offset, length: len };
                 if (e.url)     ent.url             = e.url;
                 if (e.emojiId) ent.custom_emoji_id = e.emojiId;
-                entities.push(ent);
+                fmtEntities.push(ent);
               }
             }
             break;
@@ -117,23 +117,40 @@ function parseHtmlToEntities(html: string, emojiIdMap?: Record<string, string>):
       text += html[i]; utf16Off++; i++;
     } else {
       const cp = html.codePointAt(i)!;
-      const ch = String.fromCodePoint(cp);
       const isSuppl = cp > 0xFFFF;
       const chLen = isSuppl ? 2 : 1;
       const nextCp = html.codePointAt(i + chLen);
       const hasVS = nextCp === 0xFE0F || nextCp === 0xFE0E;
-      const fullSeq = hasVS ? ch + String.fromCodePoint(nextCp!) : ch;
       const seqLen = chLen + (hasVS ? 1 : 0);
-      const emojiId = emojiIdMap ? (emojiIdMap[fullSeq] ?? emojiIdMap[ch]) : undefined;
-      if (emojiId) {
-        entities.push({ type: 'custom_emoji', offset: utf16Off, length: seqLen, custom_emoji_id: emojiId });
-      }
-      text += fullSeq;
+      text += html.slice(i, i + seqLen);
       utf16Off += seqLen;
       i        += seqLen;
     }
   }
-  return { text, entities: sanitizeEntities(text, entities) };
+
+  // Scansione separata del testo finale per trovare emoji animate — offset sempre corretti
+  const emojiEntities: TgEntity[] = [];
+  if (emojiIdMap) {
+    const keys = Object.keys(emojiIdMap).sort((a, b) => b.length - a.length);
+    let ti = 0;
+    while (ti < text.length) {
+      let matched = false;
+      for (const key of keys) {
+        if (key.length > 0 && ti + key.length <= text.length && text.slice(ti, ti + key.length) === key) {
+          emojiEntities.push({ type: 'custom_emoji', offset: ti, length: key.length, custom_emoji_id: emojiIdMap[key] });
+          ti += key.length;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        const code = text.charCodeAt(ti);
+        ti += (code >= 0xD800 && code <= 0xDBFF) ? 2 : 1;
+      }
+    }
+  }
+
+  return { text, entities: sanitizeEntities(text, [...fmtEntities, ...emojiEntities]) };
 }
 
 function capWithEntities(text: string, entities: TgEntity[], maxLen: number): { text: string; entities: TgEntity[] } {
