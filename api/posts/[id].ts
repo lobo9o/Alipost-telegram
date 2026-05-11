@@ -463,6 +463,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // Parsa HTML → testo piano + entità (necessario per custom emoji animate)
   const parsedMsg = parseHtmlToEntities(messageText, emojiIdMap);
   const hasCustomEmoji = parsedMsg.entities.some(e => e.type === 'custom_emoji');
+  console.log('[tg-ent] emojiIdMap keys:', Object.keys(emojiIdMap).map(k => `${[...k].map(c=>c.codePointAt(0)?.toString(16)).join('+')} len=${k.length}`));
+  console.log('[tg-ent] text[150..165]:', [...parsedMsg.text.slice(150,165)].map(c=>c.codePointAt(0)?.toString(16)));
+  console.log('[tg-ent] entities:', JSON.stringify(parsedMsg.entities));
 
   if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {
     const base64 = generatedImage.replace(/^data:image\/\w+;base64,/, '');
