@@ -397,7 +397,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // Carica mappa emoji animate per questo utente
   const emojiRows = await sql`SELECT emoji_char, custom_emoji_id FROM emoji_ids WHERE user_id = ${userId}`.catch(() => []);
   const emojiIdMap: Record<string, string> = {};
-  for (const er of emojiRows) emojiIdMap[er.emoji_char as string] = er.custom_emoji_id as string;
+  for (const er of emojiRows) {
+    const ch = er.emoji_char as string;
+    const id = er.custom_emoji_id as string;
+    emojiIdMap[ch] = id;
+    // Aggiunge variante senza variation selector per compatibilità (es. 🚀️ → 🚀)
+    if (ch.endsWith('️') || ch.endsWith('︎')) {
+      const noVS = ch.slice(0, ch.length - 1);
+      if (!emojiIdMap[noVS]) emojiIdMap[noVS] = id;
+    }
+  }
 
   // disable_notification: lo includiamo SOLO quando true (silenzioso).
   console.log('[publish] disable_notification final:', disableNotification);
@@ -406,6 +415,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const plainText = htmlStrip(messageText);
   const customEmojiEntities = findEmojiEntities(plainText, emojiIdMap);
   const hasCustomEmoji = customEmojiEntities.length > 0;
+  console.log(`[emoji] map=${Object.keys(emojiIdMap).length} entities=${customEmojiEntities.length} hasCustomEmoji=${hasCustomEmoji}`);
 
   if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {
     const base64 = generatedImage.replace(/^data:image\/\w+;base64,/, '');
