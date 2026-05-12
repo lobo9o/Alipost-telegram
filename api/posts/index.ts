@@ -138,7 +138,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
-    '{boxcoupon}':       post.coupon || '',
+    '{boxcoupon}':       (post as any).boxcoupon || '',
     '{checkout}':        '',
   };
 

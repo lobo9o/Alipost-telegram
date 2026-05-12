@@ -150,6 +150,13 @@ async function runMigration() {
     PRIMARY KEY (user_id, emoji_char)
   )`;
 
+  // Seed tag di sistema {boxcoupon} per tutti gli utenti (user_id='legacy')
+  await sql`
+    INSERT INTO tags (id, user_id, name, value)
+    VALUES ('sys_boxcoupon', 'legacy', '{boxcoupon}', 'Abilita il coupon prima di acquistare')
+    ON CONFLICT DO NOTHING
+  `.catch(() => {});
+
   _migrated = true;
   console.log('[DB] migrazione completata');
 }

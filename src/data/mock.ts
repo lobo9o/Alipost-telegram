@@ -44,23 +44,11 @@ export const INITIAL_TAGS: Tag[] = [
 export const INITIAL_LAYOUTS: TextLayout[] = [
   {
     id: 'l1', nome: 'Standard', tipo: 'normal',
-    contenuto: '🔥 {titolo}\n\n💰 {prezzo} <s>{oldprezzo}</s>\n🏷️ {perc} di sconto\n{_ ⭐ {stelle}/5 ({recensioni} rec.) _}\n\n{custom}\n\n👇 Link nel pulsante',
-  },
-  {
-    id: 'l2', nome: 'Minimo Storico', tipo: 'historical_low',
-    contenuto: '🏆 MINIMO STORICO!\n\n📌 {titolo}\n\n💰 {prezzo}\n📉 Minimo di sempre!\n{_ ⭐ {stelle}/5 _}\n\n{custom}',
+    contenuto: '{_<b>{minimo_storico}</b>\n_}\n{_<b>{custom}</b>\n_}\n<b>{titoloshort}</b>\n\n🔶#Amazon \n💶 Lo paghi <b>{prezzo}{valuta}</b> Invece di <s>{oldprezzo}{valuta}</s>\n{_\n🎟 <b>Coupon:</b> {coupon}_}{_\n<i>✂️ {boxcoupon}</i>_}{_\n<i>🛒 {checkout}</i>_}\n\n👉 <a href="{link}">APRI SU AMAZON</a>',
   },
   {
     id: 'l3', nome: 'Post Multiplo', tipo: 'multi',
-    contenuto: '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">APRI SU AMAZON</a>\n➿➿➿➿➿➿➿➿➿➿➿➿',
-  },
-  {
-    id: 'l4', nome: 'AliExpress', tipo: 'aliexpress',
-    contenuto: '🛒 {titolo}\n\n💰 {prezzo} <s>{oldprezzo}</s>\n🏷️ {perc} di sconto\n\n🚀 Spedizione gratuita\n\n{custom}\n\n👇 Link nel pulsante',
-  },
-  {
-    id: 'l5', nome: 'Min. Storico AliExpress', tipo: 'aliexpress_historical_low',
-    contenuto: '🏆 MINIMO STORICO!\n\n🛒 {titolo}\n\n💰 {prezzo}\n📉 Minimo di sempre su AliExpress!\n\n🚀 Spedizione gratuita\n\n{custom}',
+    contenuto: '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n🟥#{store}\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">ACQUISTA ORA</a>\n➿➿➿➿➿➿➿➿➿➿➿➿',
   },
 ];
 

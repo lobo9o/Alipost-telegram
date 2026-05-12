@@ -284,19 +284,6 @@ async function generateTemplateImageServer(
       } catch (e: any) { console.warn('[tpl] badge:', e.message); }
     }
 
-    // Badge minimo storico — usa template.badge.src (stessa logica del browser)
-    if (isHistoricalLow && template.badge?.enabled && template.badge?.src) {
-      try {
-        const src = String(template.badge.src);
-        const badgeBuf = src.startsWith('http') ? (await fetchImgBuf(src) ?? null) : null;
-        const badgeImg = await loadImage(badgeBuf ?? src);
-        const el = template.badge;
-        const w = ((el.size ?? 30) / 100) * SIZE;
-        const h = (badgeImg.height / badgeImg.width) * w;
-        ctx.drawImage(badgeImg, ((el.x ?? 0) / 100) * SIZE, ((el.y ?? 0) / 100) * SIZE, w, h);
-      } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
-    }
-
     // Testi — usa ctx.textAlign per rispettare l'ancora indipendentemente dal font
     const drawTextEl = (el: any, text: string) => {
       if (!el?.enabled || !text?.trim()) return;
@@ -331,6 +318,19 @@ async function generateTemplateImageServer(
     drawTextEl(template.prezzoPrecedente, priceData.prezzoPrecedente);
     drawTextEl(template.sconto,           priceData.sconto);
     drawTextEl(template.testoCustom,      template.testoCustom?.text ?? '');
+
+    // Badge minimo storico — ULTIMO livello, sopra tutto (stessa logica del browser)
+    if (isHistoricalLow && template.badge?.enabled && template.badge?.src) {
+      try {
+        const src = String(template.badge.src);
+        const badgeBuf = src.startsWith('http') ? (await fetchImgBuf(src) ?? null) : null;
+        const badgeImg = await loadImage(badgeBuf ?? src);
+        const el = template.badge;
+        const w = ((el.size ?? 30) / 100) * SIZE;
+        const h = (badgeImg.height / badgeImg.width) * w;
+        ctx.drawImage(badgeImg, ((el.x ?? 0) / 100) * SIZE, ((el.y ?? 0) / 100) * SIZE, w, h);
+      } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
+    }
 
     const buf = canvas.toBuffer('image/jpeg', { quality: 0.88 });
     return `data:image/jpeg;base64,${buf.toString('base64')}`;
@@ -411,7 +411,7 @@ function buildMessage(
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
-    '{boxcoupon}':       post.coupon || '',
+    '{boxcoupon}':       post.boxcoupon || '',
     '{checkout}':        '',
     // Tag personalizzati (con eventuali override per-post)
     ...customTags,
@@ -1109,7 +1109,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       if (isMulti) {
         // ── Post multiplo ──
         const layoutText: string | undefined = layoutRow?.body;
-        const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">APRI SU AMAZON</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
+        const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n🟥#{store}\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">ACQUISTA ORA</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
 
         if (layoutText?.includes('{lista_prodotti}')) {
           // Backward compat: layout vecchio con {lista_prodotti}

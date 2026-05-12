@@ -112,6 +112,7 @@ export interface AmazonProductResult {
   author?: string;
   cat?: string;
   coupon?: string;
+  couponBox?: boolean;
   priceWarning?: string;
   isHistoricalLow?: boolean;
 }

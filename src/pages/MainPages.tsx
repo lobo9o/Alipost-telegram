@@ -1425,7 +1425,10 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
         if (l.platform === 'amazon') {
           const p = await productApi.fetchAmazon({ url: l.url });
           if (p.priceWarning) priceWarnings.push(`${p.title.slice(0, 30)}… — ${p.priceWarning}`);
-          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon };
+          const boxcouponText = p.couponBox
+            ? (tags.find(t => t.name === '{boxcoupon}')?.value || 'Abilita il coupon prima di acquistare')
+            : '';
+          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon, boxcoupon: boxcouponText || undefined };
         } else {
           const p = await productApi.fetchAliExpress({ url: l.url });
           return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultAliLay, keyboardId: defaultKb, emoji: '📦' };

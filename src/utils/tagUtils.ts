@@ -61,7 +61,7 @@ function computedTags(post: CreatedPost, currency?: string): Record<string, stri
     '{cat}':             post.cat || '',
     '{author}':          post.author || '',
     '{coupon}':          post.coupon || '',
-    '{boxcoupon}':       post.coupon || '',
+    '{boxcoupon}':       post.boxcoupon || '',
     '{checkout}':        '',
   };
 }

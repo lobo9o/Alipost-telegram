@@ -508,12 +508,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     const dealDetails = pick(listings, 'dealDetails', 'DealDetails') as any;
     let coupon = '';
+    let couponBox = false;
     if (dealDetails) {
       const dealType = String(pick(dealDetails, 'dealType', 'DealType') ?? '').toLowerCase();
       const displayAmount = String(pick(dealDetails, 'displayAmount', 'DisplayAmount', 'amount', 'Amount') ?? '');
       const displayPerc = String(pick(dealDetails, 'displayPercentage', 'DisplayPercentage', 'percentage', 'Percentage') ?? '');
       if (dealType.includes('coupon') || dealType.includes('clip')) {
         coupon = displayAmount || displayPerc || 'coupon';
+        couponBox = true;
       } else if (displayAmount || displayPerc) {
         coupon = displayAmount || displayPerc;
       }
@@ -552,6 +554,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       author: author || undefined,
       cat: cat || undefined,
       coupon: coupon || undefined,
+      couponBox: couponBox || undefined,
       priceWarning,
       isHistoricalLow: isHistoricalLowAmazon || undefined,
     });
