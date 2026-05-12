@@ -60,6 +60,16 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+const IT_STOP = new Set(['di','da','in','con','su','per','tra','fra','del','della','dello','dei','degli','delle','al','allo','alla','agli','alle','un','una','uno','il','lo','la','i','gli','le','a','e','o','che','se','ma','non','ha','ho','nei','nelle','nel','alle','set','new','pro','con','the','for','and','with','kit']);
+function extractKeywords(title: string): Set<string> {
+  return new Set(
+    title.toLowerCase()
+      .replace(/[^a-zàèéìòù0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 4 && !IT_STOP.has(w))
+  );
+}
+
 
 // Genera immagine terminata server-side: grayscale + testo overlay (usa sharp)
 async function generateTerminataImageServer(
@@ -178,6 +188,7 @@ async function generateTemplateImageServer(
   productImageUrl: string,
   platform: string,
   priceData: { prezzo: string; prezzoPrecedente: string; sconto: string },
+  isHistoricalLow = false,
 ): Promise<string | null> {
   try {
     const canvasMod = await import('canvas').catch(() => null) as any;
@@ -271,6 +282,23 @@ async function generateTemplateImageServer(
         ctx.textBaseline = 'middle';
         ctx.fillText(platform === 'amazon' ? 'a' : 'Ali', bx + s / 2, by + s * 0.55);
       } catch (e: any) { console.warn('[tpl] badge:', e.message); }
+    }
+
+    // Badge minimo storico
+    if (isHistoricalLow) {
+      try {
+        const bh = Math.round(SIZE * 0.055);
+        const bw = Math.round(SIZE * 0.52);
+        const bx = 0;
+        const by = SIZE - bh;
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#FFD700';
+        ctx.font = `bold ${Math.round(bh * 0.54)}px sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⭐ MINIMO STORICO', bx + 10, by + bh / 2);
+      } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
     }
 
     // Testi — usa ctx.textAlign per rispettare l'ancora indipendentemente dal font
@@ -521,6 +549,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     await sql`CREATE INDEX IF NOT EXISTS price_history_lookup ON price_history (product_id, platform)`.catch(() => {});
     await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ`.catch(() => {});
     await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS terminata BOOLEAN DEFAULT false`.catch(() => {});
+    await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS is_multi BOOLEAN DEFAULT false`.catch(() => {});
     // Pulizia storico prezzi oltre 180 giorni (fire-and-forget)
     sql`DELETE FROM price_history WHERE recorded_at < now() - interval '180 days'`.catch(() => {});
     migrationDone = true;
@@ -599,6 +628,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
       isMulti = Array.isArray(postsArr) && postsArr.length > 1;
 
+      // Salta se il post è già stato terminato manualmente
+      if (!isMulti && candidatePost.id) {
+        const [alreadyTerm] = await sql`
+          SELECT 1 FROM published_posts
+          WHERE id = ${candidatePost.id} AND user_id = ${userId} AND terminata = true
+        `.catch(() => [null]);
+        if (alreadyTerm) {
+          console.log(`[autopost] skip terminata in coda: ${String(candidatePost.title ?? '').slice(0, 40)}`);
+          await sql`DELETE FROM autopost_queue WHERE id = ${candidate.id}`.catch(() => {});
+          triedIds.push(candidate.id as string);
+          continue;
+        }
+      }
+
       // Verifica prezzo prima di bloccare l'item (solo per post singoli)
       if (!isMulti) {
         const priceCheck = await checkPostPrice(candidatePost, cfg);
@@ -674,7 +717,17 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const salePrice = parseFloat(candidate.target_sale_price ?? '0') || 0;
           const origPrice = parseFloat(candidate.target_original_price ?? '0') || salePrice;
           const affUrl    = candidate.promotion_link || `https://www.aliexpress.com/item/${candidate.product_id}.html`;
-          const autoPostId = crypto.randomUUID();
+          const aliCurrSym2 = ALI_CURRENCY_SYM[country] ?? '€';
+
+          // Carica template e layout utente (come per Amazon)
+          const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
+          const aliTemplateId = aliTplRow[0]?.id ?? 'tpl1';
+          const aliTemplateCfg = aliTplRow[0]
+            ? { id: aliTplRow[0].id, ...(typeof aliTplRow[0].config === 'string' ? JSON.parse(aliTplRow[0].config) : (aliTplRow[0].config ?? {})) }
+            : null;
+          const aliLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo IN ('aliexpress', 'normal') ORDER BY tipo = 'aliexpress' DESC, created_at ASC LIMIT 1`;
+          const aliLayoutId = aliLayoutRows[0]?.id ?? '';
+
           post = {
             id: crypto.randomUUID(), platform: 'aliexpress',
             sourceUrl: affUrl, productId: String(candidate.product_id),
@@ -683,9 +736,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             originalPrice: origPrice, discountedPrice: salePrice,
             discountPercent: discPct,
             customText: '', isHistoricalLow: false,
-            templateId: 'tpl1', layoutId: '', keyboardId: '', emoji: '🔴',
+            templateId: aliTemplateId, layoutId: aliLayoutId, keyboardId: '', emoji: '🔴',
           };
-          queueItem = { id: autoPostId, posts: [post], silenzioso: null };
+
+          // Genera immagine template server-side
+          if (aliTemplateCfg && candidate.product_main_image_url) {
+            const genImg = await generateTemplateImageServer(aliTemplateCfg, String(candidate.product_main_image_url), 'aliexpress', {
+              prezzo:           `${aliCurrSym2}${salePrice.toFixed(2)}`,
+              prezzoPrecedente: `${aliCurrSym2}${origPrice.toFixed(2)}`,
+              sconto:           `-${discPct}%`,
+            }).catch(() => null);
+            if (genImg) post = { ...post, generatedImage: genImg };
+          }
+
+          queueItem = { id: crypto.randomUUID(), posts: [post], silenzioso: null };
           postsArr  = [post];
           isMulti   = false;
           console.log(`[autopost] auto-search trovato: ${post.title?.slice(0, 50)}`);
@@ -720,13 +784,38 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         lastCategory = String(lastPubAmz?.category ?? '');
       }
 
-      // Escludi prodotti già pubblicati nelle ultime 48h
+      // Escludi prodotti già pubblicati nelle ultime 48h + tutti i terminati
       const recentAmz = await sql`
         SELECT product_id FROM published_posts
         WHERE user_id = ${userId} AND platform = 'amazon'
-          AND published_at > now() - interval '48 hours'
-      `;
+          AND (published_at > now() - interval '48 hours' OR COALESCE(terminata, false) = true)
+      `.catch(() => []);
       const recentAmzIds = new Set(recentAmz.map((r: any) => String(r.product_id)));
+
+      // Titoli recenti per diversificazione keyword
+      const recentTitlesAmz = await sql`
+        SELECT title FROM published_posts
+        WHERE user_id = ${userId} AND platform = 'amazon'
+        ORDER BY published_at DESC LIMIT 5
+      `.catch(() => []);
+      const recentKwSets = recentTitlesAmz.map((r: any) => extractKeywords(String(r.title ?? '')));
+
+      // Verifica se è ora di pubblicare un multi-post automatico
+      const autoMultiEvery = Number(cfg.dealSearch?.autoMultiEvery ?? 0);
+      let shouldPublishMulti = false;
+      if (autoMultiEvery > 0) {
+        const [sinceMultiRow] = await sql`
+          SELECT COUNT(*)::int AS cnt FROM published_posts
+          WHERE user_id = ${userId} AND platform = 'amazon'
+            AND NOT COALESCE(is_multi, false)
+            AND published_at > COALESCE(
+              (SELECT MAX(published_at) FROM published_posts
+               WHERE user_id = ${userId} AND platform = 'amazon' AND COALESCE(is_multi, false) = true),
+              now() - interval '30 days'
+            )
+        `.catch(() => [{ cnt: 0 }]);
+        shouldPublishMulti = Number(sinceMultiRow?.cnt ?? 0) >= autoMultiEvery;
+      }
 
       const cacheRows = await sql`
         SELECT product_id, title, image, original_price::float, discounted_price::float,
@@ -740,11 +829,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         LIMIT 500
       `;
 
-      // Filtra per categoria, già pubblicati, no dupe categoria
+      // Filtra: già pubblicati, categoria (fix null), no dupe cat, keyword diversity
       let candidates = cacheRows.filter((r: any) => {
         if (recentAmzIds.has(String(r.product_id))) return false;
-        if (searchIdxs.length > 0 && r.search_index && !searchIdxs.includes(r.search_index)) return false;
+        if (searchIdxs.length > 0 && !searchIdxs.includes(String(r.search_index ?? ''))) return false;
         if (noDupeCat && lastCategory && String(r.category) === lastCategory) return false;
+        const candKws = extractKeywords(String(r.title ?? ''));
+        if (recentKwSets.some(kws => [...candKws].filter(w => kws.has(w)).length >= 2)) return false;
         return true;
       });
 
@@ -763,6 +854,63 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       } else {
         candidates = candidates.sort((a: any, b: any) => b.discount_percent - a.discount_percent);
       }
+
+      // ── Auto multi-post: raggruppa per keyword simile ──────────────────────
+      if (shouldPublishMulti && candidates.length >= 2) {
+        const multiSize = Math.min(6, candidates.length);
+        const kwMap = new Map<string, any[]>();
+        for (const cand of candidates) {
+          for (const kw of extractKeywords(String(cand.title ?? ''))) {
+            if (!kwMap.has(kw)) kwMap.set(kw, []);
+            kwMap.get(kw)!.push(cand);
+          }
+        }
+        let multiCandidates: any[] = [];
+        for (const cluster of kwMap.values()) {
+          if (cluster.length > multiCandidates.length) multiCandidates = cluster;
+        }
+        if (multiCandidates.length < 2) multiCandidates = candidates;
+        multiCandidates = multiCandidates.slice(0, multiSize);
+
+        const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
+        const mTemplateId = mTplRow[0]?.id ?? 'tpl1';
+        const mTemplateCfg = mTplRow[0]
+          ? { id: mTplRow[0].id, ...(typeof mTplRow[0].config === 'string' ? JSON.parse(mTplRow[0].config) : (mTplRow[0].config ?? {})) }
+          : null;
+        const mLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`.catch(() => []);
+        const mLayoutId = mLayoutRows[0]?.id ?? '';
+        const CSYM_M: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
+
+        const multiPosts = multiCandidates.map((cand: any) => ({
+          id: crypto.randomUUID(), platform: 'amazon',
+          sourceUrl: String(cand.affiliate_url || cand.url),
+          productId: String(cand.product_id),
+          title: cand.title ?? '', image: cand.image ?? '',
+          originalPrice: Number(cand.original_price), discountedPrice: Number(cand.discounted_price),
+          discountPercent: Number(cand.discount_percent),
+          customText: '', isHistoricalLow: false,
+          templateId: mTemplateId, layoutId: mLayoutId, keyboardId: '', emoji: '🟡',
+          cat: cand.category || undefined,
+        }));
+
+        // Genera immagine del primo prodotto per il post multiplo
+        const fc = multiCandidates[0];
+        const fcSym = CSYM_M[String(fc.currency ?? 'EUR').toUpperCase()] ?? '€';
+        if (mTemplateCfg && fc.image) {
+          const genImg = await generateTemplateImageServer(mTemplateCfg, String(fc.image), 'amazon', {
+            prezzo: `${fcSym}${Number(fc.discounted_price).toFixed(2)}`,
+            prezzoPrecedente: `${fcSym}${Number(fc.original_price).toFixed(2)}`,
+            sconto: `-${Number(fc.discount_percent)}%`,
+          }).catch(() => null);
+          if (genImg) multiPosts[0] = { ...multiPosts[0], generatedImage: genImg };
+        }
+
+        post = multiPosts[0];
+        postsArr = multiPosts;
+        isMulti = true;
+        queueItem = { id: crypto.randomUUID(), posts: multiPosts, silenzioso: null, _autoMulti: true };
+        console.log(`[autopost] Amazon multi-post auto: ${multiPosts.length} prodotti`);
+      } else {
 
       const amzCandidate = candidates[0] ?? null;
 
@@ -845,6 +993,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       } else {
         console.log(`[autopost] Amazon pool vuoto o tutti già pubblicati userId=${userId}`);
       }
+      } // fine else (single post vs multi)
     }
 
     if (!queueItem || !post) {
@@ -866,25 +1015,36 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         `.catch(() => [null]);
         if (hlLayout?.id) post = { ...post, layoutId: String(hlLayout.id) };
 
-        // Rigenera immagine con template "minimo storico" se disponibile
+        // Rigenera immagine con badge minimo storico
         const [hlTpl] = await sql`
           SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo = 'historical_low'
           ORDER BY created_at ASC LIMIT 1
         `.catch(() => [null]);
-        if (hlTpl && post.image && String(post.image).startsWith('http')) {
-          const hlCfg = { id: hlTpl.id, ...(typeof hlTpl.config === 'string' ? JSON.parse(hlTpl.config) : (hlTpl.config ?? {})) };
-          const discountedPrice = Number(post.discountedPrice);
-          const originalPrice   = Number(post.originalPrice);
-          const discountPercent = Number(post.discountPercent);
-          const currSym = post.platform === 'aliexpress'
+        if (post.image && String(post.image).startsWith('http')) {
+          const hlDiscountedPrice = Number(post.discountedPrice);
+          const hlOriginalPrice   = Number(post.originalPrice);
+          const hlDiscountPercent = Number(post.discountPercent);
+          const hlCurrSym = post.platform === 'aliexpress'
             ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
             : '€';
-          const genImg = await generateTemplateImageServer(hlCfg, String(post.image), post.platform, {
-            prezzo:           `${currSym}${discountedPrice.toFixed(2)}`,
-            prezzoPrecedente: `${currSym}${originalPrice.toFixed(2)}`,
-            sconto:           `-${discountPercent}%`,
-          }).catch(() => null);
-          if (genImg) post = { ...post, generatedImage: genImg };
+          const hlPriceData = {
+            prezzo:           `${hlCurrSym}${hlDiscountedPrice.toFixed(2)}`,
+            prezzoPrecedente: `${hlCurrSym}${hlOriginalPrice.toFixed(2)}`,
+            sconto:           `-${hlDiscountPercent}%`,
+          };
+          if (hlTpl) {
+            const hlCfg = { id: hlTpl.id, ...(typeof hlTpl.config === 'string' ? JSON.parse(hlTpl.config) : (hlTpl.config ?? {})) };
+            const genImg = await generateTemplateImageServer(hlCfg, String(post.image), post.platform, hlPriceData, true).catch(() => null);
+            if (genImg) post = { ...post, generatedImage: genImg };
+          } else {
+            // Nessun template dedicato: rigenera con template base + badge
+            const [baseTpl] = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`.catch(() => [null]);
+            if (baseTpl) {
+              const baseCfg = { id: baseTpl.id, ...(typeof baseTpl.config === 'string' ? JSON.parse(baseTpl.config) : (baseTpl.config ?? {})) };
+              const genImg = await generateTemplateImageServer(baseCfg, String(post.image), post.platform, hlPriceData, true).catch(() => null);
+              if (genImg) post = { ...post, generatedImage: genImg };
+            }
+          }
         }
 
         console.log(`[autopost] MINIMO STORICO userId=${userId} productId=${post.productId} price=${post.discountedPrice} minPrice=${histRow.min_price} hlLayout=${hlLayout?.id ?? 'nessuno'} hlTpl=${hlTpl?.id ?? 'nessuno'}`);
@@ -1062,17 +1222,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           id, user_id, emoji, title, image,
           original_price, discounted_price, discount_percent,
           platform, source_url, product_id, custom_text,
-          layout_id, is_historical_low, chat_id, message_id, published_at
+          layout_id, is_historical_low, is_multi, chat_id, message_id, published_at
         ) VALUES (
           ${post.id}, ${userId}, ${post.emoji ?? ''}, ${post.title ?? ''}, ${post.image ?? ''},
           ${post.originalPrice ?? 0}, ${post.discountedPrice ?? 0}, ${post.discountPercent ?? 0},
           ${post.platform ?? 'amazon'}, ${post.sourceUrl ?? ''}, ${post.productId ?? ''},
           ${post.customText ?? ''}, ${post.layoutId ?? ''}, ${post.isHistoricalLow ?? false},
-          ${chatId}, ${messageId}, now()
+          ${isMulti}, ${chatId}, ${messageId}, now()
         )
         ON CONFLICT (id) DO UPDATE SET
           chat_id = EXCLUDED.chat_id,
-          message_id = EXCLUDED.message_id
+          message_id = EXCLUDED.message_id,
+          is_multi = EXCLUDED.is_multi
       `.catch(() => {});
 
       // Registra prezzo in storico (fire-and-forget)
@@ -1111,10 +1272,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         FROM published_posts
         WHERE user_id = ${userId}
           AND NOT COALESCE(terminata, false)
-          AND published_at > now() - interval '48 hours'
           AND (last_checked_at IS NULL OR last_checked_at < now() - interval '1 hour')
         ORDER BY last_checked_at ASC NULLS FIRST
-        LIMIT 3
+        LIMIT 5
       `.catch(() => []);
 
       for (const pub of toCheck) {

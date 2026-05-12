@@ -1312,6 +1312,31 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
               value={s.dealSearch?.noDupeCategory ?? false}
               onChange={v => setS(prev => ({ ...prev, dealSearch: { ...prev.dealSearch!, noDupeCategory: v } }))}
             />
+            <div style={{ padding: '8px 14px 12px' }}>
+              <label className="lbl">Post multiplo automatico ogni N singoli</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  className="inp"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={20}
+                  style={{ width: 80 }}
+                  value={s.dealSearch?.autoMultiEvery ?? ''}
+                  placeholder="0 = off"
+                  onChange={e => {
+                    const v = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value) || 0);
+                    setS(prev => ({ ...prev, dealSearch: { ...prev.dealSearch!, autoMultiEvery: v } }));
+                  }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--t2)' }}>singoli</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>
+                {(s.dealSearch?.autoMultiEvery ?? 0) > 0
+                  ? `Ogni ${s.dealSearch!.autoMultiEvery} post singoli pubblica automaticamente un post multiplo raggruppando prodotti con keyword simili`
+                  : '0 = disabilitato'}
+              </div>
+            </div>
           </div>
         )}
       </div>

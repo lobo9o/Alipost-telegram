@@ -238,6 +238,7 @@ export interface DealSearchSettings {
   scoreWeightRating?: number;    // 0-100
   scoreWeightReviews?: number;   // 0-100
   noDupeCategory?: boolean;
+  autoMultiEvery?: number;
 }
 
 export interface AppSettings {
