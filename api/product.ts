@@ -509,12 +509,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const dealDetails = pick(listings, 'dealDetails', 'DealDetails') as any;
     let coupon = '';
     let couponBox = false;
+    let couponIsPercent = false;
     if (dealDetails) {
       const dealType = String(pick(dealDetails, 'dealType', 'DealType') ?? '').toLowerCase();
       const displayAmount = String(pick(dealDetails, 'displayAmount', 'DisplayAmount', 'amount', 'Amount') ?? '');
       const displayPerc = String(pick(dealDetails, 'displayPercentage', 'DisplayPercentage', 'percentage', 'Percentage') ?? '');
       if (dealType.includes('coupon') || dealType.includes('clip')) {
-        coupon = displayAmount || displayPerc || 'coupon';
+        if (displayAmount) {
+          coupon = displayAmount;
+          couponIsPercent = false;
+        } else if (displayPerc) {
+          coupon = displayPerc;
+          couponIsPercent = true;
+        } else {
+          coupon = 'coupon';
+        }
         couponBox = true;
       } else if (displayAmount || displayPerc) {
         coupon = displayAmount || displayPerc;
@@ -522,7 +531,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       console.log('[product] dealDetails:', JSON.stringify(dealDetails).slice(0, 200));
     }
 
-    const finalDiscountPercent = savingsPct > 0
+    // Applica il coupon da spuntare al prezzo finale (il prezzo reale che l'utente paga)
+    if (couponBox) {
+      const couponNum = parsePriceStr(coupon.replace('%', ''));
+      if (couponNum > 0) {
+        if (couponIsPercent) {
+          finalDiscountedPrice = Math.round(finalDiscountedPrice * (1 - couponNum / 100) * 100) / 100;
+        } else {
+          finalDiscountedPrice = Math.max(0, Math.round((finalDiscountedPrice - couponNum) * 100) / 100);
+        }
+        console.log('[product] prezzo post-coupon:', finalDiscountedPrice, '| coupon:', coupon, '| pct:', couponIsPercent);
+      }
+    }
+
+    const finalDiscountPercent = savingsPct > 0 && !couponBox
       ? Math.round(savingsPct)
       : finalOriginalPrice > finalDiscountedPrice
         ? Math.round((1 - finalDiscountedPrice / finalOriginalPrice) * 100) : 0;
