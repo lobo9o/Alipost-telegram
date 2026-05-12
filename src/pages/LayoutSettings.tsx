@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, KeyboardLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId, INITIAL_LAYOUTS, INITIAL_KEYBOARDS } from '../data/mock';
-import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, emojiIdsApi, EmojiEntry } from '../lib/api';
+import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi } from '../lib/api';
 import { SYSTEM_TAGS } from '../utils/tagUtils';
 
 // ============================================================
@@ -57,8 +57,7 @@ function TagsSection() {
   };
 
   const systemTags = tags.filter(t => SYSTEM_TAGS.has(t.name));
-  const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name) && !t.name.startsWith('{emoji_'));
-  const emojiTags  = tags.filter(t => t.name.startsWith('{emoji_'));
+  const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name));
 
   const renderTag = (t: Tag, isSystem: boolean) => (
     <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
@@ -107,25 +106,14 @@ function TagsSection() {
       )}
       {customTags.map(t => renderTag(t, false))}
 
-      {emojiTags.length > 0 && (
-        <>
-          <div className="stit" style={{ marginTop: 8 }}>TAG EMOJI ({emojiTags.length})</div>
-          <div style={{ margin: '0 16px 6px', padding: '7px 12px', background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
-            Per emoji <b>animate</b>: imposta il valore come <code>🔥|ID_NUMERICO</code> (es. <code>🔥|5368324170671202286</code>).<br />
-            Per trovare l&apos;ID: invia l&apos;emoji animata direttamente a @JsonDumpBot (non inoltrata) e copia il <code>custom_emoji_id</code> dall&apos;array entities.
-          </div>
-          {emojiTags.map(t => renderTag(t, false))}
-        </>
-      )}
-
       <div className="stit">AGGIUNGI TAG</div>
       <div style={{ padding: '0 16px 8px' }}>
         <input className="inp" value={newName} onChange={e => setNewName(e.target.value)}
-          placeholder="{nome_tag} oppure {emoji_fuoco}" style={{ marginBottom: 7 }}
+          placeholder="{nome_tag}" style={{ marginBottom: 7 }}
           onKeyDown={e => e.key === 'Enter' && addTag()} />
         <div className="irow">
           <input className="inp" value={newValue} onChange={e => setNewValue(e.target.value)}
-            placeholder="Valore (o 🔥|ID per emoji animate)"
+            placeholder="Valore"
             onKeyDown={e => e.key === 'Enter' && addTag()} />
           <button className="btn bp" onClick={addTag} style={{ padding: '0 16px', flexShrink: 0 }}>+ Aggiungi</button>
         </div>
@@ -1377,134 +1365,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>
         {saved && <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a2a0a', border: '1px solid #1a5c1a', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>✓ Impostazioni salvate con successo</div>}
         {saveErr && <ErrorBanner>{saveErr}</ErrorBanner>}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// EMOJI PAGE — scoperta e gestione emoji animate
-// ============================================================
-export function EmojiPage({ nav }: { nav: (p: NavPage) => void }) {
-  const [emoji, setEmoji]         = useState<EmojiEntry[]>([]);
-  const [loading, setLoading]     = useState(false);
-  const [discovering, setDisc]    = useState(false);
-  const [msg, setMsg]             = useState('');
-  const [err, setErr]             = useState('');
-  const [manualChar, setManualChar] = useState('');
-  const [manualId, setManualId]   = useState('');
-  const [packName, setPackName]   = useState('');
-  const [importingPack, setImportingPack] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try { const d = await emojiIdsApi.list(); setEmoji(d.emoji); } catch { /* */ } finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const discover = async () => {
-    setDisc(true); setMsg(''); setErr('');
-    try {
-      const d = await emojiIdsApi.discover();
-      setEmoji(d.emoji);
-      setMsg(d.discovered > 0 ? `✅ Trovate ${d.discovered} nuove emoji!` : 'Nessuna emoji nuova trovata. Invia un\'emoji animata al bot e riprova.');
-    } catch (e: any) { setErr(e.message ?? 'Errore'); }
-    finally { setDisc(false); }
-  };
-
-  const remove = async (char: string) => {
-    try { await emojiIdsApi.remove(char); setEmoji(e => e.filter(x => x.emoji_char !== char)); }
-    catch (e: any) { setErr(e.message); }
-  };
-
-  const addManual = async () => {
-    if (!manualChar || !manualId) return;
-    try {
-      await emojiIdsApi.add(manualChar, manualId);
-      await load();
-      setManualChar(''); setManualId(''); setMsg('✅ Emoji aggiunta');
-    } catch (e: any) { setErr(e.message); }
-  };
-
-  const importFromPack = async () => {
-    if (!packName.trim()) return;
-    setImportingPack(true); setMsg(''); setErr('');
-    try {
-      const d = await emojiIdsApi.fromPack(packName.trim());
-      setEmoji(d.emoji);
-      setMsg(`✅ Importate ${d.imported} emoji custom da "${d.pack_title}" (${d.total_in_pack} sticker totali)`);
-      if (d.imported === 0) setErr('Nessuna emoji custom trovata in questo pack. Verifica che il pack contenga sticker di tipo "custom_emoji".');
-    } catch (e: any) { setErr(e.message ?? 'Errore'); }
-    finally { setImportingPack(false); }
-  };
-
-  const copy = (char: string) => {
-    navigator.clipboard.writeText(char).catch(() => {});
-  };
-
-  return (
-    <div className="pg">
-      <PageHeader title="Emoji Animate" onBack={() => nav('dash')} />
-
-      <div style={{ padding: '0 16px 8px' }}>
-        <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 10, fontSize: 12, color: 'var(--t2)', marginBottom: 12, lineHeight: 1.6 }}>
-          <b>Come funziona:</b><br />
-          1. Invia un'emoji animata direttamente al tuo bot Telegram<br />
-          2. Clicca "Cerca nuove emoji" qui sotto<br />
-          3. L'emoji appare nella lista — da ora scrivi solo il carattere nel testo del layout e viene inviata animata automaticamente
-        </div>
-
-        <button className="btn bp bfull" onClick={discover} disabled={discovering} style={{ marginBottom: 10 }}>
-          {discovering ? '⏳ Ricerca in corso...' : '🔍 Cerca nuove emoji'}
-        </button>
-
-        {msg && <div style={{ padding: '9px 12px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 8, fontSize: 12, color: '#4ade80', marginBottom: 8 }}>{msg}</div>}
-        {err && <ErrorBanner>{err}</ErrorBanner>}
-      </div>
-
-      <div className="stit">EMOJI REGISTRATE ({emoji.length})</div>
-      {loading && <div style={{ padding: '8px 16px', fontSize: 12, color: 'var(--t3)' }}>Caricamento...</div>}
-      {!loading && emoji.length === 0 && (
-        <div style={{ padding: '8px 16px', fontSize: 12, color: 'var(--t3)' }}>Nessuna emoji registrata. Invia un'emoji animata al bot e premi "Cerca".</div>
-      )}
-      {emoji.map(e => (
-        <div key={e.emoji_char} className="card" style={{ margin: '0 16px 6px', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 28, lineHeight: 1 }}>{e.emoji_char}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'monospace', wordBreak: 'break-all' }}>ID: {e.custom_emoji_id}</div>
-          </div>
-          <button className="btn bgh bsm" style={{ padding: '3px 9px', fontSize: 11 }} onClick={() => copy(e.emoji_char)} title="Copia il carattere emoji">📋</button>
-          <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }} onClick={() => remove(e.emoji_char)}>×</button>
-        </div>
-      ))}
-
-      <div className="stit" style={{ marginTop: 8 }}>IMPORTA DA STICKER PACK</div>
-      <div style={{ padding: '0 16px 8px' }}>
-        <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 6, lineHeight: 1.5 }}>
-          Inserisci il nome di un pack Telegram con emoji custom (es. <b>AnimatedEmojis</b>). Il bot importa automaticamente gli ID usabili. I pack premium/di terze parti potrebbero non funzionare.
-        </div>
-        <div className="irow">
-          <input className="inp" value={packName} onChange={e => setPackName(e.target.value)}
-            placeholder="Nome pack (es. AnimatedEmojis)" />
-          <button className="btn bp bsm" onClick={importFromPack} disabled={importingPack || !packName.trim()} style={{ flexShrink: 0 }}>
-            {importingPack ? '⏳' : '📦 Import'}
-          </button>
-        </div>
-      </div>
-
-      <div className="stit" style={{ marginTop: 8 }}>AGGIUNTA MANUALE</div>
-      <div style={{ padding: '0 16px 8px' }}>
-        <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 6 }}>
-          Se conosci già l'ID: incolla l'emoji e l'ID numerico da @JsonDumpBot
-        </div>
-        <input className="inp" value={manualChar} onChange={e => setManualChar(e.target.value)}
-          placeholder="Emoji (es. 🔥)" style={{ marginBottom: 6 }} />
-        <div className="irow">
-          <input className="inp" value={manualId} onChange={e => setManualId(e.target.value)}
-            placeholder="ID numerico (es. 5368324170671202286)" />
-          <button className="btn bp bsm" onClick={addManual} style={{ flexShrink: 0 }}>+ Aggiungi</button>
-        </div>
       </div>
     </div>
   );
