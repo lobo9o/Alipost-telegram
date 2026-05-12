@@ -63,8 +63,11 @@ function TagsSection() {
     <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
       {editId === t.id ? (
         <>
-          <input className="inp" value={editName} onChange={e => setEditName(e.target.value)}
-            placeholder="{nome_tag}" style={{ marginBottom: 7 }} />
+          {isSystem
+            ? <div style={{ padding: '2px 0 7px', fontSize: 13, fontWeight: 600, color: 'var(--a1)' }}>{t.name}</div>
+            : <input className="inp" value={editName} onChange={e => setEditName(e.target.value)}
+                placeholder="{nome_tag}" style={{ marginBottom: 7 }} />
+          }
           <div className="irow">
             <input className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
               placeholder="Valore / descrizione"
@@ -79,14 +82,11 @@ function TagsSection() {
           <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {t.value || <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>vuoto</span>}
           </span>
-          {isSystem
-            ? <span style={{ fontSize: 10, color: 'var(--a1)', padding: '2px 7px', border: '1px solid var(--a1)', borderRadius: 20, flexShrink: 0, opacity: .7 }}>SISTEMA</span>
-            : <>
-                <button className="btn bgh bsm" style={{ padding: '3px 8px' }} onClick={() => startEdit(t)}>✏️</button>
-                <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }}
-                  onClick={() => { setTags(ts => ts.filter(x => x.id !== t.id)); tagsApi.delete(t.id).catch(() => {}); }}>×</button>
-              </>
-          }
+          <button className="btn bgh bsm" style={{ padding: '3px 8px' }} onClick={() => startEdit(t)}>✏️</button>
+          {!isSystem && (
+            <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }}
+              onClick={() => { setTags(ts => ts.filter(x => x.id !== t.id)); tagsApi.delete(t.id).catch(() => {}); }}>×</button>
+          )}
         </div>
       )}
     </div>
@@ -96,7 +96,7 @@ function TagsSection() {
     <>
       <div className="stit">TAG DI SISTEMA ({systemTags.length})</div>
       <div style={{ margin: '0 16px 6px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
-        Compilati automaticamente dall'API. Non modificabili.
+        Compilati automaticamente dall'API. Non eliminabili ma modificabili (premi ✏️ per cambiare il testo).
       </div>
       {systemTags.map(t => renderTag(t, true))}
 

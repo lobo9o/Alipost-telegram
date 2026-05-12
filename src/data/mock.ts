@@ -36,9 +36,13 @@ export const INITIAL_TAGS: Tag[] = [
   { id: 'tag_rec',         name: '{recensioni}',       value: 'N. recensioni' },
   { id: 'tag_cat',         name: '{cat}',              value: '#categoria prodotto' },
   { id: 'tag_author',      name: '{author}',           value: 'Autore / Brand' },
+  // ── Coupon e checkout
+  { id: 'tag_coupon',      name: '{coupon}',            value: 'Coupon extra (es: -10€)' },
+  { id: 'tag_boxcoupon',   name: '{boxcoupon}',         value: 'Abilita il coupon prima di acquistare' },
+  { id: 'tag_checkout',    name: '{checkout}',          value: 'Testo personalizzato al checkout' },
   // ── Custom liberi utente
-  { id: 'tag_custom2',     name: '{custom2}',          value: '' },
-  { id: 'tag_custom3',     name: '{custom3}',          value: '' },
+  { id: 'tag_custom2',     name: '{custom2}',           value: '' },
+  { id: 'tag_custom3',     name: '{custom3}',           value: '' },
 ];
 
 export const INITIAL_LAYOUTS: TextLayout[] = [

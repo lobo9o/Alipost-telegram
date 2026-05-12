@@ -150,10 +150,12 @@ async function runMigration() {
     PRIMARY KEY (user_id, emoji_char)
   )`;
 
-  // Seed tag di sistema {boxcoupon} per tutti gli utenti (user_id='legacy')
+  // Seed tag di sistema {boxcoupon} per tutti gli utenti esistenti
   await sql`
     INSERT INTO tags (id, user_id, name, value)
-    VALUES ('sys_boxcoupon', 'legacy', '{boxcoupon}', 'Abilita il coupon prima di acquistare')
+    SELECT 'sys_boxcoupon_' || user_id, user_id, '{boxcoupon}', 'Abilita il coupon prima di acquistare'
+    FROM settings
+    WHERE user_id IS NOT NULL
     ON CONFLICT DO NOTHING
   `.catch(() => {});
 
