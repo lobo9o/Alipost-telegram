@@ -48,67 +48,6 @@ const ALI_CURRENCY_SYM: Record<string, string> = {
   US: '$', BR: 'R$', UK: '£', RU: '₽', PL: 'zł',
 };
 
-// ── Telegram entities per custom emoji animate ────────────────────────────────
-interface TgEntity {
-  type: string; offset: number; length: number;
-  url?: string; custom_emoji_id?: string;
-}
-
-// Rimuove tag HTML lasciando solo il testo visibile
-function htmlStrip(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
-}
-
-// Trova le posizioni delle custom emoji nel testo piano via indexOf nativo
-function findEmojiEntities(text: string, idMap: Record<string, string>): TgEntity[] {
-  const all: TgEntity[] = [];
-  for (const [ch, id] of Object.entries(idMap)) {
-    if (!ch || !id) continue;
-    let pos = 0;
-    while ((pos = text.indexOf(ch, pos)) !== -1) {
-      const end = pos + ch.length;
-      // Scarta se inizia su un low surrogate o termina su un high surrogate
-      if ((text.charCodeAt(pos) & 0xFC00) !== 0xDC00 &&
-          (text.charCodeAt(end - 1) & 0xFC00) !== 0xD800) {
-        all.push({ type: 'custom_emoji', offset: pos, length: ch.length, custom_emoji_id: id });
-      }
-      pos = end;
-    }
-  }
-  // Ordina per offset e rimuovi sovrapposizioni
-  all.sort((a, b) => a.offset - b.offset);
-  const result: TgEntity[] = [];
-  let prev = 0;
-  for (const e of all) {
-    if (e.offset >= prev) { result.push(e); prev = e.offset + e.length; }
-  }
-  return result;
-}
-
-function capWithEntities(text: string, entities: TgEntity[], maxLen: number): { text: string; entities: TgEntity[] } {
-  let t = text;
-  if (t.length > maxLen) {
-    let cut = maxLen - 1;
-    if ((t.charCodeAt(cut) & 0xFC00) === 0xDC00) cut--;
-    t = t.slice(0, cut) + '…';
-  }
-  // Filtra entità: devono stare interamente nel testo, senza surrogate boundary issues
-  const ents = entities.filter(e => {
-    const end = e.offset + e.length;
-    if (e.offset < 0 || e.length <= 0 || end > t.length) return false;
-    if ((t.charCodeAt(e.offset) & 0xFC00) === 0xDC00) return false;
-    if ((t.charCodeAt(end - 1) & 0xFC00) === 0xD800) return false;
-    return true;
-  });
-  return { text: t, entities: ents };
-}
-
 function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string, currency?: string, customTags: Record<string, string> = {}): string {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
@@ -391,101 +330,49 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
 
-  let tgRes: Response;
   const hasImage = post.image && post.image !== 'placeholder.jpg' && post.image.startsWith('http');
 
-  // Carica mappa emoji animate per questo utente
-  const emojiRows = await sql`SELECT emoji_char, custom_emoji_id FROM emoji_ids WHERE user_id = ${userId}`.catch(() => []);
-  const emojiIdMap: Record<string, string> = {};
-  for (const er of emojiRows) {
-    const ch = er.emoji_char as string;
-    const id = er.custom_emoji_id as string;
-    emojiIdMap[ch] = id;
-    // Aggiunge variante senza variation selector per compatibilità (es. 🚀️ → 🚀)
-    if (ch.endsWith('️') || ch.endsWith('︎')) {
-      const noVS = ch.slice(0, ch.length - 1);
-      if (!emojiIdMap[noVS]) emojiIdMap[noVS] = id;
-    }
-  }
-
-  // disable_notification: lo includiamo SOLO quando true (silenzioso).
-  console.log('[publish] disable_notification final:', disableNotification);
-
-  // Testo piano + entità custom emoji (approccio semplice: strip HTML via regex + indexOf)
-  const plainText = htmlStrip(messageText);
-  const customEmojiEntities = findEmojiEntities(plainText, emojiIdMap);
-  const hasCustomEmoji = customEmojiEntities.length > 0;
-  console.log(`[emoji] map=${Object.keys(emojiIdMap).length} entities=${customEmojiEntities.length} hasCustomEmoji=${hasCustomEmoji} ids=${JSON.stringify(customEmojiEntities.map(e => e.custom_emoji_id))}`);
-
-  type TgResult = { ok: boolean; result?: { message_id: number; chat?: { id: number }; caption_entities?: any[]; entities?: any[] }; description?: string };
-  let tgData: TgResult;
-
+  let tgRes: Response;
   if (generatedImage && typeof generatedImage === 'string' && generatedImage.startsWith('data:')) {
     const base64 = generatedImage.replace(/^data:image\/\w+;base64,/, '');
     const imgBuffer = Buffer.from(base64, 'base64');
     const form = new FormData();
     form.append('chat_id', channel);
     form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'post.jpg');
-    if (hasCustomEmoji) {
-      // Telegram ignora caption_entities in FormData — plain text ora, entities via editMessageCaption dopo
-      const { text: ct } = capWithEntities(plainText, customEmojiEntities, 1024);
-      form.append('caption', ct);
-    } else {
-      form.append('caption', safeCaption(messageText, 1024));
-      form.append('parse_mode', 'HTML');
-    }
+    form.append('caption', safeCaption(messageText, 1024));
+    form.append('parse_mode', 'HTML');
     if (disableNotification) form.append('disable_notification', 'true');
     if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
-    const step1Res = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
-    tgData = await step1Res.json() as TgResult;
-    console.log('[publish]', channel, 'photo(upload)', step1Res.status, tgData.ok ? 'ok' : tgData.description);
-
-    if (hasCustomEmoji && tgData.ok && tgData.result?.message_id) {
-      const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
-      const editBody = { chat_id: channel, message_id: tgData.result.message_id, caption: ct, caption_entities: ce };
-      const editRes = await fetch(`${tgBase}/editMessageCaption`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editBody),
-      });
-      const editData = await editRes.json() as TgResult;
-      console.log('[emoji-edit]', editData.ok ? 'ok' : editData.description);
-      if (editData.ok) tgData = editData;
-    }
+    tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
+  } else if (hasImage) {
+    tgRes = await fetch(`${tgBase}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: channel,
+        photo: post.image,
+        caption: safeCaption(messageText, 1024),
+        parse_mode: 'HTML',
+        ...(disableNotification ? { disable_notification: true } : {}),
+        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      }),
+    });
   } else {
-    if (hasImage) {
-      const captionFields = hasCustomEmoji
-        ? (() => { const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024); return { caption: ct, caption_entities: ce }; })()
-        : { caption: safeCaption(messageText, 1024), parse_mode: 'HTML' };
-      tgRes = await fetch(`${tgBase}/sendPhoto`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: channel,
-          photo: post.image,
-          ...captionFields,
-          ...(disableNotification ? { disable_notification: true } : {}),
-          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-        }),
-      });
-    } else {
-      const textFields = hasCustomEmoji
-        ? (() => { const { text: mt, entities: me } = capWithEntities(plainText, customEmojiEntities, 4096); return { text: mt, entities: me }; })()
-        : { text: messageText, parse_mode: 'HTML' };
-      tgRes = await fetch(`${tgBase}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: channel,
-          ...textFields,
-          ...(disableNotification ? { disable_notification: true } : {}),
-          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-        }),
-      });
-    }
-    tgData = await tgRes.json() as TgResult;
-    console.log('[publish]', channel, hasImage ? 'photo' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
+    tgRes = await fetch(`${tgBase}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: channel,
+        text: messageText,
+        parse_mode: 'HTML',
+        ...(disableNotification ? { disable_notification: true } : {}),
+        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      }),
+    });
   }
+
+  const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
+  console.log('[publish]', channel, hasImage ? 'photo' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
 
   if (!tgData.ok) {
     res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore sconosciuto'}` });

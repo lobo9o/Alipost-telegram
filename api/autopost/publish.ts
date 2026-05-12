@@ -60,61 +60,6 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// ── Telegram entities per custom emoji animate ────────────────────────────────
-interface TgEntity {
-  type: string; offset: number; length: number;
-  url?: string; custom_emoji_id?: string;
-}
-
-function htmlStrip(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
-}
-
-function findEmojiEntities(text: string, idMap: Record<string, string>): TgEntity[] {
-  const all: TgEntity[] = [];
-  for (const [ch, id] of Object.entries(idMap)) {
-    if (!ch || !id) continue;
-    let pos = 0;
-    while ((pos = text.indexOf(ch, pos)) !== -1) {
-      const end = pos + ch.length;
-      if ((text.charCodeAt(pos) & 0xFC00) !== 0xDC00 &&
-          (text.charCodeAt(end - 1) & 0xFC00) !== 0xD800) {
-        all.push({ type: 'custom_emoji', offset: pos, length: ch.length, custom_emoji_id: id });
-      }
-      pos = end;
-    }
-  }
-  all.sort((a, b) => a.offset - b.offset);
-  const result: TgEntity[] = [];
-  let prev = 0;
-  for (const e of all) {
-    if (e.offset >= prev) { result.push(e); prev = e.offset + e.length; }
-  }
-  return result;
-}
-
-function capWithEntities(text: string, entities: TgEntity[], maxLen: number): { text: string; entities: TgEntity[] } {
-  let t = text;
-  if (t.length > maxLen) {
-    let cut = maxLen - 1;
-    if ((t.charCodeAt(cut) & 0xFC00) === 0xDC00) cut--;
-    t = t.slice(0, cut) + '…';
-  }
-  const ents = entities.filter(e => {
-    const end = e.offset + e.length;
-    if (e.offset < 0 || e.length <= 0 || end > t.length) return false;
-    if ((t.charCodeAt(e.offset) & 0xFC00) === 0xDC00) return false;
-    if ((t.charCodeAt(end - 1) & 0xFC00) === 0xD800) return false;
-    return true;
-  });
-  return { text: t, entities: ents };
-}
 
 // Genera immagine terminata server-side: grayscale + testo overlay (usa sharp)
 async function generateTerminataImageServer(
@@ -990,20 +935,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const emojiTagsInDb = Object.keys(customTags).filter(k => k.startsWith('{emoji_'));
       console.log(`[autopost] userId=${userId} totalTags=${tagRows.length} emojiTags(${emojiTagsInDb.length}):`, emojiTagsInDb);
 
-      // Carica mappa emoji animate (char → custom_emoji_id)
-      const emojiRows = await sql`SELECT emoji_char, custom_emoji_id FROM emoji_ids WHERE user_id = ${userId}`.catch(() => []);
-      const emojiIdMap: Record<string, string> = {};
-      for (const er of emojiRows) {
-        const ch = er.emoji_char as string;
-        const id = er.custom_emoji_id as string;
-        emojiIdMap[ch] = id;
-        // Variante senza variation selector per compatibilità (es. 🚀️ → 🚀)
-        if (ch.endsWith('️') || ch.endsWith('︎')) {
-          const noVS = ch.slice(0, ch.length - 1);
-          if (!emojiIdMap[noVS]) emojiIdMap[noVS] = id;
-        }
-      }
-
       // Costruisce URL affiliato (primo post)
       let affiliateUrl: string = post.sourceUrl ?? '';
       if (!affiliateUrl && post.platform === 'amazon' && post.productId) {
@@ -1079,83 +1010,47 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       // disable_notification: incluso SOLO quando true — omesso = Telegram notifica per default
       console.log(`[autopost] disable_notification: ${disableNotification} (sil=${silenzioso} disc=${post.discountPercent} threshold=${notifThreshold})`);
 
-      // Testo piano + entità custom emoji (strip HTML via regex + indexOf nativo)
-      const plainText = htmlStrip(messageText);
-      const customEmojiEntities = findEmojiEntities(plainText, emojiIdMap);
-      const hasCustomEmoji = customEmojiEntities.length > 0;
-      console.log(`[emoji] map=${Object.keys(emojiIdMap).length} entities=${customEmojiEntities.length} hasCustomEmoji=${hasCustomEmoji} ids=${JSON.stringify(customEmojiEntities.map(e => e.custom_emoji_id))}`);
-
-      type TgResult = { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
-      let tgData: TgResult;
-
+      let tgRes: Response;
       if (hasGeneratedImage) {
         const base64Data = String(post.generatedImage).replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
         const formData = new FormData();
         formData.append('chat_id', channel);
         formData.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'photo.jpg');
-        if (hasCustomEmoji) {
-          // Telegram ignora caption_entities in FormData — plain text ora, entities via editMessageCaption dopo
-          const { text: ct } = capWithEntities(plainText, customEmojiEntities, 1024);
-          formData.append('caption', ct);
-        } else {
-          formData.append('caption', safeCaption(messageText, 1024));
-          formData.append('parse_mode', 'HTML');
-        }
+        formData.append('caption', safeCaption(messageText, 1024));
+        formData.append('parse_mode', 'HTML');
         if (disableNotification) formData.append('disable_notification', 'true');
         if (replyMarkup) formData.append('reply_markup', JSON.stringify(replyMarkup));
-        const step1Res = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
-        tgData = await step1Res.json() as TgResult;
-
-        if (hasCustomEmoji && tgData.ok && tgData.result?.message_id) {
-          const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024);
-          const editRes = await fetch(`${tgBase}/editMessageCaption`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: channel,
-              message_id: tgData.result.message_id,
-              caption: ct,
-              caption_entities: ce,
-            }),
-          });
-          const editData = await editRes.json() as TgResult;
-          console.log('[emoji-edit]', editData.ok ? 'ok' : editData.description);
-          if (editData.ok) tgData = editData;
-        }
+        tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: formData });
       } else if (hasUrlImage) {
-        const captionFields = hasCustomEmoji
-          ? (() => { const { text: ct, entities: ce } = capWithEntities(plainText, customEmojiEntities, 1024); return { caption: ct, caption_entities: ce }; })()
-          : { caption: safeCaption(messageText, 1024), parse_mode: 'HTML' };
-        const r = await fetch(`${tgBase}/sendPhoto`, {
+        tgRes = await fetch(`${tgBase}/sendPhoto`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: channel,
             photo: post.image,
-            ...captionFields,
+            caption: safeCaption(messageText, 1024),
+            parse_mode: 'HTML',
             ...(disableNotification ? { disable_notification: true } : {}),
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
-        tgData = await r.json() as TgResult;
       } else {
-        const textFields = hasCustomEmoji
-          ? (() => { const { text: mt, entities: me } = capWithEntities(plainText, customEmojiEntities, 4096); return { text: mt, entities: me }; })()
-          : { text: messageText.slice(0, 4096), parse_mode: 'HTML' };
-        const r = await fetch(`${tgBase}/sendMessage`, {
+        tgRes = await fetch(`${tgBase}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: channel,
-            ...textFields,
+            text: messageText.slice(0, 4096),
+            parse_mode: 'HTML',
             ...(disableNotification ? { disable_notification: true } : {}),
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
-        tgData = await r.json() as TgResult;
       }
 
+      const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
+      console.log('[autopost]', channel, hasGeneratedImage ? 'genImg' : hasUrlImage ? 'urlImg' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
       if (!tgData.ok) throw new Error(`Telegram: ${tgData.description ?? 'errore sconosciuto'}`);
 
       const messageId = tgData.result?.message_id ?? 0;
