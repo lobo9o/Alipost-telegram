@@ -284,20 +284,16 @@ async function generateTemplateImageServer(
       } catch (e: any) { console.warn('[tpl] badge:', e.message); }
     }
 
-    // Badge minimo storico
-    if (isHistoricalLow) {
+    // Badge minimo storico — usa template.badge.src (stessa logica del browser)
+    if (isHistoricalLow && template.badge?.enabled && template.badge?.src) {
       try {
-        const bh = Math.round(SIZE * 0.055);
-        const bw = Math.round(SIZE * 0.52);
-        const bx = 0;
-        const by = SIZE - bh;
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(bx, by, bw, bh);
-        ctx.fillStyle = '#FFD700';
-        ctx.font = `bold ${Math.round(bh * 0.54)}px sans-serif`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('⭐ MINIMO STORICO', bx + 10, by + bh / 2);
+        const src = String(template.badge.src);
+        const badgeBuf = src.startsWith('http') ? (await fetchImgBuf(src) ?? null) : null;
+        const badgeImg = await loadImage(badgeBuf ?? src);
+        const el = template.badge;
+        const w = ((el.size ?? 30) / 100) * SIZE;
+        const h = (badgeImg.height / badgeImg.width) * w;
+        ctx.drawImage(badgeImg, ((el.x ?? 0) / 100) * SIZE, ((el.y ?? 0) / 100) * SIZE, w, h);
       } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
     }
 
