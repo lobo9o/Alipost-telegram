@@ -511,9 +511,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     let couponBox = false;
     let couponIsPercent = false;
     if (dealDetails) {
-      const dealType = String(pick(dealDetails, 'dealType', 'DealType') ?? '').toLowerCase();
+      const rawDealType = String(pick(dealDetails, 'dealType', 'DealType') ?? '');
+      const dealType = rawDealType.toLowerCase();
       const displayAmount = String(pick(dealDetails, 'displayAmount', 'DisplayAmount', 'amount', 'Amount') ?? '');
       const displayPerc = String(pick(dealDetails, 'displayPercentage', 'DisplayPercentage', 'percentage', 'Percentage') ?? '');
+      console.log('[product] COUPON_DEBUG asin=' + resolvedAsin + ' dealType=' + rawDealType + ' displayAmount=' + displayAmount + ' displayPerc=' + displayPerc);
       if (dealType.includes('coupon') || dealType.includes('clip')) {
         if (displayAmount) {
           coupon = displayAmount;
@@ -528,7 +530,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       } else if (displayAmount || displayPerc) {
         coupon = displayAmount || displayPerc;
       }
-      console.log('[product] dealDetails:', JSON.stringify(dealDetails).slice(0, 200));
     }
 
     // Applica il coupon da spuntare al prezzo finale (il prezzo reale che l'utente paga)
