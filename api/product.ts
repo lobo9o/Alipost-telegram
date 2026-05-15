@@ -213,7 +213,7 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
     } else {
       const couponLabelAmtM = html.match(/couponLabelText[^>]*>\s*Applica\s+coupon\s+(?:€|EUR\s*)?([\d,\.]+)/i);
       if (couponLabelAmtM) {
-        clipCoupon = couponLabelAmtM[1].replace(',', '.');
+        clipCoupon = couponLabelAmtM[1].replace(',', '.') + '€';
         clipCouponPct = false;
       }
     }
