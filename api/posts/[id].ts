@@ -59,6 +59,9 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
   const titleShort = (post.title || '').length > 60 ? (post.title || '').slice(0, 57) + '...' : (post.title || '');
 
   const tags: Record<string, string> = {
+    // Tag personalizzati dal DB — le assegnazioni esplicite sotto hanno priorità
+    ...customTags,
+    // Assegnazioni esplicite: sovrascrivono sempre i tag del DB
     '{titolo}':          esc(post.title),
     '{titoloup}':        esc((post.title || '').toUpperCase()),
     '{titoloshort}':     esc(titleShort),
@@ -85,7 +88,6 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       (post as any).boxcoupon || '',
     '{checkout}':        '',
-    ...customTags,
   };
 
   // Aggiunge tagOverrides per tag non già in tags (custom per-post)

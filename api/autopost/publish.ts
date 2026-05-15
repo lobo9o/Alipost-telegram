@@ -387,6 +387,9 @@ function buildMessage(
   const titleShort = (post.title || '').length > 60 ? (post.title || '').slice(0, 57) + '...' : (post.title || '');
 
   const tags: Record<string, string> = {
+    // Tag personalizzati dal DB — le assegnazioni esplicite sotto hanno priorità
+    ...customTags,
+    // Assegnazioni esplicite: sovrascrivono sempre i tag del DB
     '{titolo}':          esc(post.title),
     '{titoloup}':        esc((post.title || '').toUpperCase()),
     '{titoloshort}':     esc(titleShort),
@@ -413,8 +416,6 @@ function buildMessage(
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       post.boxcoupon || '',
     '{checkout}':        '',
-    // Tag personalizzati (con eventuali override per-post)
-    ...customTags,
   };
 
   const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;
