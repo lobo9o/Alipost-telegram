@@ -224,7 +224,20 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
           <div style={{ marginBottom: 10 }}>
             <div className="lbl">COUPON <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{coupon}'}</span></div>
             <input className="inp" value={post.coupon || ''} onChange={e => update({ coupon: e.target.value })}
-              placeholder="Codice sconto (es. PROMO20)..." />
+              placeholder="Valore coupon (es. -10€, -15%)..." style={{ marginBottom: 6 }} />
+            {currentLayout?.contenuto.includes('{boxcoupon}') && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--t2)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!post.boxcoupon}
+                  onChange={e => {
+                    const val = e.target.checked
+                      ? (tags.find(t => t.name === '{boxcoupon}')?.value || 'Abilita il coupon prima di acquistare')
+                      : undefined;
+                    update({ boxcoupon: val } as any);
+                  }} />
+                C'è un coupon da spuntare sulla pagina Amazon <span style={{ fontFamily: 'monospace', fontSize: 10 }}>{'{boxcoupon}'}</span>
+                {post.boxcoupon && <span style={{ color: 'var(--gre)', fontSize: 10 }}>✓ attivo</span>}
+              </label>
+            )}
           </div>
         )}
 
