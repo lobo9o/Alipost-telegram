@@ -132,8 +132,10 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
   recensioni: string;
   scrapedPrice: number;
   scrapedOrigPrice: number;
+  clipCoupon: string;
+  clipCouponPct: boolean;
 }> {
-  const empty = { stelle: '', recensioni: '', scrapedPrice: 0, scrapedOrigPrice: 0 };
+  const empty = { stelle: '', recensioni: '', scrapedPrice: 0, scrapedOrigPrice: 0, clipCoupon: '', clipCouponPct: false };
   try {
     const url = `https://${domain}/dp/${asin}`;
     const controller = new AbortController();
@@ -193,8 +195,24 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
       if (cpM) scrapedPrice = parseFloat(cpM[1]) || 0;
     }
 
+    // Clip coupon (checkbox da spuntare nel buybox) — rilevato da couponLabelText
+    let clipCoupon = '';
+    let clipCouponPct = false;
+    const couponLabelM = html.match(/couponLabelText[^>]*>\s*Applica\s+coupon\s+([\d,\.]+)\s*%/i);
+    if (couponLabelM) {
+      clipCoupon = couponLabelM[1].replace(',', '.') + '%';
+      clipCouponPct = true;
+    } else {
+      const couponLabelAmtM = html.match(/couponLabelText[^>]*>\s*Applica\s+coupon\s+(?:€|EUR\s*)?([\d,\.]+)/i);
+      if (couponLabelAmtM) {
+        clipCoupon = couponLabelAmtM[1].replace(',', '.');
+        clipCouponPct = false;
+      }
+    }
+    if (clipCoupon) console.log('[product] clip coupon da scraping:', clipCoupon, 'pct:', clipCouponPct);
+
     console.log('[product] scrape page', asin, '| stelle:', stelle, '| rec:', recensioni, '| price:', scrapedPrice, '| origPrice:', scrapedOrigPrice);
-    return { stelle, recensioni, scrapedPrice, scrapedOrigPrice };
+    return { stelle, recensioni, scrapedPrice, scrapedOrigPrice, clipCoupon, clipCouponPct };
   } catch {
     return empty;
   }
@@ -482,7 +500,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     // customerReviews non è supportato dall'API Creators — scraping pagina prodotto
     // Se il prezzo dall'API è 0, lo scraping prova a recuperarlo dalla pagina HTML
-    const { stelle, recensioni, scrapedPrice, scrapedOrigPrice } = await scrapeAmazonPage(resolvedAsin, marketplaceDomain);
+    // Rileva anche clip coupon (checkbox) dalla classe couponLabelText nella pagina
+    const { stelle, recensioni, scrapedPrice, scrapedOrigPrice, clipCoupon, clipCouponPct } = await scrapeAmazonPage(resolvedAsin, marketplaceDomain);
 
     let finalDiscountedPrice = discountedPrice;
     let finalOriginalPrice   = originalPrice;
@@ -515,21 +534,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const dealType = rawDealType.toLowerCase();
       const displayAmount = String(pick(dealDetails, 'displayAmount', 'DisplayAmount', 'amount', 'Amount') ?? '');
       const displayPerc = String(pick(dealDetails, 'displayPercentage', 'DisplayPercentage', 'percentage', 'Percentage') ?? '');
-      console.log('[product] COUPON_DEBUG asin=' + resolvedAsin + ' dealType=' + rawDealType + ' displayAmount=' + displayAmount + ' displayPerc=' + displayPerc);
       if (dealType.includes('coupon') || dealType.includes('clip')) {
-        if (displayAmount) {
-          coupon = displayAmount;
-          couponIsPercent = false;
-        } else if (displayPerc) {
-          coupon = displayPerc;
-          couponIsPercent = true;
-        } else {
-          coupon = 'coupon';
-        }
+        coupon = displayAmount || displayPerc || 'coupon';
+        couponIsPercent = !displayAmount && !!displayPerc;
         couponBox = true;
       } else if (displayAmount || displayPerc) {
         coupon = displayAmount || displayPerc;
       }
+    }
+
+    // Fallback: se l'API non ha dato coupon, usa quello rilevato dallo scraping (couponLabelText)
+    if (!couponBox && clipCoupon) {
+      coupon = clipCoupon;
+      couponIsPercent = clipCouponPct;
+      couponBox = true;
     }
 
     // Applica il coupon da spuntare al prezzo finale (il prezzo reale che l'utente paga)
