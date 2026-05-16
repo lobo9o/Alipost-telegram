@@ -111,8 +111,9 @@ export async function generatePostImage(
     try {
       const img = await loadImage(makeStoreImageUrl(platform));
       const el = template.store;
-      const s = (el.size / 100) * CANVAS_SIZE;
-      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, s, s);
+      const w = (el.size / 100) * CANVAS_SIZE;
+      const h = w * (img.naturalHeight / img.naturalWidth);
+      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, w, h);
     } catch { /* skip */ }
   }
 
