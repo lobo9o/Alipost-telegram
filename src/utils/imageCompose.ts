@@ -68,6 +68,12 @@ function makeStoreImageUrl(platform: 'amazon' | 'aliexpress'): string {
   return platform === 'amazon' ? '/store-amazon.png' : '/store-aliexpress.png';
 }
 
+// Fattore correttivo: a parità di size%, Amazon e AliExpress appaiono uguali
+const STORE_SCALE: Record<'amazon' | 'aliexpress', number> = {
+  amazon:     1.0,
+  aliexpress: 5 / 11,
+};
+
 export async function generatePostImage(
   template: Template,
   productImageUrl: string,
@@ -111,7 +117,7 @@ export async function generatePostImage(
   if (storeEl?.enabled) {
     try {
       const img = await loadImage(makeStoreImageUrl(platform));
-      const h = (storeEl.size / 100) * CANVAS_SIZE;
+      const h = (storeEl.size / 100) * STORE_SCALE[platform] * CANVAS_SIZE;
       const w = h * (img.naturalWidth / img.naturalHeight);
       ctx.drawImage(img, (storeEl.x / 100) * CANVAS_SIZE, (storeEl.y / 100) * CANVAS_SIZE, w, h);
     } catch { /* skip */ }
@@ -215,7 +221,7 @@ export async function generateTerminataImage(
   if (storeEl2?.enabled) {
     try {
       const img = await loadImage(makeStoreImageUrl(platform));
-      const h = (storeEl2.size / 100) * CANVAS_SIZE;
+      const h = (storeEl2.size / 100) * STORE_SCALE[platform] * CANVAS_SIZE;
       const w = h * (img.naturalWidth / img.naturalHeight);
       ctx.drawImage(img, (storeEl2.x / 100) * CANVAS_SIZE, (storeEl2.y / 100) * CANVAS_SIZE, w, h);
     } catch { /* skip */ }

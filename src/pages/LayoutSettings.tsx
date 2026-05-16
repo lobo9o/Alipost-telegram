@@ -477,11 +477,12 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon' }: { tpl
         const storeEl = (platform === 'amazon' ? tpl.storeAmazon : tpl.storeAliexpress) ?? tpl.storeAmazon;
         if (!storeEl?.enabled) return null;
         const src = platform === 'amazon' ? '/store-amazon.png' : '/store-aliexpress.png';
+        const scale = platform === 'amazon' ? 1 : 5 / 11;
         return (
           <img src={src} alt="store"
             style={{
               position: 'absolute', left: `${storeEl.x}%`, top: `${storeEl.y}%`,
-              height: `${storeEl.size}%`, width: 'auto', pointerEvents: 'none',
+              height: `${storeEl.size * scale}%`, width: 'auto', pointerEvents: 'none',
             }}
           />
         );

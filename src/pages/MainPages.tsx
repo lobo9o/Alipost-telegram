@@ -83,13 +83,14 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       {(() => {
         const storeEl = post.platform === 'amazon' ? template.storeAmazon : template.storeAliexpress;
         if (!storeEl?.enabled) return null;
+        const scale = post.platform === 'amazon' ? 1 : 5 / 11;
         return (
           <img
             src={post.platform === 'amazon' ? '/store-amazon.png' : '/store-aliexpress.png'}
             alt="store"
             style={{
               position: 'absolute', left: `${storeEl.x}%`, top: `${storeEl.y}%`,
-              height: `${storeEl.size}%`, width: 'auto', pointerEvents: 'none',
+              height: `${storeEl.size * scale}%`, width: 'auto', pointerEvents: 'none',
             }}
           />
         );
