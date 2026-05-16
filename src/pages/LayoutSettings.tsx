@@ -477,7 +477,7 @@ export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata
         <img src="/store-amazon.png" alt="store"
           style={{
             position: 'absolute', left: `${tpl.store.x}%`, top: `${tpl.store.y}%`,
-            width: `${tpl.store.size}%`, height: 'auto', pointerEvents: 'none',
+            height: `${tpl.store.size}%`, width: 'auto', pointerEvents: 'none',
           }}
         />
       )}

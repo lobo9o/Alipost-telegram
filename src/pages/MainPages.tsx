@@ -86,7 +86,7 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
           alt="store"
           style={{
             position: 'absolute', left: `${template.store.x}%`, top: `${template.store.y}%`,
-            width: `${template.store.size}%`, height: 'auto', pointerEvents: 'none',
+            height: `${template.store.size}%`, width: 'auto', pointerEvents: 'none',
           }}
         />
       )}
