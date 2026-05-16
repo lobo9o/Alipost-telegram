@@ -81,15 +81,14 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
 
       {/* Store */}
       {template.store.enabled && (
-        <div style={{
-          position: 'absolute', left: `${template.store.x}%`, top: `${template.store.y}%`,
-          width: `${template.store.size}%`, aspectRatio: '1/1',
-          background: post.platform === 'amazon' ? '#FF9900' : '#E43226',
-          borderRadius: '20%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: `${template.store.size * 0.4}px`, pointerEvents: 'none',
-        }}>
-          {post.platform === 'amazon' ? '🟡' : '🔴'}
-        </div>
+        <img
+          src={post.platform === 'amazon' ? '/store-amazon.png' : '/store-aliexpress.png'}
+          alt="store"
+          style={{
+            position: 'absolute', left: `${template.store.x}%`, top: `${template.store.y}%`,
+            width: `${template.store.size}%`, height: 'auto', pointerEvents: 'none',
+          }}
+        />
       )}
 
       {/* Text elements with actual values */}

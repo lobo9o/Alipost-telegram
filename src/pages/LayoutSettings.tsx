@@ -474,13 +474,12 @@ export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata
 
       {/* Store icon */}
       {tpl.store.enabled && (
-        <div style={{
-          position: 'absolute', left: `${tpl.store.x}%`, top: `${tpl.store.y}%`,
-          width: `${tpl.store.size}%`, aspectRatio: '1/1',
-          background: '#FF9900', borderRadius: '20%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: `${tpl.store.size * 0.4}px`, pointerEvents: 'none',
-        }}>🏪</div>
+        <img src="/store-amazon.png" alt="store"
+          style={{
+            position: 'absolute', left: `${tpl.store.x}%`, top: `${tpl.store.y}%`,
+            width: `${tpl.store.size}%`, height: 'auto', pointerEvents: 'none',
+          }}
+        />
       )}
 
       {/* Text elements */}
