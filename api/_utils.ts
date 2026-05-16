@@ -195,7 +195,9 @@ export function getUserId(req: VercelRequest): string | null {
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
   const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
-  return computedHash === hash ? userId : null;
+  if (computedHash !== hash) return null;
+  const suffix = process.env.USER_SUFFIX || '';
+  return userId + suffix;
 }
 
 export function requireUserId(req: VercelRequest, res: VercelResponse): string | null {

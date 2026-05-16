@@ -573,7 +573,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const oraI   = cfg.oraI   ?? '08:00';
     const oraF   = cfg.oraF   ?? '22:00';
     const interv = Math.max(1, Number(cfg.interv ?? 60));
-    const channels: string[] = Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
+    const channelOverride = process.env.CHANNEL_OVERRIDE || '';
+    const channels: string[] = channelOverride
+      ? [channelOverride]
+      : Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
 
     if (!channels.length) { skipped.push(`${userId}: no channels`); continue; }
 
