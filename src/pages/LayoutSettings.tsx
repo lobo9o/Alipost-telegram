@@ -437,7 +437,7 @@ function SizeSlider({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE' 
 
 const CANVAS_SIZE_CONST = 1024;
 
-export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata?: TerminataConfig }) {
+export function TemplatePreviewer({ tpl, terminata, platform = 'amazon' }: { tpl: Template; terminata?: TerminataConfig; platform?: 'amazon' | 'aliexpress' }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(340);
   useEffect(() => {
@@ -472,15 +472,20 @@ export function TemplatePreviewer({ tpl, terminata }: { tpl: Template; terminata
         }} />
       )}
 
-      {/* Store icon */}
-      {tpl.store.enabled && (
-        <img src="/store-amazon.png" alt="store"
-          style={{
-            position: 'absolute', left: `${tpl.store.x}%`, top: `${tpl.store.y}%`,
-            height: `${tpl.store.size}%`, width: 'auto', pointerEvents: 'none',
-          }}
-        />
-      )}
+      {/* Store icon — usa il campo in base alla platform passata */}
+      {(() => {
+        const storeEl = (platform === 'amazon' ? tpl.storeAmazon : tpl.storeAliexpress) ?? tpl.storeAmazon;
+        if (!storeEl?.enabled) return null;
+        const src = platform === 'amazon' ? '/store-amazon.png' : '/store-aliexpress.png';
+        return (
+          <img src={src} alt="store"
+            style={{
+              position: 'absolute', left: `${storeEl.x}%`, top: `${storeEl.y}%`,
+              height: `${storeEl.size}%`, width: 'auto', pointerEvents: 'none',
+            }}
+          />
+        );
+      })()}
 
       {/* Text elements */}
       {([
@@ -749,7 +754,7 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
 
 // ── Template Section ──────────────────────────────────────────
 
-type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store' | 'terminata';
+type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'storeAmazon' | 'storeAliexpress' | 'terminata';
 
 const COMP_INFO: Record<ComponentKey, string> = {
   product:          '📦 Riquadro dove apparirà la foto del prodotto. Spostalo con le frecce e ridimensionalo con lo slider.',
@@ -759,7 +764,8 @@ const COMP_INFO: Record<ComponentKey, string> = {
   prezzoPrecedente: '📉 Prezzo precedente (barrato) — inserito automaticamente. Puoi cambiare il colore della barra barrata separatamente.',
   sconto:           '🏷️ Percentuale di sconto — calcolata automaticamente (es. -50%). Impostane font, colore e posizione.',
   testoCustom:      '📝 Testo libero personalizzabile. Corrisponde al campo "Testo custom" del post.',
-  store:            '🏪 Logo negozio automatico: arancio Amazon, rosso AliExpress.',
+  storeAmazon:      '🟠 Logo Amazon — posizione e dimensione indipendenti da AliExpress.',
+  storeAliexpress:  '🔴 Logo AliExpress — posizione e dimensione indipendenti da Amazon.',
   terminata:        '🚫 Configura come appare il post quando l\'offerta termina: immagine B&N, testo overlay, elementi visibili e layout Telegram.',
 };
 
@@ -771,13 +777,14 @@ const COMP_BUTTONS: { id: ComponentKey; icon: string; label: string }[] = [
   { id: 'prezzoPrecedente', icon: '📉', label: 'Prec.' },
   { id: 'sconto',           icon: '🏷️', label: 'Sconto' },
   { id: 'testoCustom',      icon: '📝', label: 'Testo' },
-  { id: 'store',            icon: '🏪', label: 'Store' },
+  { id: 'storeAmazon',      icon: '🟠', label: 'Amazon' },
+  { id: 'storeAliexpress',  icon: '🔴', label: 'AliExpr.' },
   { id: 'terminata',        icon: '🚫', label: 'Terminata' },
 ];
 
 function getElEnabled(id: ComponentKey, tpl: Template): boolean {
   if (id === 'product' || id === 'terminata') return true;
-  if (id === 'overlay' || id === 'badge' || id === 'store') return (tpl[id] as ImgEl).enabled;
+  if (id === 'overlay' || id === 'badge' || id === 'storeAmazon' || id === 'storeAliexpress') return (tpl[id] as ImgEl).enabled;
   return (tpl[id] as TextEl).enabled;
 }
 
@@ -785,6 +792,7 @@ function TemplateSection() {
   const { templates, setTemplates, templateFromDB } = useApp();
   const [activePanel, setActivePanel] = useState<ComponentKey | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [previewPlatform, setPreviewPlatform] = useState<'amazon' | 'aliexpress'>('amazon');
 
   const tpl = templates[0] ?? makeDefaultTemplate('tpl1');
 
@@ -803,7 +811,7 @@ function TemplateSection() {
     });
   };
 
-  const updateImg = (key: 'overlay' | 'badge' | 'store', changes: Partial<ImgEl>) => {
+  const updateImg = (key: 'overlay' | 'badge' | 'storeAmazon' | 'storeAliexpress', changes: Partial<ImgEl>) => {
     setTemplates(ts => {
       const base = ts[0] ?? makeDefaultTemplate('tpl1');
       const updated = { ...base, [key]: { ...(base[key] as ImgEl), ...changes } };
@@ -842,8 +850,8 @@ function TemplateSection() {
   const toggleEnabled = (id: ComponentKey) => {
     if (id === 'product' || id === 'terminata') return;
     const cur = getElEnabled(id, tpl);
-    if (id === 'overlay' || id === 'badge' || id === 'store') {
-      updateImg(id as 'overlay' | 'badge' | 'store', { enabled: !cur });
+    if (id === 'overlay' || id === 'badge' || id === 'storeAmazon' || id === 'storeAliexpress') {
+      updateImg(id as 'overlay' | 'badge' | 'storeAmazon' | 'storeAliexpress', { enabled: !cur });
     } else {
       updateText(id as 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom', { enabled: !cur });
     }
@@ -917,7 +925,20 @@ function TemplateSection() {
       )}
 
       {/* Anteprima live */}
-      <TemplatePreviewer tpl={tpl} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 16px 0' }}>
+        <button
+          onClick={() => {
+            const next = previewPlatform === 'amazon' ? 'aliexpress' : 'amazon';
+            setPreviewPlatform(next);
+            if (activePanel === 'storeAmazon' && next === 'aliexpress') setActivePanel('storeAliexpress');
+            if (activePanel === 'storeAliexpress' && next === 'amazon') setActivePanel('storeAmazon');
+          }}
+          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg2)', cursor: 'pointer' }}
+        >
+          {previewPlatform === 'amazon' ? '🟠 Amazon' : '🔴 AliExpress'} — cambia preview
+        </button>
+      </div>
+      <TemplatePreviewer tpl={tpl} platform={previewPlatform} />
 
       {/* Pannello attivo — frecce subito sotto l'anteprima */}
       {activePanel && (
@@ -931,8 +952,11 @@ function TemplateSection() {
           {activePanel === 'badge' && (
             <BadgeImgPanel el={tpl.badge} onUpdate={ch => updateImg('badge', ch)} onFile={f => handleFile('badge', f)} />
           )}
-          {activePanel === 'store' && (
-            <StorePanel el={tpl.store} onUpdate={ch => updateImg('store', ch)} />
+          {activePanel === 'storeAmazon' && (
+            <StorePanel el={tpl.storeAmazon} onUpdate={ch => updateImg('storeAmazon', ch)} />
+          )}
+          {activePanel === 'storeAliexpress' && (
+            <StorePanel el={tpl.storeAliexpress} onUpdate={ch => updateImg('storeAliexpress', ch)} />
           )}
           {isTextKey(activePanel) && (
             <TextElPanel

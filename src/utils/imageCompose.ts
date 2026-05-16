@@ -106,14 +106,14 @@ export async function generatePostImage(
     } catch { /* skip */ }
   }
 
-  // Store logo (Amazon / AliExpress auto icon)
-  if (template.store.enabled) {
+  // Store logo (Amazon / AliExpress)
+  const storeEl = platform === 'amazon' ? template.storeAmazon : template.storeAliexpress;
+  if (storeEl?.enabled) {
     try {
       const img = await loadImage(makeStoreImageUrl(platform));
-      const el = template.store;
-      const h = (el.size / 100) * CANVAS_SIZE;
+      const h = (storeEl.size / 100) * CANVAS_SIZE;
       const w = h * (img.naturalWidth / img.naturalHeight);
-      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, w, h);
+      ctx.drawImage(img, (storeEl.x / 100) * CANVAS_SIZE, (storeEl.y / 100) * CANVAS_SIZE, w, h);
     } catch { /* skip */ }
   }
 
@@ -211,12 +211,13 @@ export async function generateTerminataImage(
     } catch { /* skip */ }
   }
 
-  if (template.store.enabled) {
+  const storeEl2 = platform === 'amazon' ? template.storeAmazon : template.storeAliexpress;
+  if (storeEl2?.enabled) {
     try {
       const img = await loadImage(makeStoreImageUrl(platform));
-      const el = template.store;
-      const s = (el.size / 100) * CANVAS_SIZE;
-      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, s, s);
+      const h = (storeEl2.size / 100) * CANVAS_SIZE;
+      const w = h * (img.naturalWidth / img.naturalHeight);
+      ctx.drawImage(img, (storeEl2.x / 100) * CANVAS_SIZE, (storeEl2.y / 100) * CANVAS_SIZE, w, h);
     } catch { /* skip */ }
   }
 

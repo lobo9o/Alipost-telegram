@@ -159,7 +159,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const tmpl = tmplResult as Template[] | null;
       if (tmpl !== null) {
         if (tmpl.length > 0) {
-          const normalized = tmpl.map(t => ({ ...makeDefaultTemplate(t.id), ...t }));
+          const normalized = tmpl.map(t => {
+            const base = { ...makeDefaultTemplate(t.id), ...t };
+            // Migrazione: se c'è il vecchio campo store, copialo in entrambi
+            if ((t as any).store && !t.storeAmazon) base.storeAmazon = (t as any).store;
+            if ((t as any).store && !t.storeAliexpress) base.storeAliexpress = (t as any).store;
+            return base;
+          });
           setTemplates(normalized);
         } else {
           const def = makeDefaultTemplate('tpl1');

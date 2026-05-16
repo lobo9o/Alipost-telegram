@@ -80,16 +80,20 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       )}
 
       {/* Store */}
-      {template.store.enabled && (
-        <img
-          src={post.platform === 'amazon' ? '/store-amazon.png' : '/store-aliexpress.png'}
-          alt="store"
-          style={{
-            position: 'absolute', left: `${template.store.x}%`, top: `${template.store.y}%`,
-            height: `${template.store.size}%`, width: 'auto', pointerEvents: 'none',
-          }}
-        />
-      )}
+      {(() => {
+        const storeEl = post.platform === 'amazon' ? template.storeAmazon : template.storeAliexpress;
+        if (!storeEl?.enabled) return null;
+        return (
+          <img
+            src={post.platform === 'amazon' ? '/store-amazon.png' : '/store-aliexpress.png'}
+            alt="store"
+            style={{
+              position: 'absolute', left: `${storeEl.x}%`, top: `${storeEl.y}%`,
+              height: `${storeEl.size}%`, width: 'auto', pointerEvents: 'none',
+            }}
+          />
+        );
+      })()}
 
       {/* Text elements with actual values */}
       {([

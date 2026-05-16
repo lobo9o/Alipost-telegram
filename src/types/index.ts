@@ -110,7 +110,8 @@ export interface Template {
   prezzoPrecedente: TextEl;
   sconto: TextEl;
   testoCustom: TextEl;
-  store: ImgEl;
+  storeAmazon: ImgEl;
+  storeAliexpress: ImgEl;
 }
 
 // Helpers
@@ -137,7 +138,8 @@ export function makeDefaultTemplate(id = 'tpl1'): Template {
     prezzoPrecedente: defText({ enabled: true, x: 5, y: 82, fontSize: 26, color: '#9ca3af', strikethrough: true }),
     sconto: defText({ enabled: true, x: 60, y: 73, fontSize: 36, color: '#ef4444' }),
     testoCustom: defText({ enabled: false, x: 5, y: 90, fontSize: 22 }),
-    store: defImg({ enabled: true, x: 3, y: 3, size: 20 }),
+    storeAmazon:     defImg({ enabled: true, x: 3, y: 3, size: 20 }),
+    storeAliexpress: defImg({ enabled: true, x: 3, y: 3, size: 20 }),
   };
 }
 
