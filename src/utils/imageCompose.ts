@@ -64,11 +64,8 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string) {
   ctx.restore();
 }
 
-function makeStoreSvg(platform: 'amazon' | 'aliexpress'): string {
-  const amazon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="16" fill="#FF9900"/><text x="50" y="78" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="72" fill="white">a</text></svg>`;
-  const ali = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="16" fill="#E43226"/><text x="50" y="68" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="34" fill="white">Ali</text></svg>`;
-  const svg = platform === 'amazon' ? amazon : ali;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+function makeStoreImageUrl(platform: 'amazon' | 'aliexpress'): string {
+  return platform === 'amazon' ? '/store-amazon.png' : '/store-aliexpress.png';
 }
 
 export async function generatePostImage(
@@ -112,7 +109,7 @@ export async function generatePostImage(
   // Store logo (Amazon / AliExpress auto icon)
   if (template.store.enabled) {
     try {
-      const img = await loadImage(makeStoreSvg(platform));
+      const img = await loadImage(makeStoreImageUrl(platform));
       const el = template.store;
       const s = (el.size / 100) * CANVAS_SIZE;
       ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, s, s);
@@ -215,7 +212,7 @@ export async function generateTerminataImage(
 
   if (template.store.enabled) {
     try {
-      const img = await loadImage(makeStoreSvg(platform));
+      const img = await loadImage(makeStoreImageUrl(platform));
       const el = template.store;
       const s = (el.size / 100) * CANVAS_SIZE;
       ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, s, s);
