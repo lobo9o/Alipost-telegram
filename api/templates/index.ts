@@ -20,11 +20,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // POST — create new template
-  const { id, ...config } = req.body ?? {};
-  if (!id) { res.status(400).json({ error: 'id required' }); return; }
+  const { id: _clientId, ...config } = req.body ?? {};
   const [row] = await sql`
     INSERT INTO templates (id, user_id, nome, tipo, config)
-    VALUES (${id}, ${userId}, 'Template', 'normal', ${sql.json(config)})
+    VALUES (gen_random_uuid()::text, ${userId}, 'Template', 'normal', ${sql.json(config)})
     RETURNING id, config
   `;
   res.status(201).json(parseConfig((row as any).config, (row as any).id));

@@ -16,11 +16,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const { id, nome, tipo, contenuto = '', keyboardId = null, active = false } = req.body ?? {};
-  if (!id || !nome || !tipo) { res.status(400).json({ error: 'id, nome and tipo required' }); return; }
+  const { id: _clientId, nome, tipo, contenuto = '', keyboardId = null, active = false } = req.body ?? {};
+  if (!nome || !tipo) { res.status(400).json({ error: 'nome and tipo required' }); return; }
   const [row] = await sql`
     INSERT INTO layouts (id, user_id, nome, tipo, body, keyboard_id, active)
-    VALUES (${id}, ${userId}, ${nome}, ${tipo}, ${contenuto}, ${keyboardId}, ${active})
+    VALUES (gen_random_uuid()::text, ${userId}, ${nome}, ${tipo}, ${contenuto}, ${keyboardId}, ${active})
     RETURNING id, nome, tipo, body AS contenuto, keyboard_id AS "keyboardId", active
   `;
   res.status(201).json(row);

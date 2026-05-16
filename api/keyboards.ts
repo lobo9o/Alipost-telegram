@@ -49,11 +49,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const { id: newId, nome, contenuto = '' } = req.body ?? {};
-  if (!newId || !nome) { res.status(400).json({ error: 'id e nome richiesti' }); return; }
+  const { id: _clientId, nome, contenuto = '' } = req.body ?? {};
+  if (!nome) { res.status(400).json({ error: 'nome richiesto' }); return; }
   const [row] = await sql`
     INSERT INTO keyboards (id, user_id, nome, body)
-    VALUES (${newId}, ${userId}, ${nome}, ${contenuto})
+    VALUES (gen_random_uuid()::text, ${userId}, ${nome}, ${contenuto})
     RETURNING id, nome, body AS contenuto
   `;
   res.status(201).json(row);
