@@ -292,7 +292,7 @@ async function generateTemplateImageServer(
       const fill   = String(el.color || '#ffffff');
       const deco   = el.strikethrough ? ' text-decoration="line-through"' : '';
       const safe   = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const common = `x="${x}" y="${y}" font-family="${family}, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${weight}" text-anchor="${anchor}" dominant-baseline="hanging"${deco}`;
+      const common = `x="${x}" y="${y}" font-family="${family}, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${weight}" text-anchor="${anchor}" dominant-baseline="text-before-edge"${deco}`;
       if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
         const sw = Number(el.strokeWidth) * 2;
         const sc = String(el.strokeColor || '#000000');
