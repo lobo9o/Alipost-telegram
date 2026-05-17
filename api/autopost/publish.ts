@@ -181,8 +181,7 @@ async function scrapeAmazonRating(asin: string, domain: string): Promise<{ stell
   } catch { return empty; }
 }
 
-// Genera immagine con template usando node-canvas (stessa logica del browser, imageCompose.ts)
-// Richiede: npm install canvas  (ha binary precompilati per ARM64/RPi4)
+// Genera immagine con template usando sharp (già installato, nessuna dipendenza nativa extra)
 async function generateTemplateImageServer(
   template: any,
   productImageUrl: string,
@@ -191,35 +190,18 @@ async function generateTemplateImageServer(
   isHistoricalLow = false,
 ): Promise<string | null> {
   try {
-    const canvasMod = await import('canvas').catch(() => null) as any;
-    if (!canvasMod) {
-      console.warn('[tpl] node-canvas non installato — esegui: npm install canvas');
-      return null;
-    }
-    const { createCanvas, loadImage, registerFont } = canvasMod;
-
-    // Registra Impact esplicitamente se presente (Raspberry Pi dopo mscorefonts)
-    const impactPaths = [
-      '/usr/share/fonts/truetype/msttcorefonts/Impact.ttf',
-      '/usr/share/fonts/truetype/impact.ttf',
-      '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
-    ];
-    for (const p of impactPaths) {
-      try {
-        const { existsSync } = await import('fs');
-        if (existsSync(p)) { registerFont(p, { family: 'Impact' }); break; }
-      } catch { /* ignore */ }
-    }
+    const sharpMod = await import('sharp').catch(() => null) as any;
+    if (!sharpMod) { console.warn('[tpl] sharp non disponibile'); return null; }
+    const sharp = (sharpMod.default ?? sharpMod) as any;
 
     const SIZE = 1024;
-    const canvas = createCanvas(SIZE, SIZE);
-    const ctx = canvas.getContext('2d');
 
-    // Background
-    ctx.fillStyle = template.bgColor || '#ffffff';
-    ctx.fillRect(0, 0, SIZE, SIZE);
+    // Converti colore hex background in { r, g, b }
+    const bgHex = String(template.bgColor || '#ffffff').replace('#', '').padEnd(6, 'f');
+    const bgR = parseInt(bgHex.slice(0, 2), 16) || 255;
+    const bgG = parseInt(bgHex.slice(2, 4), 16) || 255;
+    const bgB = parseInt(bgHex.slice(4, 6), 16) || 255;
 
-    // Helper: fetch immagine HTTP con User-Agent e restituisce Buffer
     async function fetchImgBuf(url: string): Promise<Buffer | null> {
       try {
         const ctrl = new AbortController();
@@ -231,101 +213,130 @@ async function generateTemplateImageServer(
       } catch { return null; }
     }
 
-    // Prodotto — centrato nella box (identico a drawContained del browser)
+    async function bufFromSrc(src: string): Promise<Buffer | null> {
+      if (src.startsWith('data:')) {
+        const b64 = src.split(',')[1];
+        return b64 ? Buffer.from(b64, 'base64') : null;
+      }
+      if (src.startsWith('http')) return fetchImgBuf(src);
+      return null;
+    }
+
+    const composites: any[] = [];
+
+    // ── Immagine prodotto (contained nella box) ────────────────────
     if (productImageUrl?.startsWith('http')) {
       try {
         const buf = await fetchImgBuf(productImageUrl);
         if (buf) {
-          const img = await loadImage(buf);
           const el = template.product ?? { x: 5, y: 5, size: 90 };
-          const x = (el.x / 100) * SIZE;
-          const y = (el.y / 100) * SIZE;
-          const box = (el.size / 100) * SIZE;
-          const ratio = Math.min(box / img.width, box / img.height);
-          const dw = img.width * ratio;
-          const dh = img.height * ratio;
-          ctx.drawImage(img, x + (box - dw) / 2, y + (box - dh) / 2, dw, dh);
+          const box     = Math.round((el.size / 100) * SIZE);
+          const elLeft  = Math.round((el.x / 100) * SIZE);
+          const elTop   = Math.round((el.y / 100) * SIZE);
+          const { data, info } = await sharp(buf)
+            .resize(box, box, { fit: 'inside' })
+            .toBuffer({ resolveWithObject: true });
+          composites.push({
+            input: data,
+            left: elLeft + Math.round((box - info.width) / 2),
+            top:  elTop  + Math.round((box - info.height) / 2),
+          });
         }
       } catch (e: any) { console.warn('[tpl] product:', e.message); }
     }
 
-    // Overlay (logo utente — base64 o URL)
+    // ── Overlay PNG (logo utente — base64 o URL) ───────────────────
     if (template.overlay?.enabled && template.overlay?.src) {
       try {
-        const src = String(template.overlay.src);
-        const img = await loadImage(src.startsWith('http') ? (await fetchImgBuf(src) ?? src) : src);
-        const el = template.overlay;
-        const s = (el.size / 100) * SIZE;
-        ctx.drawImage(img, (el.x / 100) * SIZE, (el.y / 100) * SIZE, s, s);
+        const buf = await bufFromSrc(String(template.overlay.src));
+        if (buf) {
+          const el = template.overlay;
+          const s = Math.round((el.size / 100) * SIZE);
+          const resized = await sharp(buf)
+            .resize(s, s, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+            .png().toBuffer();
+          composites.push({ input: resized, left: Math.round((el.x / 100) * SIZE), top: Math.round((el.y / 100) * SIZE) });
+        }
       } catch (e: any) { console.warn('[tpl] overlay:', e.message); }
     }
 
-    // Store badge — carica PNG reale da filesystem
+    // ── Store badge (PNG da filesystem) ────────────────────────────
     const storeEl = platform === 'amazon' ? template.storeAmazon : template.storeAliexpress;
     const storeScale = platform === 'amazon' ? 1.0 : 5 / 11;
     if (storeEl?.enabled) {
       try {
         const { fileURLToPath } = await import('url');
         const { dirname, join } = await import('path');
+        const { promises: fs } = await import('fs');
         const __dir = dirname(fileURLToPath(import.meta.url));
         const pngPath = join(__dir, '../../public', platform === 'amazon' ? 'store-amazon.png' : 'store-aliexpress.png');
-        const img = await loadImage(pngPath);
-        const h = (storeEl.size / 100) * storeScale * SIZE;
-        const w = h * (img.width / img.height);
-        ctx.drawImage(img, (storeEl.x / 100) * SIZE, (storeEl.y / 100) * SIZE, w, h);
+        const storeBuf = await fs.readFile(pngPath);
+        const meta = await sharp(storeBuf).metadata();
+        const h = Math.round((storeEl.size / 100) * storeScale * SIZE);
+        const w = Math.round(h * ((meta.width ?? 1) / (meta.height ?? 1)));
+        const resized = await sharp(storeBuf).resize(w, h).toBuffer();
+        composites.push({ input: resized, left: Math.round((storeEl.x / 100) * SIZE), top: Math.round((storeEl.y / 100) * SIZE) });
       } catch (e: any) { console.warn('[tpl] store:', e.message); }
     }
 
-    // Testi — usa ctx.textAlign per rispettare l'ancora indipendentemente dal font
-    const drawTextEl = (el: any, text: string) => {
+    // ── Elementi testo via SVG ──────────────────────────────────────
+    const svgEls: string[] = [];
+    function textElToSvg(el: any, text: string) {
       if (!el?.enabled || !text?.trim()) return;
       const fs     = (Number(el.fontSize) || 36) * 2;
-      const x      = (el.x / 100) * SIZE;
-      const y      = (el.y / 100) * SIZE;
-      const anchor = el.textAnchor === 'right' ? 'right' : el.textAnchor === 'center' ? 'center' : 'left';
-      ctx.save();
-      ctx.font         = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, sans-serif`;
-      ctx.textBaseline = 'top';
-      ctx.textAlign    = anchor as CanvasTextAlign;
-      if (el.strokeEnabled && el.strokeWidth > 0) {
-        ctx.strokeStyle = el.strokeColor || '#000';
-        ctx.lineWidth   = (el.strokeWidth || 3) * 2;
-        ctx.lineJoin    = 'round';
-        ctx.strokeText(text, x, y);
+      const x      = Math.round((el.x / 100) * SIZE);
+      const y      = Math.round((el.y / 100) * SIZE);
+      const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
+      const family = String(el.fontFamily || 'Impact').replace(/"/g, '');
+      const weight = el.bold ? 'bold' : 'normal';
+      const fill   = String(el.color || '#ffffff');
+      const deco   = el.strikethrough ? ' text-decoration="line-through"' : '';
+      const safe   = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const common = `x="${x}" y="${y}" font-family="${family}, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${weight}" text-anchor="${anchor}" dominant-baseline="hanging"${deco}`;
+      if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
+        const sw = Number(el.strokeWidth) * 2;
+        const sc = String(el.strokeColor || '#000000');
+        svgEls.push(`<text ${common} stroke="${sc}" stroke-width="${sw}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${safe}</text>`);
+      } else {
+        svgEls.push(`<text ${common} fill="${fill}">${safe}</text>`);
       }
-      ctx.fillStyle = el.color || '#fff';
-      ctx.fillText(text, x, y);
-      if (el.strikethrough) {
-        const tw = ctx.measureText(text).width;
-        const sx = anchor === 'right' ? x - tw : anchor === 'center' ? x - tw / 2 : x;
-        const sy = y + fs * 0.55;
-        ctx.strokeStyle = el.strikethroughColor || el.color || '#fff';
-        ctx.lineWidth   = Math.max(1, fs * 0.06);
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + tw, sy); ctx.stroke();
-      }
-      ctx.restore();
-    };
+    }
 
-    drawTextEl(template.prezzo,           priceData.prezzo);
-    drawTextEl(template.prezzoPrecedente, priceData.prezzoPrecedente);
-    drawTextEl(template.sconto,           priceData.sconto);
-    drawTextEl(template.testoCustom,      template.testoCustom?.text ?? '');
+    textElToSvg(template.prezzo,           priceData.prezzo);
+    textElToSvg(template.prezzoPrecedente, priceData.prezzoPrecedente);
+    textElToSvg(template.sconto,           priceData.sconto);
+    textElToSvg(template.testoCustom,      template.testoCustom?.text ?? '');
 
-    // Badge minimo storico — ULTIMO livello, sopra tutto (stessa logica del browser)
+    if (svgEls.length > 0) {
+      const svg = Buffer.from(
+        `<svg width="${SIZE}" height="${SIZE}" xmlns="http://www.w3.org/2000/svg">${svgEls.join('')}</svg>`
+      );
+      composites.push({ input: svg });
+    }
+
+    // ── Badge minimo storico (ULTIMO strato) ───────────────────────
     if (isHistoricalLow && template.badge?.enabled && template.badge?.src) {
       try {
-        const src = String(template.badge.src);
-        const badgeBuf = src.startsWith('http') ? (await fetchImgBuf(src) ?? null) : null;
-        const badgeImg = await loadImage(badgeBuf ?? src);
-        const el = template.badge;
-        const w = ((el.size ?? 30) / 100) * SIZE;
-        const h = (badgeImg.height / badgeImg.width) * w;
-        ctx.drawImage(badgeImg, ((el.x ?? 0) / 100) * SIZE, ((el.y ?? 0) / 100) * SIZE, w, h);
+        const buf = await bufFromSrc(String(template.badge.src));
+        if (buf) {
+          const el = template.badge;
+          const meta = await sharp(buf).metadata();
+          const w = Math.round(((el.size ?? 30) / 100) * SIZE);
+          const h = Math.round(w * ((meta.height ?? 1) / (meta.width ?? 1)));
+          const resized = await sharp(buf).resize(w, h).png().toBuffer();
+          composites.push({ input: resized, left: Math.round(((el.x ?? 0) / 100) * SIZE), top: Math.round(((el.y ?? 0) / 100) * SIZE) });
+        }
       } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
     }
 
-    const buf = canvas.toBuffer('image/jpeg', { quality: 0.88 });
-    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    const result = await sharp({
+      create: { width: SIZE, height: SIZE, channels: 3, background: { r: bgR, g: bgG, b: bgB } },
+    })
+      .composite(composites)
+      .jpeg({ quality: 88 })
+      .toBuffer();
+
+    return `data:image/jpeg;base64,${result.toString('base64')}`;
   } catch (e: any) {
     console.warn('[tpl] generate failed:', e.message);
     return null;
