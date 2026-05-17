@@ -1214,19 +1214,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           id, user_id, emoji, title, image,
           original_price, discounted_price, discount_percent,
           platform, source_url, product_id, custom_text,
-          layout_id, is_historical_low, is_multi, chat_id, message_id, published_at
+          layout_id, is_historical_low, is_multi, chat_id, message_id, published_at, last_checked_at
         ) VALUES (
           ${post.id}, ${userId}, ${post.emoji ?? ''}, ${post.title ?? ''}, ${post.image ?? ''},
           ${post.originalPrice ?? 0}, ${post.discountedPrice ?? 0}, ${post.discountPercent ?? 0},
           ${post.platform ?? 'amazon'}, ${post.sourceUrl ?? ''}, ${post.productId ?? ''},
           ${post.customText ?? ''}, ${post.layoutId ?? ''}, ${post.isHistoricalLow ?? false},
-          ${isMulti}, ${chatId}, ${messageId}, now()
+          ${isMulti}, ${chatId}, ${messageId}, now(), now()
         )
         ON CONFLICT (id) DO UPDATE SET
           chat_id = EXCLUDED.chat_id,
           message_id = EXCLUDED.message_id,
           is_multi = EXCLUDED.is_multi
-      `.catch(() => {});
+      `.catch((e: any) => console.error('[autopost] published_posts insert error:', e?.message));
 
       // Registra prezzo in storico (fire-and-forget)
       if (post.productId && Number(post.discountedPrice ?? 0) > 0) {
@@ -1264,6 +1264,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         FROM published_posts
         WHERE user_id = ${userId}
           AND NOT COALESCE(terminata, false)
+          AND published_at < now() - interval '30 minutes'
           AND (last_checked_at IS NULL OR last_checked_at < now() - interval '1 hour')
         ORDER BY last_checked_at ASC NULLS FIRST
         LIMIT 5
