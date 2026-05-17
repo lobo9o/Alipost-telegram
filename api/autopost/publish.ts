@@ -618,6 +618,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
+    // Allinea l'orario ai multipli dell'intervallo (es. ogni 5 min → 11:50, 11:55, 12:00)
+    // Pubblica solo se siamo entro i primi 60s della "finestra" multipla dell'intervallo
+    if (interv > 1) {
+      const nowRome = nowMinutesRome();
+      const minuteInCycle = (nowRome - timeToMin(oraI) + 1440) % interv;
+      if (minuteInCycle > 0) {
+        skipped.push(`${userId}: attendo finestra (${minuteInCycle}/${interv}min)`); continue;
+      }
+    }
+
     // Scorre la coda finché trova un post con prezzo ancora valido (max 5 tentativi)
     let queueItem: Record<string, any> | null = null;
     let post: Record<string, any> | null = null;
