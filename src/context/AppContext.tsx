@@ -135,24 +135,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const extra = (t as Tag[]).filter((x: Tag) => !INITIAL_TAGS.some(d => d.id === x.id || d.name === x.name));
         setTags([...systemMerged, ...extra]);
       }
-      // Merge DB layouts with defaults: DB ha la precedenza per ID corrispondenti,
-      // i default riempiono i gap (così layout mai modificati rimangono visibili)
+      // Merge DB layouts: controlla per nome+tipo (non per id) così non crea duplicati
+      // quando il server genera UUID invece degli id fissi dell'app
       {
-        const dbById = new Map((l as TextLayout[]).map((x: TextLayout) => [x.id, x]));
-        const merged = INITIAL_LAYOUTS.map(d => dbById.get(d.id) ?? d);
-        const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => d.id === x.id));
+        const key = (x: TextLayout) => `${x.nome}__${x.tipo}`;
+        const dbByKey = new Map((l as TextLayout[]).map((x: TextLayout) => [key(x), x]));
+        // Pulizia duplicati: per ogni nome+tipo tieni solo il più vecchio, cancella gli altri
+        const seen = new Map<string, string>(); // key → id da tenere
+        for (const x of (l as TextLayout[])) {
+          const k = key(x);
+          if (!seen.has(k)) { seen.set(k, x.id); }
+          else { layoutsApi.delete(x.id).catch(() => {}); }
+        }
+        const merged = INITIAL_LAYOUTS.map(d => dbByKey.get(key(d)) ?? d);
+        const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => key(d) === key(x)) && seen.get(key(x)) === x.id);
         setLayouts([...merged, ...extra]);
-        // Persisti nel DB i layout di default non ancora presenti — così il PUT successivo li trova
-        INITIAL_LAYOUTS.forEach(d => { if (!dbById.has(d.id)) layoutsApi.create(d).catch(() => {}); });
+        INITIAL_LAYOUTS.forEach(d => { if (!dbByKey.has(key(d))) layoutsApi.create(d).catch(() => {}); });
       }
-      // Merge keyboards: stessa logica dei layouts
+      // Merge keyboards: stessa logica (per nome)
       {
-        const kbById = new Map((kb as KeyboardLayout[]).map((x: KeyboardLayout) => [x.id, x]));
-        const merged = INITIAL_KEYBOARDS.map(d => kbById.get(d.id) ?? d);
-        const extra = (kb as KeyboardLayout[]).filter((x: KeyboardLayout) => !INITIAL_KEYBOARDS.some(d => d.id === x.id));
+        const dbByNome = new Map((kb as KeyboardLayout[]).map((x: KeyboardLayout) => [x.nome, x]));
+        // Pulizia duplicati
+        const seenKb = new Map<string, string>();
+        for (const x of (kb as KeyboardLayout[])) {
+          if (!seenKb.has(x.nome)) { seenKb.set(x.nome, x.id); }
+          else { keyboardsApi.delete(x.id).catch(() => {}); }
+        }
+        const merged = INITIAL_KEYBOARDS.map(d => dbByNome.get(d.nome) ?? d);
+        const extra = (kb as KeyboardLayout[]).filter((x: KeyboardLayout) => !INITIAL_KEYBOARDS.some(d => d.nome === x.nome) && seenKb.get(x.nome) === x.id);
         setKeyboards([...merged, ...extra]);
-        // Stessa cosa per keyboards
-        INITIAL_KEYBOARDS.forEach(d => { if (!kbById.has(d.id)) keyboardsApi.create(d).catch(() => {}); });
+        INITIAL_KEYBOARDS.forEach(d => { if (!dbByNome.has(d.nome)) keyboardsApi.create(d).catch(() => {}); });
       }
       // tmplResult === null → API fallita: templateFromDB resta false, nessun salvataggio
       // tmplResult !== null → dato reale dal DB → abilita salvataggio
