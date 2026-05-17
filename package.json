@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "dependencies": {
+    "canvas": "^2.11.2",
     "express": "^4.21.2",
     "node-cron": "^3.0.3",
     "postgres": "^3.4.4",
