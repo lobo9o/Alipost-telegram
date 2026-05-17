@@ -517,6 +517,21 @@ function nowMinutesRome(): number {
 
 let migrationDone = false;
 
+// Lock in-memory per userId: evita doppia pubblicazione quando due cron run si sovrappongono
+const publishingUsers = new Set<string>();
+
+// Legge config template dal DB e applica la migration store→storeAmazon/storeAliexpress
+function parseTemplateCfg(row: any): Record<string, any> | null {
+  if (!row) return null;
+  const raw = typeof row.config === 'string' ? JSON.parse(row.config) : (row.config ?? {});
+  const cfg: Record<string, any> = { id: row.id, ...raw };
+  if (cfg.store && !cfg.storeAmazon) {
+    cfg.storeAmazon = cfg.store;
+    cfg.storeAliexpress = cfg.store;
+  }
+  return cfg;
+}
+
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   // Vercel invia CRON_SECRET come Bearer token nell'header Authorization
   const cronSecret = process.env.CRON_SECRET;
@@ -561,6 +576,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     // AutoPost disabilitato
     if (!cfg.attivo) { skipped.push(`${userId}: disabled`); continue; }
+
+    // Lock per-userId: evita doppia pubblicazione se due run cron si sovrappongono
+    if (publishingUsers.has(userId)) { skipped.push(`${userId}: run già in corso`); continue; }
+    publishingUsers.add(userId);
+    try {
 
     const oraI   = cfg.oraI   ?? '08:00';
     const oraF   = cfg.oraF   ?? '22:00';
@@ -714,9 +734,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           // Carica template e layout utente (come per Amazon)
           const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
           const aliTemplateId = aliTplRow[0]?.id ?? 'tpl1';
-          const aliTemplateCfg = aliTplRow[0]
-            ? { id: aliTplRow[0].id, ...(typeof aliTplRow[0].config === 'string' ? JSON.parse(aliTplRow[0].config) : (aliTplRow[0].config ?? {})) }
-            : null;
+          const aliTemplateCfg = parseTemplateCfg(aliTplRow[0]);
           const aliLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo IN ('aliexpress', 'normal') ORDER BY tipo = 'aliexpress' DESC, created_at ASC LIMIT 1`;
           const aliLayoutId = aliLayoutRows[0]?.id ?? '';
 
@@ -866,9 +884,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
         const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
         const mTemplateId = mTplRow[0]?.id ?? 'tpl1';
-        const mTemplateCfg = mTplRow[0]
-          ? { id: mTplRow[0].id, ...(typeof mTplRow[0].config === 'string' ? JSON.parse(mTplRow[0].config) : (mTplRow[0].config ?? {})) }
-          : null;
+        const mTemplateCfg = parseTemplateCfg(mTplRow[0]);
         const mLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`.catch(() => []);
         const mLayoutId = mLayoutRows[0]?.id ?? '';
         const CSYM_M: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
@@ -915,9 +931,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const layoutId = amzLayouts[0]?.id ?? '';
         const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
         const templateId  = tplRow[0]?.id ?? 'tpl1';
-        const templateCfg = tplRow[0]
-          ? { id: tplRow[0].id, ...(typeof tplRow[0].config === 'string' ? JSON.parse(tplRow[0].config) : (tplRow[0].config ?? {})) }
-          : null;
+        const templateCfg = parseTemplateCfg(tplRow[0]);
 
         const discountedPrice = Number(amzCandidate.discounted_price);
         const originalPrice   = Number(amzCandidate.original_price);
@@ -1025,14 +1039,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             sconto:           `-${hlDiscountPercent}%`,
           };
           if (hlTpl) {
-            const hlCfg = { id: hlTpl.id, ...(typeof hlTpl.config === 'string' ? JSON.parse(hlTpl.config) : (hlTpl.config ?? {})) };
+            const hlCfg = parseTemplateCfg(hlTpl)!;
             const genImg = await generateTemplateImageServer(hlCfg, String(post.image), post.platform, hlPriceData, true).catch(() => null);
             if (genImg) post = { ...post, generatedImage: genImg };
           } else {
             // Nessun template dedicato: rigenera con template base + badge
             const [baseTpl] = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`.catch(() => [null]);
             if (baseTpl) {
-              const baseCfg = { id: baseTpl.id, ...(typeof baseTpl.config === 'string' ? JSON.parse(baseTpl.config) : (baseTpl.config ?? {})) };
+              const baseCfg = parseTemplateCfg(baseTpl)!;
               const genImg = await generateTemplateImageServer(baseCfg, String(post.image), post.platform, hlPriceData, true).catch(() => null);
               if (genImg) post = { ...post, generatedImage: genImg };
             }
@@ -1338,6 +1352,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     } catch (e) {
       console.warn('[autopost] check expired:', e instanceof Error ? e.message : e);
     }
+
+    } finally { publishingUsers.delete(userId); } // ← rilascia lock per-userId
   }
 
   res.json({ ok: true, published, skipped, errors });

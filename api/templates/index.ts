@@ -14,7 +14,17 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   if (req.method === 'GET') {
     const rows = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} ORDER BY created_at ASC`;
-    const result = rows.map((r: any) => parseConfig(r.config, r.id));
+    const result = [];
+    for (const r of rows as any[]) {
+      const cfg = parseConfig(r.config, r.id) as any;
+      if (cfg.store && !cfg.storeAmazon) {
+        cfg.storeAmazon = cfg.store;
+        cfg.storeAliexpress = cfg.store;
+        const { id: _id, ...configToSave } = cfg;
+        await sql`UPDATE templates SET config = ${sql.json(configToSave)} WHERE id = ${r.id} AND user_id = ${userId}`.catch(() => {});
+      }
+      result.push(cfg);
+    }
     res.json(result);
     return;
   }
