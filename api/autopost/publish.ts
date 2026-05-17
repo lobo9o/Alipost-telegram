@@ -260,28 +260,20 @@ async function generateTemplateImageServer(
       } catch (e: any) { console.warn('[tpl] overlay:', e.message); }
     }
 
-    // Store badge — disegnato con canvas 2D primitives (no SVG, no font dependency)
-    if (template.store?.enabled) {
+    // Store badge — carica PNG reale da filesystem
+    const storeEl = platform === 'amazon' ? template.storeAmazon : template.storeAliexpress;
+    const storeScale = platform === 'amazon' ? 1.0 : 5 / 11;
+    if (storeEl?.enabled) {
       try {
-        const el = template.store;
-        const s  = Math.max(16, (el.size / 100) * SIZE);
-        const bx = (el.x / 100) * SIZE;
-        const by = (el.y / 100) * SIZE;
-        const rc = s * 0.16;
-        ctx.beginPath();
-        ctx.moveTo(bx + rc, by); ctx.lineTo(bx + s - rc, by);
-        ctx.arcTo(bx + s, by, bx + s, by + rc, rc); ctx.lineTo(bx + s, by + s - rc);
-        ctx.arcTo(bx + s, by + s, bx + s - rc, by + s, rc); ctx.lineTo(bx + rc, by + s);
-        ctx.arcTo(bx, by + s, bx, by + s - rc, rc); ctx.lineTo(bx, by + rc);
-        ctx.arcTo(bx, by, bx + rc, by, rc); ctx.closePath();
-        ctx.fillStyle = platform === 'amazon' ? '#FF9900' : '#E43226';
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.round(s * 0.55)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(platform === 'amazon' ? 'a' : 'Ali', bx + s / 2, by + s * 0.55);
-      } catch (e: any) { console.warn('[tpl] badge:', e.message); }
+        const { fileURLToPath } = await import('url');
+        const { dirname, join } = await import('path');
+        const __dir = dirname(fileURLToPath(import.meta.url));
+        const pngPath = join(__dir, '../../public', platform === 'amazon' ? 'store-amazon.png' : 'store-aliexpress.png');
+        const img = await loadImage(pngPath);
+        const h = (storeEl.size / 100) * storeScale * SIZE;
+        const w = h * (img.width / img.height);
+        ctx.drawImage(img, (storeEl.x / 100) * SIZE, (storeEl.y / 100) * SIZE, w, h);
+      } catch (e: any) { console.warn('[tpl] store:', e.message); }
     }
 
     // Testi — usa ctx.textAlign per rispettare l'ancora indipendentemente dal font
