@@ -563,7 +563,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!botToken) { res.json({ ok: true, note: 'TELEGRAM_BOT_TOKEN non configurato' }); return; }
   const tgBase = `https://api.telegram.org/bot${botToken}`;
 
-  const settingsRows = await sql`SELECT user_id, data FROM settings WHERE user_id IS NOT NULL`;
+  // Ogni processo gestisce solo i propri utenti: dev (_dev) non pubblica per stable e viceversa
+  const userSuffix = process.env.USER_SUFFIX || '';
+  const allSettingsRows = await sql`SELECT user_id, data FROM settings WHERE user_id IS NOT NULL`;
+  const settingsRows = (allSettingsRows as any[]).filter(row => {
+    const uid = String(row.user_id);
+    return userSuffix ? uid.endsWith(userSuffix) : !uid.includes('_');
+  });
 
   const published: string[] = [];
   const skipped: string[] = [];
