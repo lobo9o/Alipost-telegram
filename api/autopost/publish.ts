@@ -264,11 +264,12 @@ async function generateTemplateImageServer(
         } catch (e: any) { console.warn('[tpl] store:', e.message); }
       }
 
-      const drawTextEl = (el: any, text: string) => {
+      const drawTextEl = (el: any, text: string, debugName?: string) => {
         if (!el?.enabled || !text?.trim()) return;
         const fs = (Number(el.fontSize) || 36) * 2;
         const x = (el.x / 100) * SIZE; const y = (el.y / 100) * SIZE;
         const anchor = el.textAnchor === 'right' ? 'right' : el.textAnchor === 'center' ? 'center' : 'left';
+        if (debugName) console.log(`[tpl] ${debugName}: color=${JSON.stringify(el.color)} strikethroughColor=${JSON.stringify(el.strikethroughColor)} strokeColor=${JSON.stringify(el.strokeColor)} strikethrough=${el.strikethrough}`);
         ctx.save();
         ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, sans-serif`;
         ctx.textBaseline = 'top'; ctx.textAlign = anchor as CanvasTextAlign;
@@ -281,16 +282,18 @@ async function generateTemplateImageServer(
         if (el.strikethrough) {
           const tw = ctx.measureText(text).width;
           const sx = anchor === 'right' ? x - tw : anchor === 'center' ? x - tw / 2 : x;
-          ctx.strokeStyle = el.strikethroughColor || el.color || '#fff';
+          const strkColor = el.strikethroughColor || el.color || '#fff';
+          if (debugName) console.log(`[tpl] ${debugName} strikethrough: usando colore=${JSON.stringify(strkColor)}`);
+          ctx.strokeStyle = strkColor;
           ctx.lineWidth = Math.max(1, fs * 0.06);
           ctx.beginPath(); ctx.moveTo(sx, y + fs * 0.55); ctx.lineTo(sx + tw, y + fs * 0.55); ctx.stroke();
         }
         ctx.restore();
       };
 
-      drawTextEl(template.prezzo, priceData.prezzo);
-      drawTextEl(template.prezzoPrecedente, priceData.prezzoPrecedente);
-      drawTextEl(template.sconto, priceData.sconto);
+      drawTextEl(template.prezzo, priceData.prezzo, 'prezzo');
+      drawTextEl(template.prezzoPrecedente, priceData.prezzoPrecedente, 'prezzoPrecedente');
+      drawTextEl(template.sconto, priceData.sconto, 'sconto');
       drawTextEl(template.testoCustom, template.testoCustom?.text ?? '');
 
       if (isHistoricalLow && template.badge?.enabled && template.badge?.src) {
