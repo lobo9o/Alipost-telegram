@@ -1951,6 +1951,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     }));
   };
 
+  // Aggiorna stato locale + persiste nel DB (senza rigenerare immagine)
+  const saveQueueField = (item: QueueItem, changes: Partial<CreatedPost>) => {
+    updateQueuePost(item.id, changes);
+    const updatedPost = { ...(item.posts[0] as CreatedPost), ...changes };
+    autopostApi.update(item.id, { posts: [updatedPost], status: item.status }).catch(() => {});
+  };
+
   // Aggiorna un singolo prodotto dentro un post multiplo + persiste nel DB
   const updateMultiPostProduct = async (itemId: string, postId: string, changes: Partial<CreatedPost>) => {
     const qItem = queue.find(x => x.id === itemId);
@@ -2756,7 +2763,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 
               <div style={{ marginTop: 12, marginBottom: 10 }}>
                 <div className="lbl">LAYOUT TESTO</div>
-                <select className="sel" value={p.layoutId} onChange={e => updateQueuePost(item.id, { layoutId: e.target.value })}>
+                <select className="sel" value={p.layoutId} onChange={e => saveQueueField(item, { layoutId: e.target.value })}>
                   {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
                 </select>
               </div>
@@ -2834,14 +2841,14 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
               {/* 6. Layout testo */}
               <div style={{ marginBottom: 10 }}>
                 <div className="lbl">LAYOUT TESTO</div>
-                <select className="sel" value={p.layoutId} onChange={e => updateQueuePost(item.id, { layoutId: e.target.value })}>
+                <select className="sel" value={p.layoutId} onChange={e => saveQueueField(item, { layoutId: e.target.value })}>
                   {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
                 </select>
               </div>
               {/* 7. Tastiera */}
               <div style={{ marginBottom: 4 }}>
                 <div className="lbl">TASTIERA BOTTONI</div>
-                <select className="sel" value={p.keyboardId ?? keyboards[0]?.id ?? ''} onChange={e => updateQueuePost(item.id, { keyboardId: e.target.value })}>
+                <select className="sel" value={p.keyboardId ?? keyboards[0]?.id ?? ''} onChange={e => saveQueueField(item, { keyboardId: e.target.value })}>
                   {keyboards.map(k => <option key={k.id} value={k.id}>{k.nome}</option>)}
                 </select>
               </div>
