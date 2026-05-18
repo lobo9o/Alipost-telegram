@@ -190,7 +190,7 @@ function TextLayoutSection() {
           </select>
         </div>
         <div className="fld">
-          <label className="lbl">Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{custom}'}</label>
+          <label className="lbl">Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{countryflag}'}, {'{country}'}, {'{custom}'}</label>
           <textarea ref={taRef} className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={8} />
         </div>
         <div className="fld">

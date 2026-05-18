@@ -333,35 +333,53 @@ async function scrapeAliShipFrom(productId: string): Promise<string | null> {
     if (!r.ok) return null;
     const html = await r.text();
 
-    // Pattern 1: "shipFromCountry":"FR" (common in JSON data)
-    const m1 = html.match(/"shipFromCountry"\s*:\s*"([A-Z]{2})"/);
-    if (m1?.[1]) { console.log('[ali] shipFrom p1:', m1[1]); return m1[1]; }
+    const NAME_TO_CODE: Record<string, string> = {
+      France: 'FR', Germany: 'DE', Spain: 'ES', Italy: 'IT', China: 'CN',
+      'United States': 'US', Japan: 'JP', 'United Kingdom': 'GB',
+      Netherlands: 'NL', Poland: 'PL', Russia: 'RU', Brazil: 'BR',
+      Turkey: 'TR', Australia: 'AU', Canada: 'CA', India: 'IN',
+      Korea: 'KR', Belgium: 'BE', Portugal: 'PT', Sweden: 'SE',
+      Austria: 'AT', Switzerland: 'CH', Ukraine: 'UA',
+    };
+
+    // Cerca TUTTI i valori sendCountry nella pagina — preferiamo il non-CN (warehouse EU)
+    const allSendCountry = [...html.matchAll(/"sendCountry"\s*:\s*"([A-Z]{2})"/g)].map(m => m[1]);
+    const euSendCountry = allSendCountry.find(c => c !== 'CN') ?? allSendCountry[0] ?? null;
+    if (euSendCountry) { console.log('[ali] shipFrom sendCountry:', euSendCountry, '(all:', allSendCountry.join(','), ')'); return euSendCountry; }
+
+    // Pattern 1: "shipFromCountry":"FR" (seller/warehouse in JSON)
+    const allShipFromCountry = [...html.matchAll(/"shipFromCountry"\s*:\s*"([A-Z]{2})"/g)].map(m => m[1]);
+    const euShipFrom = allShipFromCountry.find(c => c !== 'CN') ?? allShipFromCountry[0] ?? null;
+    if (euShipFrom) { console.log('[ali] shipFrom shipFromCountry:', euShipFrom); return euShipFrom; }
 
     // Pattern 2: "country":"FR" inside a freight/logistics block
     const m2 = html.match(/"(?:freight|freightInfo|logistics)[^}]{0,300}"country"\s*:\s*"([A-Z]{2})"/s);
     if (m2?.[1]) { console.log('[ali] shipFrom p2:', m2[1]); return m2[1]; }
 
     // Pattern 3: "shipFrom":"France" or "shipFrom":"FR"
-    const m3 = html.match(/"shipFrom"\s*:\s*"([^"]{2,30})"/);
-    if (m3?.[1]) {
-      const v = m3[1].trim();
-      if (v.length === 2) { console.log('[ali] shipFrom p3 code:', v); return v.toUpperCase(); }
-      const NAME_TO_CODE: Record<string, string> = {
-        France: 'FR', Germany: 'DE', Spain: 'ES', Italy: 'IT', China: 'CN',
-        'United States': 'US', Japan: 'JP', 'United Kingdom': 'GB',
-        Netherlands: 'NL', Poland: 'PL', Russia: 'RU', Brazil: 'BR',
-        Turkey: 'TR', Australia: 'AU', Canada: 'CA', India: 'IN',
-        Korea: 'KR', Belgium: 'BE', Portugal: 'PT', Sweden: 'SE',
-        Austria: 'AT', Switzerland: 'CH',
-      };
-      const code = NAME_TO_CODE[v] ?? null;
-      console.log('[ali] shipFrom p3 name:', v, '→', code);
-      return code;
+    const allShipFrom = [...html.matchAll(/"shipFrom"\s*:\s*"([^"]{2,30})"/g)].map(m => m[1].trim());
+    const euShipFromName = allShipFrom.find(v => NAME_TO_CODE[v] && NAME_TO_CODE[v] !== 'CN')
+      ?? allShipFrom.find(v => v.length === 2 && v !== 'CN')
+      ?? allShipFrom[0] ?? null;
+    if (euShipFromName) {
+      const code = euShipFromName.length === 2 ? euShipFromName.toUpperCase() : (NAME_TO_CODE[euShipFromName] ?? null);
+      console.log('[ali] shipFrom p3:', euShipFromName, '→', code);
+      if (code) return code;
+    }
+
+    // Pattern 4: warehouse country in logistics/delivery block
+    const m4 = html.match(/"(?:originPlace|senderCountry|warehouseCountry)"\s*:\s*"([^"]{2,30})"/);
+    if (m4?.[1]) {
+      const v = m4[1].trim();
+      const code = v.length === 2 ? v.toUpperCase() : (NAME_TO_CODE[v] ?? null);
+      console.log('[ali] shipFrom p4 originPlace:', v, '→', code);
+      if (code) return code;
     }
 
     // Debug: log snippet se nessun pattern trovato
-    const snip = html.slice(0, 5000).match(/"ship[^"]{0,30}"/gi);
-    console.log('[ali] shipFrom: nessun pattern trovato per', productId, '| ship-keys:', snip?.slice(0, 5).join(', '));
+    const snipSend = html.match(/"send[^"]{0,30}"/gi)?.slice(0, 5);
+    const snipShip = html.match(/"ship[^"]{0,30}"/gi)?.slice(0, 5);
+    console.log('[ali] shipFrom: nessun pattern per', productId, '| send-keys:', snipSend?.join(', '), '| ship-keys:', snipShip?.join(', '));
     return null;
   } catch (e: any) {
     console.warn('[ali] scrapeShipFrom error:', e.message);
