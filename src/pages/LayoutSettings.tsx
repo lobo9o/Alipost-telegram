@@ -27,6 +27,20 @@ export function LayoutPage({ nav }: { nav: (p: NavPage) => void }) {
 }
 
 
+// Tag di sistema non-modificabili (compilati automaticamente dal bot), in ordine fisso
+const READONLY_SYSTEM_TAG_ORDER = [
+  '{titolo}', '{titoloup}', '{titoloshort}',
+  '{prezzo}', '{oldprezzo}', '{prezzo_scontato}',
+  '{sconto}', '{perc}', '{valuta}',
+  '{link_affiliato}', '{link}',
+  '{coupon}', '{boxcoupon}', '{custom}',
+  '{store}', '{storeup}',
+  '{countryflag}', '{country}', '{countryup}',
+  '{giorno}', '{ora}', '{data}',
+  '{stelle}', '{recensioni}', '{cat}', '{author}',
+];
+const READONLY_SYSTEM_TAG_SET = new Set(READONLY_SYSTEM_TAG_ORDER);
+
 // ── Tags ─────────────────────────────────────────────────────
 function TagsSection() {
   const { tags, setTags } = useApp();
@@ -56,17 +70,18 @@ function TagsSection() {
     setEditId(null);
   };
 
-  const systemTags = tags.filter(t => SYSTEM_TAGS.has(t.name));
+  // Tag di sistema modificabili (in SYSTEM_TAGS ma NON nella lista readonly)
+  const editableSystemTags = tags.filter(t => SYSTEM_TAGS.has(t.name) && !READONLY_SYSTEM_TAG_SET.has(t.name));
   const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name));
 
-  const renderTag = (t: Tag, isSystem: boolean) => (
+  const renderEditableTag = (t: Tag, isCustom: boolean) => (
     <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
       {editId === t.id ? (
         <>
-          {isSystem
-            ? <div style={{ padding: '2px 0 7px', fontSize: 13, fontWeight: 600, color: 'var(--a1)' }}>{t.name}</div>
-            : <input className="inp" value={editName} onChange={e => setEditName(e.target.value)}
+          {isCustom
+            ? <input className="inp" value={editName} onChange={e => setEditName(e.target.value)}
                 placeholder="{nome_tag}" style={{ marginBottom: 7 }} />
+            : <div style={{ padding: '2px 0 7px', fontSize: 13, fontWeight: 600, color: 'var(--a1)' }}>{t.name}</div>
           }
           <div className="irow">
             <input className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
@@ -83,7 +98,7 @@ function TagsSection() {
             {t.value || <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>vuoto</span>}
           </span>
           <button className="btn bgh bsm" style={{ padding: '3px 8px' }} onClick={() => startEdit(t)}>✏️</button>
-          {!isSystem && (
+          {isCustom && (
             <button className="btn bgh bsm" style={{ color: 'var(--re)', padding: '3px 8px' }}
               onClick={() => { setTags(ts => ts.filter(x => x.id !== t.id)); tagsApi.delete(t.id).catch(() => {}); }}>×</button>
           )}
@@ -94,17 +109,30 @@ function TagsSection() {
 
   return (
     <>
-      <div className="stit">TAG DI SISTEMA ({systemTags.length})</div>
-      <div style={{ margin: '0 16px 6px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
-        Compilati automaticamente dall'API. Non eliminabili ma modificabili (premi ✏️ per cambiare il testo).
+      <div className="stit">TAG DI SISTEMA</div>
+      <div style={{ margin: '0 16px 8px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
+        Compilati automaticamente dal bot. Non modificabili.
       </div>
-      {systemTags.map(t => renderTag(t, true))}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 12px' }}>
+        {READONLY_SYSTEM_TAG_ORDER.map(name => (
+          <span key={name} className="tag-pill">{name}</span>
+        ))}
+      </div>
+
+      <div className="stit" style={{ marginTop: 4 }}>TAG MODIFICABILI ({editableSystemTags.length})</div>
+      <div style={{ margin: '0 16px 8px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
+        Tag di sistema con valore personalizzabile. Premi ✏️ per cambiare il testo.
+      </div>
+      {editableSystemTags.length === 0 && (
+        <div style={{ padding: '4px 16px 8px', fontSize: 12, color: 'var(--t3)' }}>Nessuno.</div>
+      )}
+      {editableSystemTags.map(t => renderEditableTag(t, false))}
 
       <div className="stit" style={{ marginTop: 8 }}>TAG PERSONALIZZATI ({customTags.length})</div>
       {customTags.length === 0 && (
         <div style={{ padding: '4px 16px 8px', fontSize: 12, color: 'var(--t3)' }}>Nessun tag personalizzato.</div>
       )}
-      {customTags.map(t => renderTag(t, false))}
+      {customTags.map(t => renderEditableTag(t, true))}
 
       <div className="stit">AGGIUNGI TAG</div>
       <div style={{ padding: '0 16px 8px' }}>
