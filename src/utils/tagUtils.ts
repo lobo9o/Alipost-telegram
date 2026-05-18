@@ -11,7 +11,7 @@ export const SYSTEM_TAGS = new Set([
   '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
-  '{coupon}', '{boxcoupon}', '{checkout}',
+  '{coupon}', '{boxcoupon}',
 ]);
 
 // Sentinel usato internamente: riga che conteneva solo un blocco {_ _} vuoto → verrà rimossa
@@ -93,7 +93,7 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
     '{author}':          post.author || '',
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       post.boxcoupon || '',
-    '{checkout}':        '',
+
   };
 }
 

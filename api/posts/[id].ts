@@ -114,7 +114,6 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       (post as any).boxcoupon || '',
-    '{checkout}':        '',
   };
 
   // Aggiunge tagOverrides per tag non già in tags (custom per-post)

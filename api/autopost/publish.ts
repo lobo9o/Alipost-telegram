@@ -554,7 +554,6 @@ function buildMessage(
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       post.boxcoupon || '',
-    '{checkout}':        '',
   };
 
   const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;

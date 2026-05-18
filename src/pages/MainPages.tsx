@@ -1668,7 +1668,6 @@ const SKIP_IN_TAG_PANEL = new Set([
   '{custom}', // già coperto da "TESTO PERSONALIZZATO"
   '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
-  '{checkout}',
 ]);
 
 // Tag di sistema che l'utente può editare (mappati a campi di CreatedPost)
@@ -1696,7 +1695,6 @@ const AUTO_COMPUTED_TAGS = new Set([
   '{minimo_storico}',
   '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
-  '{checkout}',
   // gestiti da campi dedicati nel PostCard:
   '{custom}', '{coupon}', '{boxcoupon}',
 ]);

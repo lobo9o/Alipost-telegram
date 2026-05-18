@@ -57,12 +57,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       SELECT ${minimoId}, ${userId}, '{minimo_storico}', '🏆 Minimo Storico!'
       WHERE NOT EXISTS (SELECT 1 FROM tags WHERE user_id = ${userId} AND name = '{minimo_storico}')
     `.catch(() => {});
-    const checkoutId = `sys_checkout_${userId}`;
-    await sql`
-      INSERT INTO tags (id, user_id, name, value)
-      SELECT ${checkoutId}, ${userId}, '{checkout}', ''
-      WHERE NOT EXISTS (SELECT 1 FROM tags WHERE user_id = ${userId} AND name = '{checkout}')
-    `.catch(() => {});
     const rows = await sql`SELECT id, name, value FROM tags WHERE user_id = ${userId} ORDER BY created_at ASC`;
     res.json(rows);
     return;

@@ -39,7 +39,6 @@ export const INITIAL_TAGS: Tag[] = [
   // ── Coupon e checkout
   { id: 'tag_coupon',      name: '{coupon}',            value: 'Coupon extra (es: -10€)' },
   { id: 'tag_boxcoupon',   name: '{boxcoupon}',         value: 'Abilita il coupon prima di acquistare' },
-  { id: 'tag_checkout',    name: '{checkout}',          value: 'Testo personalizzato al checkout' },
   // ── Custom liberi utente
   { id: 'tag_custom2',     name: '{custom2}',           value: '' },
   { id: 'tag_custom3',     name: '{custom3}',           value: '' },

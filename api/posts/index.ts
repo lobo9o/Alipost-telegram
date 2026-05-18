@@ -139,7 +139,6 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       (post as any).boxcoupon || '',
-    '{checkout}':        '',
   };
 
   const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;
