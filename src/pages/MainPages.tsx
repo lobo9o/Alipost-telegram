@@ -660,8 +660,10 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const addSelectedToQueue = async () => {
     if (!selectedIds.size || adding) return;
     setAdding(true);
-    const defaultAliLayout = layouts.find(l => l.tipo === 'aliexpress')?.id ?? '';
+    const defaultNormalLayout = layouts.find(l => l.tipo === 'normal')?.id ?? '';
+    const defaultAliLayout = layouts.find(l => l.tipo === 'aliexpress')?.id ?? defaultNormalLayout;
     const tpl = templates[0];
+    const aliCurr = aliCurrencySym(settings.aliexpress?.targetCountry ?? 'IT');
     const addedItems: QueueItem[] = [];
     for (const pid of Array.from(selectedIds)) {
       const p = results.find(r => r.productId === pid);
@@ -679,9 +681,9 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       // Genera immagine template (come NewPost) così il cron la usa direttamente
       if (tpl && post.image) {
         const gi = await generatePostImage(tpl, post.image, false, 'aliexpress', {
-          prezzo: p.discountedPrice.toFixed(2),
-          prezzoPrecedente: p.originalPrice.toFixed(2),
-          sconto: `${p.discountPercent}%`,
+          prezzo: `${aliCurr}${p.discountedPrice.toFixed(2)}`,
+          prezzoPrecedente: `${aliCurr}${p.originalPrice.toFixed(2)}`,
+          sconto: `-${p.discountPercent}%`,
         }).catch(() => '');
         if (gi) post = { ...post, generatedImage: gi };
       }
@@ -825,9 +827,9 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       };
       if (tpl && post.image) {
         const gi = await generatePostImage(tpl, post.image, false, 'amazon', {
-          prezzo: p.discountedPrice.toFixed(2),
-          prezzoPrecedente: p.originalPrice.toFixed(2),
-          sconto: `${p.discountPercent}%`,
+          prezzo: `€${p.discountedPrice.toFixed(2)}`,
+          prezzoPrecedente: `€${p.originalPrice.toFixed(2)}`,
+          sconto: `-${p.discountPercent}%`,
         }).catch(() => '');
         if (gi) post = { ...post, generatedImage: gi };
       }
