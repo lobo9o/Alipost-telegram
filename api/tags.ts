@@ -32,11 +32,23 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!allowMethods(['GET', 'POST'], req, res)) return;
 
   if (req.method === 'GET') {
-    // Auto-seed {boxcoupon} se non esiste ancora per questo utente
+    // Auto-seed tag di sistema se non esistono ancora per questo utente
     const boxcouponId = `sys_boxcoupon_${userId}`;
     await sql`
       INSERT INTO tags (id, user_id, name, value)
       VALUES (${boxcouponId}, ${userId}, '{boxcoupon}', 'Abilita il coupon prima di acquistare')
+      ON CONFLICT DO NOTHING
+    `.catch(() => {});
+    const countryId = `sys_country_${userId}`;
+    await sql`
+      INSERT INTO tags (id, user_id, name, value)
+      VALUES (${countryId}, ${userId}, '{country}', 'Cina')
+      ON CONFLICT DO NOTHING
+    `.catch(() => {});
+    const countryupId = `sys_countryup_${userId}`;
+    await sql`
+      INSERT INTO tags (id, user_id, name, value)
+      VALUES (${countryupId}, ${userId}, '{countryup}', 'CINA')
       ON CONFLICT DO NOTHING
     `.catch(() => {});
     const rows = await sql`SELECT id, name, value FROM tags WHERE user_id = ${userId} ORDER BY created_at ASC`;

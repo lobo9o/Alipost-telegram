@@ -48,6 +48,31 @@ const ALI_CURRENCY_SYM: Record<string, string> = {
   US: '$', BR: 'R$', UK: '£', RU: '₽', PL: 'zł',
 };
 
+const COUNTRY_IT: Record<string, string> = {
+  CN: 'Cina', FR: 'Francia', DE: 'Germania', IT: 'Italia', US: 'USA',
+  GB: 'UK', ES: 'Spagna', JP: 'Giappone', KR: 'Corea del Sud',
+  NL: 'Paesi Bassi', PL: 'Polonia', RU: 'Russia', BR: 'Brasile',
+  TR: 'Turchia', AU: 'Australia', CA: 'Canada', IN: 'India',
+  TH: 'Thailandia', VN: 'Vietnam', MY: 'Malaysia', SG: 'Singapore',
+  ID: 'Indonesia', PH: 'Filippine', MX: 'Messico', UA: 'Ucraina',
+  CZ: 'Rep. Ceca', HU: 'Ungheria', RO: 'Romania', SE: 'Svezia',
+  NO: 'Norvegia', DK: 'Danimarca', FI: 'Finlandia', BE: 'Belgio',
+  AT: 'Austria', CH: 'Svizzera', PT: 'Portogallo', GR: 'Grecia',
+  SA: 'Arabia Saudita', AE: 'Emirati Arabi', IL: 'Israele', EG: 'Egitto',
+  ZA: 'Sudafrica', NG: 'Nigeria', PK: 'Pakistan', BD: 'Bangladesh',
+};
+
+function codeToFlag(code?: string): string {
+  if (!code || code.length !== 2) return '';
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
+}
+
+function codeToCountryName(code?: string): string {
+  if (!code) return '';
+  const upper = code.toUpperCase();
+  return COUNTRY_IT[upper] ?? upper;
+}
+
 function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string, currency?: string, customTags: Record<string, string> = {}): string {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
@@ -77,7 +102,9 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{custom}':          esc(post.customText || ''),
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
-    '{countryflag}':     post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹',
+    '{countryflag}':     post.shipFromCountry ? codeToFlag(post.shipFromCountry) : (post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹'),
+    '{country}':         post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? 'Cina' : 'Italia'),
+    '{countryup}':       (post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? 'Cina' : 'Italia')).toUpperCase(),
     '{giorno}':          giorni[now.getDay()],
     '{ora}':             `${pad(now.getHours())}:${pad(now.getMinutes())}`,
     '{data}':            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,
