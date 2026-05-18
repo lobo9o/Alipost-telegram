@@ -1986,22 +1986,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           .catch(() => null)
       : Promise.resolve(null);
 
-    const [saved, gi] = await Promise.all([savePromise, imgPromise]);
+    const [, gi] = await Promise.all([savePromise, imgPromise]);
 
-    // 3. Se il server ha cambiato isHistoricalLow, aggiorna UI e rigenera immagine
-    const sp = (saved?.posts as any)?.[0];
-    if (sp && sp.isHistoricalLow !== updatedPost.isHistoricalLow) {
-      const finalPost = { ...updatedPost, isHistoricalLow: sp.isHistoricalLow, layoutId: sp.layoutId ?? updatedPost.layoutId };
-      updateQueuePost(itemId, { isHistoricalLow: finalPost.isHistoricalLow, layoutId: finalPost.layoutId });
-      if (tpl) {
-        generatePostImage(tpl, finalPost.image, finalPost.isHistoricalLow ?? false, finalPost.platform, priceData)
-          .then(newGi => {
-            pregenImages.current[itemId] = newGi;
-            updateQueuePost(itemId, { generatedImage: newGi });
-            autopostApi.update(itemId, { posts: [{ ...finalPost, generatedImage: newGi }], status: currentItem.status }).catch(() => {});
-          }).catch(() => {});
-      }
-    } else if (gi) {
+    if (gi) {
       // Salva immagine nel DB (fire-and-forget)
       autopostApi.update(itemId, { posts: [{ ...updatedPost, generatedImage: gi }], status: currentItem.status }).catch(() => {});
     }

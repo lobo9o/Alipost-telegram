@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
-import { checkAndMarkHistoricalLow } from '../_historicalLow.js';
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['PUT', 'DELETE'], req, res)) return;
@@ -22,8 +21,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const hasSilenzioso = body.silenzioso !== undefined;
 
   // Manteniamo generatedImage nel DB — serve al cron per pubblicare con overlay
+  // NB: checkAndMarkHistoricalLow NON viene chiamato qui: l'utente può sovrascrivere
+  // manualmente isHistoricalLow in modifica; il rilevamento automatico avviene solo
+  // alla creazione (index.ts POST).
   const postsForDb = hasPosts ? (body.posts as any[]) : undefined;
-  if (postsForDb) await checkAndMarkHistoricalLow(userId, postsForDb);
 
   // silenzioso: null → NULL (auto/default), true/false → override esplicito
   const silenziosoVal = hasSilenzioso
