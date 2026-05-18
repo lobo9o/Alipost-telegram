@@ -456,7 +456,7 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
     target_currency: currency,
     target_language: language,
     tracking_id: trackingId,
-    fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id,product_country',
+    fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id,product_country,sku_id',
   }) as any;
 
   const resp = data?.aliexpress_affiliate_productdetail_get_response?.resp_result;
@@ -466,6 +466,32 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
   const product = resp?.result?.products?.product?.[0];
   if (!product) throw new Error('Prodotto non trovato su AliExpress (ID: ' + productId + ')');
   return product;
+}
+
+async function aliGetShipFrom(
+  productId: string, skuId: string, country: string, currency: string,
+  salePrice: string, language: string, appKey: string, appSecret: string,
+): Promise<string | null> {
+  try {
+    const data = await aliCall('aliexpress.affiliate.product.shipping.get', appKey, appSecret, {
+      product_id: productId,
+      sku_id: skuId,
+      ship_to_country: country,
+      target_currency: currency,
+      target_sale_price: salePrice,
+      target_language: language,
+      tax_rate: '0',
+    }) as any;
+    // API può rispondere con chiave specifica o con resp_result diretto (streamlined)
+    const resp = data?.aliexpress_affiliate_product_shipping_get_response?.resp_result ?? data?.resp_result;
+    const code = String(resp?.resp_code ?? '');
+    const shipFrom = String(resp?.result?.ship_from_country ?? '').toUpperCase();
+    console.log('[ali] shipping API resp_code:', code, '| ship_from_country:', shipFrom || '(vuoto)');
+    return shipFrom || null;
+  } catch (e: any) {
+    console.warn('[ali] getShipFrom error:', e.message);
+    return null;
+  }
 }
 
 async function aliGetAffiliateLink(productUrl: string, appKey: string, appSecret: string, trackingId: string): Promise<string> {
@@ -702,10 +728,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     console.log('[ali] productId:', productId, '| url:', productUrl);
 
     const product = await aliGetProductDetail(productId, appKey, appSecret, trackingId, country);
+    const skuId = String(product.sku_id || '');
+    const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
     await new Promise(r => setTimeout(r, 600));
-    const [affiliateUrl, scrapedShipFrom] = await Promise.all([
+    const [affiliateUrl, apiShipFrom] = await Promise.all([
       aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId),
-      scrapeAliShipFrom(productId),
+      skuId
+        ? aliGetShipFrom(productId, skuId, country, currency, String(product.target_sale_price || '0'), language, appKey, appSecret)
+        : scrapeAliShipFrom(productId),
     ]);
 
     let salePrice = parseFloat(String(product.target_sale_price ?? 0)) || 0;
@@ -739,7 +769,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           VALUES (${productId}, 'aliexpress', ${salePrice})`.catch(() => {});
     }
 
-    const shipFromCountry = scrapedShipFrom || String(product.product_country || '').toUpperCase() || undefined;
+    const shipFromCountry = apiShipFrom || String(product.product_country || '').toUpperCase() || undefined;
     res.json({
       productId,
       title: product.product_title ?? '',
