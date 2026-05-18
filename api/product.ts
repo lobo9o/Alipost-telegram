@@ -316,6 +316,59 @@ async function scrapeAliPrice(productId: string): Promise<{ price: number; origP
   }
 }
 
+async function scrapeAliShipFrom(productId: string): Promise<string | null> {
+  try {
+    const url = `https://www.aliexpress.com/item/${productId}.html`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+    });
+    clearTimeout(timer);
+    if (!r.ok) return null;
+    const html = await r.text();
+
+    // Pattern 1: "shipFromCountry":"FR" (common in JSON data)
+    const m1 = html.match(/"shipFromCountry"\s*:\s*"([A-Z]{2})"/);
+    if (m1?.[1]) { console.log('[ali] shipFrom p1:', m1[1]); return m1[1]; }
+
+    // Pattern 2: "country":"FR" inside a freight/logistics block
+    const m2 = html.match(/"(?:freight|freightInfo|logistics)[^}]{0,300}"country"\s*:\s*"([A-Z]{2})"/s);
+    if (m2?.[1]) { console.log('[ali] shipFrom p2:', m2[1]); return m2[1]; }
+
+    // Pattern 3: "shipFrom":"France" or "shipFrom":"FR"
+    const m3 = html.match(/"shipFrom"\s*:\s*"([^"]{2,30})"/);
+    if (m3?.[1]) {
+      const v = m3[1].trim();
+      if (v.length === 2) { console.log('[ali] shipFrom p3 code:', v); return v.toUpperCase(); }
+      const NAME_TO_CODE: Record<string, string> = {
+        France: 'FR', Germany: 'DE', Spain: 'ES', Italy: 'IT', China: 'CN',
+        'United States': 'US', Japan: 'JP', 'United Kingdom': 'GB',
+        Netherlands: 'NL', Poland: 'PL', Russia: 'RU', Brazil: 'BR',
+        Turkey: 'TR', Australia: 'AU', Canada: 'CA', India: 'IN',
+        Korea: 'KR', Belgium: 'BE', Portugal: 'PT', Sweden: 'SE',
+        Austria: 'AT', Switzerland: 'CH',
+      };
+      const code = NAME_TO_CODE[v] ?? null;
+      console.log('[ali] shipFrom p3 name:', v, '→', code);
+      return code;
+    }
+
+    // Debug: log snippet se nessun pattern trovato
+    const snip = html.slice(0, 5000).match(/"ship[^"]{0,30}"/gi);
+    console.log('[ali] shipFrom: nessun pattern trovato per', productId, '| ship-keys:', snip?.slice(0, 5).join(', '));
+    return null;
+  } catch (e: any) {
+    console.warn('[ali] scrapeShipFrom error:', e.message);
+    return null;
+  }
+}
+
 // ── AliExpress API helpers ────────────────────────────────────────────────────
 
 const ALI_COUNTRY_MAP: Record<string, { currency: string; language: string }> = {
@@ -632,7 +685,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     const product = await aliGetProductDetail(productId, appKey, appSecret, trackingId, country);
     await new Promise(r => setTimeout(r, 600));
-    const affiliateUrl = await aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId);
+    const [affiliateUrl, scrapedShipFrom] = await Promise.all([
+      aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId),
+      scrapeAliShipFrom(productId),
+    ]);
 
     let salePrice = parseFloat(String(product.target_sale_price ?? 0)) || 0;
     let origPrice = parseFloat(String(product.target_original_price ?? 0)) || 0;
@@ -665,7 +721,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           VALUES (${productId}, 'aliexpress', ${salePrice})`.catch(() => {});
     }
 
-    const shipFromCountry = String(product.product_country || '').toUpperCase() || undefined;
+    const shipFromCountry = scrapedShipFrom || String(product.product_country || '').toUpperCase() || undefined;
     res.json({
       productId,
       title: product.product_title ?? '',
