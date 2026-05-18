@@ -60,6 +60,30 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+const COUNTRY_IT: Record<string, string> = {
+  CN: 'Cina', FR: 'Francia', DE: 'Germania', IT: 'Italia', US: 'USA',
+  GB: 'UK', ES: 'Spagna', JP: 'Giappone', KR: 'Corea del Sud',
+  NL: 'Paesi Bassi', PL: 'Polonia', RU: 'Russia', BR: 'Brasile',
+  TR: 'Turchia', AU: 'Australia', CA: 'Canada', IN: 'India',
+  TH: 'Thailandia', VN: 'Vietnam', MY: 'Malaysia', SG: 'Singapore',
+  ID: 'Indonesia', PH: 'Filippine', MX: 'Messico', UA: 'Ucraina',
+  CZ: 'Rep. Ceca', HU: 'Ungheria', RO: 'Romania', SE: 'Svezia',
+  NO: 'Norvegia', DK: 'Danimarca', FI: 'Finlandia', BE: 'Belgio',
+  AT: 'Austria', CH: 'Svizzera', PT: 'Portogallo', GR: 'Grecia',
+  SA: 'Arabia Saudita', AE: 'Emirati Arabi', IL: 'Israele', EG: 'Egitto',
+};
+function codeToFlag(code?: string): string | null {
+  if (!code || code.length !== 2) return null;
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
+}
+function codeToCountry(code?: string): string | null {
+  if (!code) return null;
+  const flag = codeToFlag(code);
+  if (!flag) return null;
+  const name = COUNTRY_IT[code.toUpperCase()];
+  return name ? `${flag} ${name}` : flag;
+}
+
 const IT_STOP = new Set(['di','da','in','con','su','per','tra','fra','del','della','dello','dei','degli','delle','al','allo','alla','agli','alle','un','una','uno','il','lo','la','i','gli','le','a','e','o','che','se','ma','non','ha','ho','nei','nelle','nel','alle','set','new','pro','con','the','for','and','with','kit']);
 function extractKeywords(title: string): Set<string> {
   return new Set(
@@ -492,11 +516,12 @@ function buildMessage(
     '{valuta}':          valuta,
     '{link_affiliato}':  affiliateUrl,
     '{link}':            affiliateUrl,
-    '{minimo_storico}':  post.isHistoricalLow ? '🏆 MINIMO STORICO!' : '',
+    '{minimo_storico}':  post.isHistoricalLow ? (customTags['{minimo_storico}'] || '🏆 MINIMO STORICO!') : '',
     '{custom}':          esc(post.customText || ''),
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
-    '{countryflag}':     post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹',
+    '{countryflag}':     codeToFlag(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹'),
+    '{country}':         codeToCountry(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '🇨🇳 Cina' : '🇮🇹 Italia'),
     '{giorno}':          giorni[now.getDay()],
     '{ora}':             `${pad(now.getHours())}:${pad(now.getMinutes())}`,
     '{data}':            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,
@@ -814,7 +839,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           tracking_id: trackId, target_currency: currency, target_language: language,
           ship_to_country: country, sort: ds.sort || 'DEFAULT_SORT',
           page_size: '20', page_no: '1',
-          fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,promotion_link',
+          fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,promotion_link,product_country',
         };
         if (ds.keywords)                      extra.keywords       = ds.keywords;
         if (Number(ds.minPrice)  > 0)         extra.min_sale_price = String(Math.round(Number(ds.minPrice) * 100));
@@ -862,6 +887,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             discountPercent: discPct,
             customText: '', isHistoricalLow: false,
             templateId: aliTemplateId, layoutId: aliLayoutId, keyboardId: '', emoji: '🔴',
+            shipFromCountry: String(candidate.product_country || '').toUpperCase() || undefined,
           };
 
           // Genera immagine template server-side

@@ -47,6 +47,7 @@ export interface CreatedPost {
   boxcoupon?: string;
   tagOverrides?: Record<string, string>; // override per-post dei tag personalizzati
   generatedImage?: string; // base64 immagine con overlay, generata client-side per autopost
+  shipFromCountry?: string; // codice ISO paese di spedizione (es. 'FR', 'CN')
 }
 
 export interface CatalogProduct {

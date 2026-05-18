@@ -125,6 +125,7 @@ export interface AliExpressProductResult {
   discountPercent: number;
   affiliateUrl: string;
   isHistoricalLow?: boolean;
+  shipFromCountry?: string;
 }
 
 export const productApi = {

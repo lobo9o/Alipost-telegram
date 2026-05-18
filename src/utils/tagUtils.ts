@@ -8,7 +8,7 @@ export const SYSTEM_TAGS = new Set([
   '{link_affiliato}', '{link}',
   '{minimo_storico}',
   '{custom}',
-  '{store}', '{storeup}', '{countryflag}',
+  '{store}', '{storeup}', '{countryflag}', '{country}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
   '{coupon}', '{boxcoupon}', '{checkout}',
@@ -28,18 +28,45 @@ export function aliCurrencySym(country: string): string {
   return ALI_CURRENCY_SYM[country.toUpperCase()] ?? '€';
 }
 
-function computedTags(post: CreatedPost, currency?: string): Record<string, string> {
+const COUNTRY_IT: Record<string, string> = {
+  CN: 'Cina', FR: 'Francia', DE: 'Germania', IT: 'Italia', US: 'USA',
+  GB: 'UK', ES: 'Spagna', JP: 'Giappone', KR: 'Corea del Sud',
+  NL: 'Paesi Bassi', PL: 'Polonia', RU: 'Russia', BR: 'Brasile',
+  TR: 'Turchia', AU: 'Australia', CA: 'Canada', IN: 'India',
+  TH: 'Thailandia', VN: 'Vietnam', MY: 'Malaysia', SG: 'Singapore',
+  ID: 'Indonesia', PH: 'Filippine', MX: 'Messico', UA: 'Ucraina',
+  CZ: 'Rep. Ceca', HU: 'Ungheria', RO: 'Romania', SE: 'Svezia',
+  NO: 'Norvegia', DK: 'Danimarca', FI: 'Finlandia', BE: 'Belgio',
+  AT: 'Austria', CH: 'Svizzera', PT: 'Portogallo', GR: 'Grecia',
+  SA: 'Arabia Saudita', AE: 'Emirati Arabi', IL: 'Israele', EG: 'Egitto',
+  ZA: 'Sudafrica', NG: 'Nigeria', PK: 'Pakistan', BD: 'Bangladesh',
+};
+
+export function codeToFlag(code: string): string {
+  if (!code || code.length !== 2) return '🌍';
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
+}
+
+export function codeToCountry(code: string): string {
+  if (!code) return '';
+  const flag = codeToFlag(code);
+  const name = COUNTRY_IT[code.toUpperCase()];
+  return name ? `${flag} ${name}` : flag;
+}
+
+function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: string): Record<string, string> {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const valuta = currency ?? (post.platform === 'aliexpress' ? '$' : '€');
-  const flag = post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹';
+  const shipCode = post.shipFromCountry?.toUpperCase();
+  const flag = shipCode ? codeToFlag(shipCode) : (post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹');
+  const country = shipCode ? codeToCountry(shipCode) : (post.platform === 'aliexpress' ? '🇨🇳 Cina' : '🇮🇹 Italia');
   const titleShort = post.title.length > 60 ? post.title.slice(0, 57) + '...' : post.title;
 
   return {
     '{titolo}':          post.title,
     '{titoloup}':        post.title.toUpperCase(),
     '{titoloshort}':     titleShort,
-    // {prezzo} = solo numero, {valuta} = simbolo — si usano insieme: {prezzo}{valuta}
     '{prezzo}':          post.discountedPrice.toFixed(2),
     '{prezzo_scontato}': post.discountedPrice.toFixed(2),
     '{oldprezzo}':       post.originalPrice.toFixed(2),
@@ -48,11 +75,12 @@ function computedTags(post: CreatedPost, currency?: string): Record<string, stri
     '{valuta}':          valuta,
     '{link_affiliato}':  post.sourceUrl || '[link]',
     '{link}':            post.sourceUrl || '[link]',
-    '{minimo_storico}':  post.isHistoricalLow ? '🏆 Minimo Storico!' : '',
+    '{minimo_storico}':  post.isHistoricalLow ? (minimoStoricoText || '🏆 Minimo Storico!') : '',
     '{custom}':          post.customText || '',
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
     '{countryflag}':     flag,
+    '{country}':         country,
     '{giorno}':          giorni[now.getDay()],
     '{ora}':             `${pad(now.getHours())}:${pad(now.getMinutes())}`,
     '{data}':            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,
@@ -94,7 +122,8 @@ function cleanupSentinels(text: string): string {
 }
 
 export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[], currency?: string): string {
-  const builtIn = computedTags(post, currency);
+  const minimoCustom = tags.find(t => t.name === '{minimo_storico}')?.value || undefined;
+  const builtIn = computedTags(post, currency, minimoCustom);
   // Override per-post: i tagOverrides del post hanno priorità sui valori globali dei tag custom
   const effectiveTags = tags.map(t =>
     post.tagOverrides?.[t.name] !== undefined

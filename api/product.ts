@@ -385,7 +385,7 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
     target_currency: currency,
     target_language: language,
     tracking_id: trackingId,
-    fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id',
+    fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id,product_country',
   }) as any;
 
   const resp = data?.aliexpress_affiliate_productdetail_get_response?.resp_result;
@@ -665,6 +665,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           VALUES (${productId}, 'aliexpress', ${salePrice})`.catch(() => {});
     }
 
+    const shipFromCountry = String(product.product_country || '').toUpperCase() || undefined;
     res.json({
       productId,
       title: product.product_title ?? '',
@@ -675,6 +676,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       affiliateUrl,
       priceWarning: salePrice === 0 ? 'Prezzo non trovato. Inseriscilo manualmente.' : undefined,
       isHistoricalLow: isHistoricalLowAli || undefined,
+      shipFromCountry,
     });
 
   } else {
