@@ -54,7 +54,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   '{link_affiliato}':  'Link affiliato del prodotto',
   '{link}':            'Uguale a {link_affiliato}',
   '{coupon}':          'Codice coupon se presente nel post',
-  '{boxcoupon}':       'Testo promozionale del coupon (da tag personalizzato)',
+  '{boxcoupon}':       'Mostra testo "Abilita il coupon prima di acquistare" per link con coupon da abilitare nella pagina Amazon',
   '{custom}':          'Testo personalizzato inserito nel post',
   '{store}':           'Nome del negozio — Amazon oppure AliExpress',
   '{storeup}':         'Nome del negozio in MAIUSCOLO — AMAZON oppure ALIEXPRESS',
