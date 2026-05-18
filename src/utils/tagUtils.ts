@@ -8,7 +8,7 @@ export const SYSTEM_TAGS = new Set([
   '{link_affiliato}', '{link}',
   '{minimo_storico}',
   '{custom}',
-  '{store}', '{storeup}', '{countryflag}', '{country}',
+  '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
   '{coupon}', '{boxcoupon}', '{checkout}',
@@ -60,7 +60,9 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
   const valuta = currency ?? (post.platform === 'aliexpress' ? '$' : '€');
   const shipCode = post.shipFromCountry?.toUpperCase();
   const flag = shipCode ? codeToFlag(shipCode) : (post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹');
-  const country = shipCode ? codeToCountry(shipCode) : (post.platform === 'aliexpress' ? '🇨🇳 Cina' : '🇮🇹 Italia');
+  const countryName = shipCode
+    ? (COUNTRY_IT[shipCode] ?? shipCode)
+    : (post.platform === 'aliexpress' ? 'Cina' : 'Italia');
   const titleShort = post.title.length > 60 ? post.title.slice(0, 57) + '...' : post.title;
 
   return {
@@ -80,7 +82,8 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
     '{countryflag}':     flag,
-    '{country}':         country,
+    '{country}':         countryName,
+    '{countryup}':       countryName.toUpperCase(),
     '{giorno}':          giorni[now.getDay()],
     '{ora}':             `${pad(now.getHours())}:${pad(now.getMinutes())}`,
     '{data}':            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,

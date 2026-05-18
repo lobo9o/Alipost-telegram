@@ -100,12 +100,10 @@ function codeToFlag(code?: string): string | null {
   if (!code || code.length !== 2) return null;
   return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
 }
-function codeToCountry(code?: string): string | null {
+function codeToCountryName(code?: string): string | null {
   if (!code) return null;
-  const flag = codeToFlag(code);
-  if (!flag) return null;
-  const name = COUNTRY_IT[code.toUpperCase()];
-  return name ? `${flag} ${name}` : flag;
+  const upper = code.toUpperCase();
+  return COUNTRY_IT[upper] ?? upper;
 }
 
 const IT_STOP = new Set(['di','da','in','con','su','per','tra','fra','del','della','dello','dei','degli','delle','al','allo','alla','agli','alle','un','una','uno','il','lo','la','i','gli','le','a','e','o','che','se','ma','non','ha','ho','nei','nelle','nel','alle','set','new','pro','con','the','for','and','with','kit']);
@@ -545,7 +543,8 @@ function buildMessage(
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
     '{countryflag}':     codeToFlag(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹'),
-    '{country}':         codeToCountry(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '🇨🇳 Cina' : '🇮🇹 Italia'),
+    '{country}':         codeToCountryName(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? 'Cina' : 'Italia'),
+    '{countryup}':       (codeToCountryName(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? 'Cina' : 'Italia')).toUpperCase(),
     '{giorno}':          giorni[now.getDay()],
     '{ora}':             `${pad(now.getHours())}:${pad(now.getMinutes())}`,
     '{data}':            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,

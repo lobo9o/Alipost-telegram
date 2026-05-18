@@ -1666,7 +1666,7 @@ const SKIP_IN_TAG_PANEL = new Set([
   '{link}', '{link_affiliato}',
   '{minimo_storico}',
   '{custom}', // già coperto da "TESTO PERSONALIZZATO"
-  '{store}', '{storeup}', '{countryflag}',
+  '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{checkout}',
 ]);
@@ -1694,7 +1694,7 @@ const AUTO_COMPUTED_TAGS = new Set([
   '{sconto}', '{perc}', '{valuta}',
   '{link_affiliato}', '{link}',
   '{minimo_storico}',
-  '{store}', '{storeup}', '{countryflag}',
+  '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{checkout}',
   // gestiti da campi dedicati nel PostCard:
@@ -2821,26 +2821,6 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                     updatePostWithImage(item.id, { isHistoricalLow: v, layoutId: layId });
                   }} />
               </div>
-              {/* 3b. Paese spedizione (solo AliExpress) */}
-              {p.platform === 'aliexpress' && (
-                <div style={{ marginBottom: 10 }}>
-                  <div className="lbl">SPEDITO DA <span style={{ fontSize: 10, color: 'var(--a1)', fontFamily: 'monospace', fontWeight: 400 }}>{'{countryflag}'} {'{country}'}</span></div>
-                  <select className="sel" value={p.shipFromCountry || 'CN'} onChange={e => saveQueueField(item, { shipFromCountry: e.target.value })}>
-                    <option value="CN">🇨🇳 Cina</option>
-                    <option value="FR">🇫🇷 Francia</option>
-                    <option value="DE">🇩🇪 Germania</option>
-                    <option value="IT">🇮🇹 Italia</option>
-                    <option value="ES">🇪🇸 Spagna</option>
-                    <option value="PL">🇵🇱 Polonia</option>
-                    <option value="BE">🇧🇪 Belgio</option>
-                    <option value="NL">🇳🇱 Paesi Bassi</option>
-                    <option value="US">🇺🇸 USA</option>
-                    <option value="GB">🇬🇧 UK</option>
-                    <option value="TR">🇹🇷 Turchia</option>
-                    <option value="UA">🇺🇦 Ucraina</option>
-                  </select>
-                </div>
-              )}
               {/* 4. Custom text — solo se {custom} è nel layout */}
               {layout?.contenuto.includes('{custom}') && (
                 <div style={{ marginBottom: 10 }}>
