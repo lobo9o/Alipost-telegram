@@ -182,6 +182,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // ── Mappa ─────────────────────────────────────────────────────────────────
+  const withLink = rawProducts.filter((p: any) => !!p.promotion_link).length;
+  if (rawProducts.length > 0 && withLink < rawProducts.length) {
+    console.warn(`[deals] WARN: ${rawProducts.length - withLink}/${rawProducts.length} prodotti senza promotion_link (tracking_id "${trackId.slice(0, 8)}..." corretto?)`);
+  }
   const mapped = rawProducts.map((p: any) => {
     const discPct   = parseInt(String(p.discount ?? '0').replace('%', '')) || 0;
     const ratingNum = parseFloat(String(p.evaluate_rate ?? '0').replace('%', '')) || 0;

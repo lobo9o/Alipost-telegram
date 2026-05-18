@@ -25,6 +25,30 @@ function aliTsAuto(): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
+async function aliGenerateLink(productUrl: string, appKey: string, appSecret: string, trackingId: string): Promise<string | null> {
+  try {
+    const params: Record<string, string> = {
+      app_key: appKey.trim(), method: 'aliexpress.affiliate.link.generate',
+      sign_method: 'md5', timestamp: aliTsAuto(), v: '2.0',
+      promotion_link_type: '0', source_values: productUrl, tracking_id: trackingId,
+    };
+    params.sign = aliSignAuto(params, appSecret.trim());
+    const res = await fetch('https://api-sg.aliexpress.com/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+      body: new URLSearchParams(params).toString(),
+    });
+    const json = await res.json() as any;
+    const link = json?.aliexpress_affiliate_link_generate_response?.resp_result?.result?.promotion_links?.promotion_link?.[0]?.promotion_link;
+    if (link) console.log('[autopost] aliGenerateLink ok:', link.slice(0, 60));
+    else console.warn('[autopost] aliGenerateLink: nessun link restituito per', productUrl.slice(0, 60), '| resp:', JSON.stringify(json).slice(0, 200));
+    return link || null;
+  } catch (e: any) {
+    console.warn('[autopost] aliGenerateLink error:', e.message);
+    return null;
+  }
+}
+
 async function aliAutoQuery(appKey: string, appSecret: string, extra: Record<string, string>): Promise<any[]> {
   try {
     const params: Record<string, string> = {
@@ -1248,6 +1272,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
         const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
         affiliateUrl = `https://${domain}/dp/${post.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}`;
+      }
+
+      // Per AliExpress: se il link non è un link affiliato tracciato, generane uno al volo.
+      // Questo copre il caso in cui il prodotto è stato aggiunto da "Cerca Offerte" e
+      // promotion_link era null nell'API query (prodotto non in programma affiliati o tracking_id errato).
+      if (post.platform === 'aliexpress' && post.productId && affiliateUrl && !affiliateUrl.includes('s.click.aliexpress.com')) {
+        const aliAppKey = cfg.aliexpress?.appKey || process.env.ALIEXPRESS_APP_KEY || '';
+        const aliAppSec = cfg.aliexpress?.appSecret || process.env.ALIEXPRESS_APP_SECRET || '';
+        const aliTrackId = cfg.aliexpress?.trackingId || process.env.ALIEXPRESS_TRACKING_ID || '';
+        if (aliAppKey && aliAppSec && aliTrackId) {
+          const productPageUrl = `https://www.aliexpress.com/item/${post.productId}.html`;
+          console.log(`[autopost] AliExpress link non affiliato — genero link per ${post.productId}`);
+          const generated = await aliGenerateLink(productPageUrl, aliAppKey, aliAppSec, aliTrackId);
+          if (generated) affiliateUrl = generated;
+        }
       }
 
       const aliCurrency = post.platform === 'aliexpress'
