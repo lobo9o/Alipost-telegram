@@ -41,6 +41,35 @@ const READONLY_SYSTEM_TAG_ORDER = [
 ];
 const READONLY_SYSTEM_TAG_SET = new Set(READONLY_SYSTEM_TAG_ORDER);
 
+const TAG_DESCRIPTIONS: Record<string, string> = {
+  '{titolo}':          'Titolo completo del prodotto',
+  '{titoloup}':        'Titolo in MAIUSCOLO',
+  '{titoloshort}':     'Titolo troncato a 60 caratteri con "..."',
+  '{prezzo}':          'Prezzo scontato attuale — es. 29.99',
+  '{oldprezzo}':       'Prezzo originale prima dello sconto',
+  '{prezzo_scontato}': 'Uguale a {prezzo}',
+  '{sconto}':          'Percentuale di sconto come numero — es. 35',
+  '{perc}':            'Sconto con segno e simbolo % — es. -35%',
+  '{valuta}':          'Simbolo della valuta — es. € oppure $',
+  '{link_affiliato}':  'Link affiliato del prodotto',
+  '{link}':            'Uguale a {link_affiliato}',
+  '{coupon}':          'Codice coupon se presente nel post',
+  '{boxcoupon}':       'Testo promozionale del coupon (da tag personalizzato)',
+  '{custom}':          'Testo personalizzato inserito nel post',
+  '{store}':           'Nome del negozio — Amazon oppure AliExpress',
+  '{storeup}':         'Nome del negozio in MAIUSCOLO — AMAZON oppure ALIEXPRESS',
+  '{countryflag}':     'Bandiera emoji del paese di spedizione — es. 🇨🇳',
+  '{country}':         'Nome del paese di spedizione — es. Cina',
+  '{countryup}':       'Nome del paese in MAIUSCOLO — es. CINA',
+  '{giorno}':          'Giorno della settimana — es. Lunedì',
+  '{ora}':             'Ora di pubblicazione — es. 14:30',
+  '{data}':            'Data di pubblicazione — es. 18/05/2026',
+  '{stelle}':          'Valutazione/stelle del prodotto',
+  '{recensioni}':      'Numero di recensioni del prodotto',
+  '{cat}':             'Categoria del prodotto',
+  '{author}':          'Autore o fonte del post',
+};
+
 // ── Tags ─────────────────────────────────────────────────────
 function TagsSection() {
   const { tags, setTags } = useApp();
@@ -49,6 +78,7 @@ function TagsSection() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editValue, setEditValue] = useState('');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const fmt = (n: string) => n.trim().startsWith('{') ? n.trim() : `{${n.trim()}}`;
 
@@ -111,13 +141,24 @@ function TagsSection() {
     <>
       <div className="stit">TAG DI SISTEMA</div>
       <div style={{ margin: '0 16px 8px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
-        Compilati automaticamente dal bot. Non modificabili.
+        Compilati automaticamente dal bot. Clicca un tag per vedere cosa contiene.
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 12px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 6px' }}>
         {READONLY_SYSTEM_TAG_ORDER.map(name => (
-          <span key={name} className="tag-pill">{name}</span>
+          <span
+            key={name}
+            className="tag-pill"
+            style={{ cursor: 'pointer', opacity: selectedTag && selectedTag !== name ? 0.5 : 1, outline: selectedTag === name ? '2px solid var(--a1)' : 'none', outlineOffset: 2 }}
+            onClick={() => setSelectedTag(prev => prev === name ? null : name)}
+          >{name}</span>
         ))}
       </div>
+      {selectedTag && TAG_DESCRIPTIONS[selectedTag] && (
+        <div style={{ margin: '0 16px 10px', padding: '8px 12px', background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.3)', borderRadius: 8, fontSize: 12, color: 'var(--t1)' }}>
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--a1)', marginRight: 6 }}>{selectedTag}</span>
+          {TAG_DESCRIPTIONS[selectedTag]}
+        </div>
+      )}
 
       <div className="stit" style={{ marginTop: 4 }}>TAG MODIFICABILI ({editableSystemTags.length})</div>
       <div style={{ margin: '0 16px 8px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
