@@ -59,10 +59,10 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const valuta = currency ?? (post.platform === 'aliexpress' ? '$' : '€');
   const shipCode = post.shipFromCountry?.toUpperCase();
-  const flag = shipCode ? codeToFlag(shipCode) : (post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹');
+  const flag = shipCode ? codeToFlag(shipCode) : (post.platform === 'aliexpress' ? '' : '🇮🇹');
   const countryName = shipCode
     ? (COUNTRY_IT[shipCode] ?? shipCode)
-    : (post.platform === 'aliexpress' ? 'Cina' : 'Italia');
+    : (post.platform === 'aliexpress' ? '' : 'Italia');
   const titleShort = post.title.length > 60 ? post.title.slice(0, 57) + '...' : post.title;
 
   return {
