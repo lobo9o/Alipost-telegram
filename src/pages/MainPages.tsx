@@ -589,6 +589,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [adding, setAdding]           = useState(false);
   const [feedback, setFeedback]       = useState('');
+  const [showAliFilters, setShowAliFilters] = useState(false);
 
   // ── Stato Amazon ────────────────────────────────────────────────────────────
   const dsAmz = settings.dealSearch?.amazon ?? { keywords: '', minDiscount: 0, maxDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'Featured', searchIndexes: '' };
@@ -1156,98 +1157,137 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 
       {tab === 'aliexpress' && (
         <>
-          {/* Filtri */}
-          <div style={{ padding: '10px 16px 0' }}>
-            {/* Keywords + cerca */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <input className="inp" placeholder="Parole chiave · usa | per più termini (es: cuffie | auricolari)"
-                value={keywords} onChange={e => setKeywords(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && doSearch()} style={{ flex: 1 }} />
-              <button className="btn bp" style={{ flexShrink: 0, padding: '0 14px' }}
-                onClick={() => doSearch()} disabled={loading}>
-                {loading ? '⏳' : '🔍'}
-              </button>
-            </div>
+          {/* Barra ricerca + filtri */}
+          <div style={{ padding: '10px 16px 6px', display: 'flex', gap: 8 }}>
+            <input className="inp" placeholder="Parole chiave · usa | per più termini (es: cuffie | auricolari)"
+              value={keywords} onChange={e => setKeywords(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && doSearch()} style={{ flex: 1 }} />
+            <button className="btn bp" style={{ flexShrink: 0, padding: '0 14px' }}
+              onClick={() => doSearch()} disabled={loading}>
+              {loading ? '⏳' : '🔍'}
+            </button>
+            <button className="btn bgh" style={{ flexShrink: 0, padding: '0 12px', position: 'relative' }}
+              onClick={() => setShowAliFilters(true)}>
+              ⚙️
+              {(minDiscount > 0 || minPrice > 0 || maxPrice > 0 || deliveryDays > 0 ||
+                activeCats.size > 0 || minRating > 0 || sort !== 'DEFAULT_SORT') && (
+                <span style={{ position: 'absolute', top: 3, right: 3, width: 6, height: 6, borderRadius: '50%', background: 'var(--a1)' }} />
+              )}
+            </button>
+          </div>
 
-            {/* Sconto + ordinamento */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>SCONTO MIN</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <input type="range" min={0} max={90} step={5} value={minDiscount}
-                    style={{ flex: 1, accentColor: 'var(--a1)' }}
-                    onChange={e => setMinDiscount(Number(e.target.value))} />
-                  <span style={{ fontSize: 12, color: 'var(--t2)', minWidth: 30 }}>{minDiscount}%</span>
+          {!settings.aliexpress.appKey && (
+            <div style={{ margin: '0 16px 6px', padding: '6px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 12, color: '#ef4444' }}>
+              ⚠️ Credenziali AliExpress non configurate.{' '}
+              <button className="btn bgh" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => nav('settings')}>Impostazioni →</button>
+            </div>
+          )}
+
+          {/* Modale filtri (bottom sheet) */}
+          {showAliFilters && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowAliFilters(false)} />
+              <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: '18px 18px 0 0', maxHeight: '90vh', overflowY: 'auto', padding: '0 0 24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 8px' }}>
+                  <span style={{ fontWeight: 600, fontSize: 15 }}>Filtri offerte AliExpress</span>
+                  <button className="btn bgh bsm" onClick={() => setShowAliFilters(false)}>✕</button>
+                </div>
+
+                <div style={{ padding: '0 16px' }}>
+                  {/* Sconto min */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
+                      SCONTO MIN {minDiscount > 0
+                        ? <span style={{ color: 'var(--a1)' }}>≥ {minDiscount}%</span>
+                        : <span>qualsiasi</span>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input type="range" min={0} max={90} step={5} value={minDiscount}
+                        style={{ flex: 1, accentColor: 'var(--a1)' }}
+                        onChange={e => setMinDiscount(Number(e.target.value))} />
+                      <span style={{ fontSize: 11, color: 'var(--t2)', minWidth: 28 }}>{minDiscount}%</span>
+                    </div>
+                  </div>
+
+                  {/* Prezzo */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MIN</div>
+                      <input className="inp" type="number" min={0} placeholder="0"
+                        value={minPrice || ''} onChange={e => setMinPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MAX</div>
+                      <input className="inp" type="number" min={0} placeholder="illimitato"
+                        value={maxPrice || ''} onChange={e => setMaxPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
+                    </div>
+                  </div>
+
+                  {/* Stelle minime */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 6 }}>STELLE MINIME</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {[0, 1, 2, 3, 4, 5].map(s => (
+                        <button key={s} className={`btn bsm ${minRating === s ? 'bp' : 'bgh'}`}
+                          style={{ fontSize: 12, padding: '4px 10px' }}
+                          onClick={() => setMinRating(s)}>
+                          {s === 0 ? 'Tutte' : `${s}★`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Spedizione */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>SPEDIZIONE</div>
+                    <select className="sel" style={{ fontSize: 12 }} value={deliveryDays} onChange={e => setDeliveryDays(Number(e.target.value))}>
+                      {DELIVERY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Ordinamento */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
+                    <select className="sel" style={{ fontSize: 12 }} value={sort} onChange={e => setSort(e.target.value)}>
+                      {ALI_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Categorie */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
+                      CATEGORIE {activeCats.size > 0
+                        ? <span style={{ color: 'var(--a1)' }}>({activeCats.size} sel.)</span>
+                        : <span>(tutte)</span>}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+                      {CAT_PRESETS.map(c => (
+                        <button key={c.id} className={`btn bsm ${activeCats.has(c.id) ? 'bp' : 'bgh'}`}
+                          style={{ fontSize: 10, padding: '3px 8px' }}
+                          onClick={() => toggleCat(c.id)}>
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                    <input className="inp" placeholder="ID aggiuntivi (es: 44,509)" value={categoryIds}
+                      onChange={e => setCategoryIds(e.target.value)} style={{ fontSize: 12 }} />
+                  </div>
+
+                  {/* Salva + Applica */}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn bs" style={{ flex: 1, fontSize: 13 }}
+                      onClick={async () => { await saveFilters(); setShowAliFilters(false); doSearch(); }}>
+                      💾 Salva e applica
+                    </button>
+                    <button className="btn bgh" style={{ flex: 1, fontSize: 13 }}
+                      onClick={() => { setShowAliFilters(false); doSearch(); }}>
+                      Applica
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
-                <select className="sel" style={{ fontSize: 12 }} value={sort} onChange={e => setSort(e.target.value)}>
-                  {ALI_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
             </div>
-
-            {/* Spedizione + prezzo */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>SPEDIZIONE</div>
-                <select className="sel" style={{ fontSize: 12 }} value={deliveryDays} onChange={e => setDeliveryDays(Number(e.target.value))}>
-                  {DELIVERY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MIN (€)</div>
-                <input className="inp" type="number" min={0} placeholder="0"
-                  value={minPrice || ''} onChange={e => setMinPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>PREZZO MAX (€)</div>
-                <input className="inp" type="number" min={0} placeholder="nessun limite"
-                  value={maxPrice || ''} onChange={e => setMaxPrice(Number(e.target.value))} style={{ fontSize: 13 }} />
-              </div>
-            </div>
-
-            {/* Valutazione minima */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>VALUTAZIONE MINIMA</div>
-              <select className="sel" style={{ fontSize: 12 }} value={minRating} onChange={e => setMinRating(Number(e.target.value))}>
-                {MIN_RATING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-
-            {/* Categorie multi-select */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 4 }}>
-                CATEGORIE {activeCats.size > 0 && <span style={{ color: 'var(--a1)' }}>({activeCats.size} selezionate)</span>}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
-                {CAT_PRESETS.map(c => (
-                  <button key={c.id} className={`btn bsm ${activeCats.has(c.id) ? 'bp' : 'bgh'}`}
-                    style={{ fontSize: 10, padding: '3px 8px' }}
-                    onClick={() => toggleCat(c.id)}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-              <input className="inp" placeholder="ID aggiuntivi (es: 44,509)" value={categoryIds}
-                onChange={e => setCategoryIds(e.target.value)} style={{ fontSize: 12 }} />
-            </div>
-
-            {/* Salva filtri per auto-ricerca */}
-            <button className="btn bs" style={{ width: '100%', fontSize: 12, marginBottom: 10 }} onClick={saveFilters}>
-              💾 Salva come filtri per auto-ricerca
-            </button>
-
-            {!settings.aliexpress.appKey && (
-              <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 12, color: '#ef4444' }}>
-                ⚠️ Credenziali AliExpress non configurate.{' '}
-                <button className="btn bgh" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => nav('settings')}>Impostazioni →</button>
-              </div>
-            )}
-          </div>
+          )}
 
           {err && <div style={{ margin: '0 16px 8px' }}><ErrorBanner>{err}</ErrorBanner></div>}
           {feedback && <div style={{ margin: '0 16px 8px', padding: '8px 12px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 8, fontSize: 12, color: '#4ade80' }}>{feedback}</div>}
