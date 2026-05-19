@@ -449,23 +449,60 @@ async function aliCall(method: string, appKey: string, appSecret: string, extra:
   return json;
 }
 
-async function aliGetProductDetail(productId: string, appKey: string, appSecret: string, trackingId: string, country: string) {
+async function aliGetSkuDetail(productId: string, appKey: string, appSecret: string, country: string): Promise<{
+  title: string; image: string;
+  salePrice: number; origPrice: number; discountRate: number;
+  shipFromCountry: string | null;
+}> {
   const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
-  const data = await aliCall('aliexpress.affiliate.productdetail.get', appKey, appSecret, {
-    product_ids: productId,
+  const data = await aliCall('aliexpress.affiliate.product.sku.detail.get', appKey, appSecret, {
+    product_id: productId,
+    ship_to_country: country.toUpperCase(),
     target_currency: currency,
     target_language: language,
-    tracking_id: trackingId,
-    fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id,product_country,sku_id',
+    need_deliver_info: 'No',
   }) as any;
 
-  const resp = data?.aliexpress_affiliate_productdetail_get_response?.resp_result;
-  if (!resp || resp.resp_code !== 200) {
-    throw new Error(`AliExpress prodotto [${resp?.resp_code ?? '?'}]: ${resp?.resp_msg ?? JSON.stringify(data).slice(0, 200)}`);
+  const outerResp = data?.aliexpress_affiliate_product_sku_detail_get_response?.result;
+  if (!outerResp || outerResp.code !== '200') {
+    throw new Error(`AliExpress SKU detail [${outerResp?.code ?? '?'}]: ${JSON.stringify(data).slice(0, 200)}`);
   }
-  const product = resp?.result?.products?.product?.[0];
-  if (!product) throw new Error('Prodotto non trovato su AliExpress (ID: ' + productId + ')');
-  return product;
+  const result = outerResp?.result;
+  const itemInfo = result?.ae_item_info;
+  const skuList: any[] = Array.isArray(result?.ae_item_sku_info) ? result.ae_item_sku_info : [];
+
+  if (!itemInfo) throw new Error('Prodotto non trovato su AliExpress (ID: ' + productId + ')');
+
+  // Prendi il prezzo minimo con tasse tra tutti gli SKU
+  let minSalePrice = Infinity;
+  let correspondingOrigPrice = 0;
+  let correspondingDiscountRate = 0;
+  let shipFromCountry: string | null = null;
+
+  for (const sku of skuList) {
+    const sp = parseFloat(String(sku.sale_price_with_tax ?? sku.sale_price ?? 0)) || 0;
+    const op = parseFloat(String(sku.price_with_tax ?? sku.price ?? 0)) || 0;
+    const dr = parseInt(String(sku.discount_rate ?? 0)) || 0;
+    if (sp > 0 && sp < minSalePrice) {
+      minSalePrice = sp;
+      correspondingOrigPrice = op;
+      correspondingDiscountRate = dr;
+    }
+    // Preferisci magazzino non-CN (EU)
+    const sfc = String(sku.ship_from_country ?? '').toUpperCase();
+    if (sfc && (!shipFromCountry || (sfc !== 'CN' && shipFromCountry === 'CN'))) {
+      shipFromCountry = sfc;
+    }
+  }
+
+  return {
+    title: String(itemInfo.title ?? itemInfo.en_title ?? ''),
+    image: String(itemInfo.image_link ?? itemInfo.image_white ?? ''),
+    salePrice: minSalePrice === Infinity ? 0 : minSalePrice,
+    origPrice: correspondingOrigPrice,
+    discountRate: correspondingDiscountRate,
+    shipFromCountry,
+  };
 }
 
 async function aliGetShipFrom(
@@ -728,24 +765,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const productUrl = `https://www.aliexpress.com/item/${productId}.html`;
     console.log('[ali] productId:', productId, '| url:', productUrl);
 
-    const product = await aliGetProductDetail(productId, appKey, appSecret, trackingId, country);
-    const skuId = String(product.sku_id || '');
-    const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
-    await new Promise(r => setTimeout(r, 600));
-    const [affiliateUrl, apiShipFrom] = await Promise.all([
+    // SKU detail API: prezzi con IVA inclusa + ship_from_country per SKU
+    const [skuDetail, affiliateUrl] = await Promise.all([
+      aliGetSkuDetail(productId, appKey, appSecret, country),
       aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId, country),
-      skuId
-        ? aliGetShipFrom(productId, skuId, country, currency, String(product.target_sale_price || '0'), language, appKey, appSecret)
-        : scrapeAliShipFrom(productId),
     ]);
 
-    let salePrice = parseFloat(String(product.target_sale_price ?? 0)) || 0;
-    let origPrice = parseFloat(String(product.target_original_price ?? 0)) || 0;
-    const discountStr = String(product.discount ?? '').replace('%', '');
+    let salePrice = skuDetail.salePrice;
+    let origPrice = skuDetail.origPrice;
 
     // Fallback scraping se il prezzo non arriva dall'API
     if (salePrice === 0) {
-      console.warn('[ali] prezzo zero da API per', productId, '— provo scraping');
+      console.warn('[ali] prezzo zero da SKU detail per', productId, '— provo scraping');
       const scraped = await scrapeAliPrice(productId);
       if (scraped.price > 0) {
         salePrice = scraped.price;
@@ -754,7 +785,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
-    const discountPercent = parseInt(discountStr) || (origPrice > salePrice ? Math.round((1 - salePrice / origPrice) * 100) : 0);
+    const discountPercent = skuDetail.discountRate || (origPrice > salePrice ? Math.round((1 - salePrice / origPrice) * 100) : 0);
+
+    // ship_from_country: dall'API SKU (affidabile), fallback scraping
+    let shipFromCountry = skuDetail.shipFromCountry;
+    if (!shipFromCountry) {
+      console.log('[ali] ship_from_country non trovato da SKU detail, provo scraping');
+      shipFromCountry = await scrapeAliShipFrom(productId);
+    }
 
     // Controlla minimo storico e registra prezzo
     let isHistoricalLowAli = false;
@@ -770,18 +808,17 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           VALUES (${productId}, 'aliexpress', ${salePrice})`.catch(() => {});
     }
 
-    const shipFromCountry = apiShipFrom || String(product.product_country || '').toUpperCase() || undefined;
     res.json({
       productId,
-      title: product.product_title ?? '',
-      image: product.product_main_image_url ?? '',
+      title: skuDetail.title,
+      image: skuDetail.image,
       originalPrice: origPrice || salePrice,
       discountedPrice: salePrice,
       discountPercent,
       affiliateUrl,
       priceWarning: salePrice === 0 ? 'Prezzo non trovato. Inseriscilo manualmente.' : undefined,
       isHistoricalLow: isHistoricalLowAli || undefined,
-      shipFromCountry,
+      shipFromCountry: shipFromCountry || undefined,
     });
 
   } else {
