@@ -98,7 +98,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{valuta}':          valuta,
     '{link_affiliato}':  affiliateUrl,
     '{link}':            affiliateUrl,
-    '{minimo_storico}':  post.isHistoricalLow ? '🏆 MINIMO STORICO!' : '',
+    '{minimo_storico}':  post.isHistoricalLow ? (customTags['{minimo_storico}'] || '🏆 MINIMO STORICO!') : '',
     '{custom}':          esc(post.customText || ''),
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
