@@ -456,6 +456,7 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
     target_currency: currency,
     target_language: language,
     tracking_id: trackingId,
+    country: country.toUpperCase(),   // restituisce target_sale_price con IVA locale inclusa
     fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id,product_country,sku_id',
   }) as any;
 
@@ -473,62 +474,6 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
     discountRate: parseInt(String(product.discount ?? '0').replace('%', '')) || 0,
     shipFromCountry: String(product.product_country || '').toUpperCase() || null,
     skuId: String(product.sku_id || ''),
-  };
-}
-
-async function aliGetSkuDetail(productId: string, appKey: string, appSecret: string, country: string): Promise<{
-  title: string; image: string;
-  salePrice: number; origPrice: number; discountRate: number;
-  shipFromCountry: string | null;
-}> {
-  const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
-  const data = await aliCall('aliexpress.affiliate.product.sku.detail.get', appKey, appSecret, {
-    product_id: productId,
-    ship_to_country: country.toUpperCase(),
-    target_currency: currency,
-    target_language: language,
-    need_deliver_info: 'No',
-  }) as any;
-
-  const outerResp = data?.aliexpress_affiliate_product_sku_detail_get_response?.result;
-  if (!outerResp || outerResp.code !== '200') {
-    throw new Error(`AliExpress SKU detail [${outerResp?.code ?? '?'}]: ${JSON.stringify(data).slice(0, 200)}`);
-  }
-  const result = outerResp?.result;
-  const itemInfo = result?.ae_item_info;
-  const skuList: any[] = Array.isArray(result?.ae_item_sku_info) ? result.ae_item_sku_info : [];
-
-  if (!itemInfo) throw new Error('Prodotto non trovato su AliExpress (ID: ' + productId + ')');
-
-  // Prendi il prezzo minimo con tasse tra tutti gli SKU
-  let minSalePrice = Infinity;
-  let correspondingOrigPrice = 0;
-  let correspondingDiscountRate = 0;
-  let shipFromCountry: string | null = null;
-
-  for (const sku of skuList) {
-    const sp = parseFloat(String(sku.sale_price_with_tax ?? sku.sale_price ?? 0)) || 0;
-    const op = parseFloat(String(sku.price_with_tax ?? sku.price ?? 0)) || 0;
-    const dr = parseInt(String(sku.discount_rate ?? 0)) || 0;
-    if (sp > 0 && sp < minSalePrice) {
-      minSalePrice = sp;
-      correspondingOrigPrice = op;
-      correspondingDiscountRate = dr;
-    }
-    // Preferisci magazzino non-CN (EU)
-    const sfc = String(sku.ship_from_country ?? '').toUpperCase();
-    if (sfc && (!shipFromCountry || (sfc !== 'CN' && shipFromCountry === 'CN'))) {
-      shipFromCountry = sfc;
-    }
-  }
-
-  return {
-    title: String(itemInfo.title ?? itemInfo.en_title ?? ''),
-    image: String(itemInfo.image_link ?? itemInfo.image_white ?? ''),
-    salePrice: minSalePrice === Infinity ? 0 : minSalePrice,
-    origPrice: correspondingOrigPrice,
-    discountRate: correspondingDiscountRate,
-    shipFromCountry,
   };
 }
 
@@ -792,26 +737,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const productUrl = `https://www.aliexpress.com/item/${productId}.html`;
     console.log('[ali] productId:', productId, '| url:', productUrl);
 
-    // Prova SKU detail (prezzi con IVA), fallback a productdetail se mancano permessi
-    let detail: { title: string; image: string; salePrice: number; origPrice: number; discountRate: number; shipFromCountry: string | null };
-    try {
-      detail = await aliGetSkuDetail(productId, appKey, appSecret, country);
-      console.log('[ali] SKU detail OK — salePrice (con IVA):', detail.salePrice);
-    } catch (e: any) {
-      console.warn('[ali] SKU detail fallisce (' + e.message.slice(0, 80) + '), uso productdetail.get');
-      const pd = await aliGetProductDetail(productId, appKey, appSecret, trackingId, country);
-      detail = pd;
-      // Se productdetail restituisce shipFromCountry=null o CN, prova shipping API
-      if (!pd.shipFromCountry || pd.shipFromCountry === 'CN') {
-        const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
-        const apiShip = pd.skuId
-          ? await aliGetShipFrom(productId, pd.skuId, country, currency, String(pd.salePrice), language, appKey, appSecret)
-          : null;
-        if (apiShip) detail = { ...detail, shipFromCountry: apiShip };
-      }
-    }
+    // productdetail.get con country= restituisce target_sale_price con IVA locale inclusa
+    const pd = await aliGetProductDetail(productId, appKey, appSecret, trackingId, country);
+    const detail = pd;
 
-    const affiliateUrl = await aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId, country);
+    const [affiliateUrl, apiShipFrom] = await Promise.all([
+      aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId, country),
+      // Se shipFromCountry è assente o CN, prova shipping API per magazzino reale
+      (!pd.shipFromCountry || pd.shipFromCountry === 'CN') && pd.skuId
+        ? (async () => {
+            const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
+            return aliGetShipFrom(productId, pd.skuId, country, currency, String(pd.salePrice), language, appKey, appSecret);
+          })()
+        : Promise.resolve(null),
+    ]);
+    if (apiShipFrom) detail.shipFromCountry = apiShipFrom;
 
     let salePrice = detail.salePrice;
     let origPrice = detail.origPrice;
