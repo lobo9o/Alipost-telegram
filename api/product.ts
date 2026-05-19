@@ -741,20 +741,17 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const pd = await aliGetProductDetail(productId, appKey, appSecret, trackingId, country);
     const detail = pd;
 
+    const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
     const [affiliateUrl, apiShipFrom] = await Promise.all([
       aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId, country),
-      // Se shipFromCountry è assente o CN, prova shipping API per magazzino reale
-      (!pd.shipFromCountry || pd.shipFromCountry === 'CN') && pd.skuId
-        ? (async () => {
-            const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
-            return aliGetShipFrom(productId, pd.skuId, country, currency, String(pd.salePrice), language, appKey, appSecret);
-          })()
-        : Promise.resolve(null),
+      // Shipping API per warehouse reale — sempre se c'è skuId, scraping altrimenti
+      pd.skuId
+        ? aliGetShipFrom(productId, pd.skuId, country, currency, String(pd.salePrice || '0'), language, appKey, appSecret)
+        : scrapeAliShipFrom(productId),
     ]);
-    if (apiShipFrom) detail.shipFromCountry = apiShipFrom;
 
-    let salePrice = detail.salePrice;
-    let origPrice = detail.origPrice;
+    let salePrice = pd.salePrice;
+    let origPrice = pd.origPrice;
 
     // Fallback scraping se il prezzo non arriva dall'API
     if (salePrice === 0) {
@@ -767,10 +764,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
-    const discountPercent = detail.discountRate || (origPrice > salePrice ? Math.round((1 - salePrice / origPrice) * 100) : 0);
+    const discountPercent = pd.discountRate || (origPrice > salePrice ? Math.round((1 - salePrice / origPrice) * 100) : 0);
 
-    // ship_from_country: dall'API, fallback scraping
-    let shipFromCountry = detail.shipFromCountry;
+    // ship_from_country: preferisci shipping API (warehouse reale), poi product_country, poi scraping
+    let shipFromCountry: string | null = apiShipFrom || pd.shipFromCountry;
     if (!shipFromCountry) {
       console.log('[ali] ship_from_country non trovato da API, provo scraping');
       shipFromCountry = await scrapeAliShipFrom(productId);
