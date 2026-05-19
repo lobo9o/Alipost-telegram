@@ -611,9 +611,9 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const [showAliFilters, setShowAliFilters] = useState(false);
   const [euOnly, setEuOnly]           = useState(false);
 
-  const visibleResults = euOnly
-    ? results.filter(p => EU_COUNTRIES.has(p.shipFromCountry ?? ''))
-    : results;
+  // euOnly forza delivery_days=7 lato server: non serve filtrare ulteriormente client-side
+  // (product_country è spesso CN anche per venditori con magazzino EU, quindi sarebbe esclusivo)
+  const visibleResults = results;
 
   // ── Stato Amazon ────────────────────────────────────────────────────────────
   const dsAmz = settings.dealSearch?.amazon ?? { keywords: '', minDiscount: 0, maxDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'Featured', searchIndexes: '' };
@@ -665,7 +665,9 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     const p = resetPage ? 1 : page;
     if (resetPage) { setPage(1); setSelectedIds(new Set()); }
     try {
-      const data = await dealsApi.searchAli({ keywords: keywords.trim(), minDiscount, minPrice, maxPrice, sort, deliveryDays, categoryIds: categoryIds.trim(), page: p, minRating });
+      // Quando EU-only è attivo, forza delivery_days=7 (magazzino vicino = EU in pratica)
+      const effectiveDeliveryDays = euOnly ? Math.max(deliveryDays, 7) : deliveryDays;
+      const data = await dealsApi.searchAli({ keywords: keywords.trim(), minDiscount, minPrice, maxPrice, sort, deliveryDays: effectiveDeliveryDays, categoryIds: categoryIds.trim(), page: p, minRating });
       setResults(resetPage ? data.products : prev => [...prev, ...data.products]);
       setTotal(data.total);
       setSearched(true);
@@ -1351,17 +1353,14 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
                 {selectedIds.size === visibleResults.length ? '☑ Deseleziona' : '☐ Seleziona tutto'}
               </button>
               <span style={{ fontSize: 11, color: 'var(--t3)', flex: 1 }}>
-                {euOnly
-                  ? `${visibleResults.length} EU di ${results.length}`
-                  : `${results.length} di ${total}`
-                } · {selectedIds.size > 0 ? `${selectedIds.size} selezionati` : 'tocca per selezionare'}
+                {results.length} di {total} · {selectedIds.size > 0 ? `${selectedIds.size} selezionati` : 'tocca per selezionare'}
               </span>
             </div>
           )}
 
           {/* Griglia risultati */}
           {searched && !loading && visibleResults.length === 0 && !err && (
-            <EmptyState icon="🔍" text={euOnly && results.length > 0 ? 'Nessun prodotto da magazzino EU in questi risultati.' : 'Nessun risultato. Cambia parole chiave o riduci i filtri.'} />
+            <EmptyState icon="🔍" text="Nessun risultato. Cambia parole chiave o riduci i filtri." />
           )}
 
           {visibleResults.length > 0 && (
