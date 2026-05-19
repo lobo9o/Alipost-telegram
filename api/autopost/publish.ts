@@ -25,13 +25,14 @@ function aliTsAuto(): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
-async function aliGenerateLink(productUrl: string, appKey: string, appSecret: string, trackingId: string): Promise<string | null> {
+async function aliGenerateLink(productUrl: string, appKey: string, appSecret: string, trackingId: string, country?: string): Promise<string | null> {
   try {
     const params: Record<string, string> = {
       app_key: appKey.trim(), method: 'aliexpress.affiliate.link.generate',
       sign_method: 'md5', timestamp: aliTsAuto(), v: '2.0',
       promotion_link_type: '0', source_values: productUrl, tracking_id: trackingId,
     };
+    if (country) params.ship_to_country = country.toUpperCase();
     params.sign = aliSignAuto(params, appSecret.trim());
     const res = await fetch('https://api-sg.aliexpress.com/sync', {
       method: 'POST',
@@ -1279,10 +1280,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const aliAppKey = cfg.aliexpress?.appKey || process.env.ALIEXPRESS_APP_KEY || '';
         const aliAppSec = cfg.aliexpress?.appSecret || process.env.ALIEXPRESS_APP_SECRET || '';
         const aliTrackId = cfg.aliexpress?.trackingId || process.env.ALIEXPRESS_TRACKING_ID || '';
+        const aliCountry = (cfg.aliexpress?.targetCountry || process.env.ALIEXPRESS_COUNTRY || 'IT').toUpperCase();
         if (aliAppKey && aliAppSec && aliTrackId) {
           const productPageUrl = `https://www.aliexpress.com/item/${post.productId}.html`;
           console.log(`[autopost] AliExpress link non affiliato — genero link per ${post.productId}`);
-          const generated = await aliGenerateLink(productPageUrl, aliAppKey, aliAppSec, aliTrackId);
+          const generated = await aliGenerateLink(productPageUrl, aliAppKey, aliAppSec, aliTrackId, aliCountry);
           if (generated) affiliateUrl = generated;
         }
       }

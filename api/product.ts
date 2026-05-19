@@ -494,11 +494,12 @@ async function aliGetShipFrom(
   }
 }
 
-async function aliGetAffiliateLink(productUrl: string, appKey: string, appSecret: string, trackingId: string): Promise<string> {
+async function aliGetAffiliateLink(productUrl: string, appKey: string, appSecret: string, trackingId: string, country?: string): Promise<string> {
   const data = await aliCall('aliexpress.affiliate.link.generate', appKey, appSecret, {
     promotion_link_type: '0',
     source_values: productUrl,
     tracking_id: trackingId,
+    ...(country ? { ship_to_country: country.toUpperCase() } : {}),
   }) as any;
 
   const resp = data?.aliexpress_affiliate_link_generate_response?.resp_result;
@@ -732,7 +733,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const { currency, language } = ALI_COUNTRY_MAP[country.toUpperCase()] ?? { currency: 'EUR', language: 'IT' };
     await new Promise(r => setTimeout(r, 600));
     const [affiliateUrl, apiShipFrom] = await Promise.all([
-      aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId),
+      aliGetAffiliateLink(productUrl, appKey, appSecret, trackingId, country),
       skuId
         ? aliGetShipFrom(productId, skuId, country, currency, String(product.target_sale_price || '0'), language, appKey, appSecret)
         : scrapeAliShipFrom(productId),
