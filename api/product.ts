@@ -317,69 +317,85 @@ async function scrapeAliPrice(productId: string): Promise<{ price: number; origP
 }
 
 async function scrapeAliShipFrom(productId: string): Promise<string | null> {
-  try {
-    const url = `https://www.aliexpress.com/item/${productId}.html`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml',
-      },
-    });
-    clearTimeout(timer);
-    if (!r.ok) return null;
-    const html = await r.text();
+  const NAME_TO_CODE: Record<string, string> = {
+    France: 'FR', Germany: 'DE', Spain: 'ES', Italy: 'IT', China: 'CN',
+    'United States': 'US', Japan: 'JP', 'United Kingdom': 'GB',
+    Netherlands: 'NL', Poland: 'PL', Russia: 'RU', Brazil: 'BR',
+    Turkey: 'TR', Australia: 'AU', Canada: 'CA', India: 'IN',
+    Korea: 'KR', Belgium: 'BE', Portugal: 'PT', Sweden: 'SE',
+    Austria: 'AT', Switzerland: 'CH', Ukraine: 'UA',
+  };
 
-    const NAME_TO_CODE: Record<string, string> = {
-      France: 'FR', Germany: 'DE', Spain: 'ES', Italy: 'IT', China: 'CN',
-      'United States': 'US', Japan: 'JP', 'United Kingdom': 'GB',
-      Netherlands: 'NL', Poland: 'PL', Russia: 'RU', Brazil: 'BR',
-      Turkey: 'TR', Australia: 'AU', Canada: 'CA', India: 'IN',
-      Korea: 'KR', Belgium: 'BE', Portugal: 'PT', Sweden: 'SE',
-      Austria: 'AT', Switzerland: 'CH', Ukraine: 'UA',
-    };
+  async function fetchPage(url: string): Promise<string | null> {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const r = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        redirect: 'follow',
+      });
+      clearTimeout(timer);
+      if (!r.ok) return null;
+      return r.text();
+    } catch { return null; }
+  }
 
-    // Cerca TUTTI i valori sendCountry nella pagina — preferiamo il non-CN (warehouse EU)
-    const allSendCountry = [...html.matchAll(/"sendCountry"\s*:\s*"([A-Z]{2})"/g)].map(m => m[1]);
-    const euSendCountry = allSendCountry.find(c => c !== 'CN') ?? allSendCountry[0] ?? null;
-    if (euSendCountry) { console.log('[ali] shipFrom sendCountry:', euSendCountry, '(all:', allSendCountry.join(','), ')'); return euSendCountry; }
+  function extractFrom(html: string, label: string): string | null {
+    // Raccoglie tutti i codici a 2 lettere per ogni chiave JSON, preferisce non-CN
+    const pick = (vals: string[]) => vals.find(v => v !== 'CN') ?? vals[0] ?? null;
 
-    // Pattern 1: "shipFromCountry":"FR" (seller/warehouse in JSON)
-    const allShipFromCountry = [...html.matchAll(/"shipFromCountry"\s*:\s*"([A-Z]{2})"/g)].map(m => m[1]);
-    const euShipFrom = allShipFromCountry.find(c => c !== 'CN') ?? allShipFromCountry[0] ?? null;
-    if (euShipFrom) { console.log('[ali] shipFrom shipFromCountry:', euShipFrom); return euShipFrom; }
+    // sendCountry / shipFromCountry / fromCountry / storeCountry / countryCode in contesto spedizione
+    for (const key of ['sendCountry', 'shipFromCountry', 'fromCountry', 'storeCountry', 'warehouseCountry', 'senderCountry', 'originPlace']) {
+      const all = [...html.matchAll(new RegExp(`"${key}"\\s*:\\s*"([A-Z]{2})"`, 'g'))].map(m => m[1]);
+      const v = pick(all);
+      if (v) { console.log(`[ali] shipFrom [${label}] ${key}:`, v); return v; }
+    }
 
-    // Pattern 2: "country":"FR" inside a freight/logistics block
-    const m2 = html.match(/"(?:freight|freightInfo|logistics)[^}]{0,300}"country"\s*:\s*"([A-Z]{2})"/s);
-    if (m2?.[1]) { console.log('[ali] shipFrom p2:', m2[1]); return m2[1]; }
-
-    // Pattern 3: "shipFrom":"France" or "shipFrom":"FR"
+    // shipFrom:"France" o shipFrom:"FR"
     const allShipFrom = [...html.matchAll(/"shipFrom"\s*:\s*"([^"]{2,30})"/g)].map(m => m[1].trim());
-    const euShipFromName = allShipFrom.find(v => NAME_TO_CODE[v] && NAME_TO_CODE[v] !== 'CN')
+    const sfName = allShipFrom.find(v => NAME_TO_CODE[v] && NAME_TO_CODE[v] !== 'CN')
       ?? allShipFrom.find(v => v.length === 2 && v !== 'CN')
       ?? allShipFrom[0] ?? null;
-    if (euShipFromName) {
-      const code = euShipFromName.length === 2 ? euShipFromName.toUpperCase() : (NAME_TO_CODE[euShipFromName] ?? null);
-      console.log('[ali] shipFrom p3:', euShipFromName, '→', code);
-      if (code) return code;
+    if (sfName) {
+      const code = sfName.length === 2 ? sfName.toUpperCase() : (NAME_TO_CODE[sfName] ?? null);
+      if (code) { console.log(`[ali] shipFrom [${label}] shipFrom:`, sfName, '→', code); return code; }
     }
 
-    // Pattern 4: warehouse country in logistics/delivery block
-    const m4 = html.match(/"(?:originPlace|senderCountry|warehouseCountry)"\s*:\s*"([^"]{2,30})"/);
-    if (m4?.[1]) {
-      const v = m4[1].trim();
-      const code = v.length === 2 ? v.toUpperCase() : (NAME_TO_CODE[v] ?? null);
-      console.log('[ali] shipFrom p4 originPlace:', v, '→', code);
-      if (code) return code;
+    // "country":"FR" dentro blocco freight/logistics
+    const m = html.match(/"(?:freight|freightInfo|logistics|delivery)[^}]{0,400}"country"\s*:\s*"([A-Z]{2})"/s);
+    if (m?.[1]) { console.log(`[ali] shipFrom [${label}] freight.country:`, m[1]); return m[1]; }
+
+    // countryCode generico in blocco shipment/warehouse/store
+    const mc = html.match(/"(?:shipment|warehouse|store|send)[^}]{0,300}"countryCode"\s*:\s*"([A-Z]{2})"/s);
+    if (mc?.[1] && mc[1] !== 'CN') { console.log(`[ali] shipFrom [${label}] countryCode:`, mc[1]); return mc[1]; }
+
+    return null;
+  }
+
+  try {
+    // Prima prova URL internazionale
+    const html1 = await fetchPage(`https://www.aliexpress.com/item/${productId}.html`);
+    if (html1) {
+      const r1 = extractFrom(html1, 'www');
+      if (r1) return r1;
     }
 
-    // Debug: log snippet se nessun pattern trovato
-    const snipSend = html.match(/"send[^"]{0,30}"/gi)?.slice(0, 5);
-    const snipShip = html.match(/"ship[^"]{0,30}"/gi)?.slice(0, 5);
-    console.log('[ali] shipFrom: nessun pattern per', productId, '| send-keys:', snipSend?.join(', '), '| ship-keys:', snipShip?.join(', '));
+    // Fallback: URL italiano (può avere dati warehouse EU in chiaro)
+    const html2 = await fetchPage(`https://it.aliexpress.com/item/${productId}.html`);
+    if (html2) {
+      const r2 = extractFrom(html2, 'it');
+      if (r2) return r2;
+    }
+
+    // Debug: mostra chiavi trovate per diagnostica
+    const html = html1 ?? html2 ?? '';
+    const snipSend = html.match(/"(?:send|ship|from|ware|origin|country)[^"]{0,25}"/gi)?.slice(0, 8);
+    console.log('[ali] shipFrom: nessun pattern per', productId, '| keys:', snipSend?.join(', ') ?? 'nessuna');
     return null;
   } catch (e: any) {
     console.warn('[ali] scrapeShipFrom error:', e.message);
@@ -766,12 +782,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     const discountPercent = pd.discountRate || (origPrice > salePrice ? Math.round((1 - salePrice / origPrice) * 100) : 0);
 
-    // ship_from_country: preferisci shipping API (warehouse reale), poi product_country, poi scraping
-    let shipFromCountry: string | null = apiShipFrom || pd.shipFromCountry;
-    if (!shipFromCountry) {
-      console.log('[ali] ship_from_country non trovato da API, provo scraping');
-      shipFromCountry = await scrapeAliShipFrom(productId);
-    }
+    // ship_from_country: shipping API → scraping → product_country (spesso CN anche per EU)
+    let shipFromCountry: string | null = apiShipFrom;
+    if (!shipFromCountry) shipFromCountry = await scrapeAliShipFrom(productId);
+    if (!shipFromCountry) shipFromCountry = pd.shipFromCountry; // ultimo resort
 
     // Controlla minimo storico e registra prezzo
     let isHistoricalLowAli = false;
