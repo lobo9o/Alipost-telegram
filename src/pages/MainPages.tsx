@@ -1787,11 +1787,14 @@ const AUTO_COMPUTED_TAGS = new Set([
   '{sconto}', '{perc}', '{valuta}',
   '{link_affiliato}', '{link}',
   '{minimo_storico}',
-  '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
+  '{store}', '{storeup}',
   '{giorno}', '{ora}', '{data}',
   // gestiti da campi dedicati nel PostCard:
   '{custom}', '{coupon}', '{boxcoupon}',
 ]);
+
+// Gestiti separatamente: auto-calcolati se shipFromCountry è noto, editabili altrimenti
+const COUNTRY_TAGS = new Set(['{country}', '{countryflag}', '{countryup}']);
 
 type TagPill =
   | { kind: 'system'; tag: string; label: string; field: keyof CreatedPost; placeholder: string }
@@ -1814,6 +1817,14 @@ function TagEditButtons({ layout, post, postTags, onUpdate }: {
 
   for (const tag of layoutTags) {
     if (AUTO_COMPUTED_TAGS.has(tag)) continue;
+    // Country tag: auto-calcolato se shipFromCountry è noto, altrimenti mostra un'unica pill editabile
+    if (COUNTRY_TAGS.has(tag)) {
+      if (!post.shipFromCountry && !seenFields.has('shipFromCountry')) {
+        seenFields.add('shipFromCountry');
+        pills.push({ kind: 'system', tag, label: 'Paese spedizione', field: 'shipFromCountry', placeholder: 'Codice ISO: FR, DE, IT, CN...' });
+      }
+      continue;
+    }
     const sys = EDITABLE_SYSTEM_TAG_MAP[tag];
     if (sys) {
       if (!seenFields.has(sys.field as string)) {
