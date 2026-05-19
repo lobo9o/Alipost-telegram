@@ -147,6 +147,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       'product_id', 'product_title', 'product_main_image_url',
       'target_sale_price', 'target_original_price', 'target_sale_price_currency',
       'discount', 'evaluate_rate', 'second_level_category_name', 'promotion_link',
+      'product_country',
     ].join(','),
   };
   if (categoryIds)      base.category_ids  = categoryIds;
@@ -203,6 +204,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       ratingNum,
       url:             productUrl,
       affiliateUrl:    String(p.promotion_link || productUrl),
+      shipFromCountry: String(p.product_country || '').toUpperCase() || undefined,
     };
   });
 

@@ -152,6 +152,7 @@ export interface DealProduct {
   rating: string;
   url: string;
   affiliateUrl: string;
+  shipFromCountry?: string;
   reviewRating?: number;
   reviewCount?: number;
   brandKeyword?: string;

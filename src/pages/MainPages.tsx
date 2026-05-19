@@ -371,7 +371,7 @@ const ALI_SORT_OPTIONS = [
 
 const DELIVERY_OPTIONS = [
   { value: 0,  label: '🌍 Tutti' },
-  { value: 7,  label: '🇪🇺 Magazzino UE (≤7 gg)' },
+  { value: 7,  label: '⚡ Consegna rapida (≤7 gg)' },
   { value: 15, label: '⚡ Veloce (≤15 gg)' },
 ];
 
@@ -669,15 +669,27 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     for (const pid of Array.from(selectedIds)) {
       const p = results.find(r => r.productId === pid);
       if (!p) continue;
+
+      // Recupera dettagli prodotto (shipFromCountry reale + link affiliato verificato)
+      let shipFromCountry: string | undefined = p.shipFromCountry;
+      let sourceUrl = p.affiliateUrl || p.url;
+      try {
+        const productUrl = `https://www.aliexpress.com/item/${p.productId}.html`;
+        const detail = await productApi.fetchAliExpress({ url: productUrl });
+        if (detail.shipFromCountry) shipFromCountry = detail.shipFromCountry;
+        if (detail.affiliateUrl) sourceUrl = detail.affiliateUrl;
+      } catch {}
+
       let post: CreatedPost = {
         id: genId(), platform: 'aliexpress',
-        sourceUrl: p.affiliateUrl || p.url,
+        sourceUrl,
         productId: p.productId, title: p.title, image: p.image,
         originalPrice: p.originalPrice, discountedPrice: p.discountedPrice,
         discountPercent: p.discountPercent,
         customText: '', isHistoricalLow: false,
         templateId: tpl?.id || 'tpl1',
         layoutId: defaultAliLayout, keyboardId: '', emoji: '🔴',
+        shipFromCountry,
       };
       // Genera immagine template (come NewPost) così il cron la usa direttamente
       if (tpl && post.image) {
