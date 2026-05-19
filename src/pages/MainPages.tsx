@@ -396,6 +396,17 @@ const CAT_PRESETS = [
   { id: '200003498',   label: '📷 Foto' },
 ];
 
+const EU_COUNTRIES = new Set([
+  'AT','BE','BG','CY','CZ','DE','DK','EE','ES','FI','FR','GB','GR',
+  'HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE',
+  'SI','SK','UK',
+]);
+
+function codeToFlag(code: string): string {
+  if (!code || code.length !== 2) return '';
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
+}
+
 const AMZ_SORT_OPTIONS = [
   { value: 'Featured',           label: 'In evidenza' },
   { value: 'Price:LowToHigh',    label: 'Prezzo ↑' },
@@ -462,6 +473,14 @@ function DealCard({ p, selected, onToggle }: { p: DealProduct; selected: boolean
             background: '#ef4444', color: '#fff',
             fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 20,
           }}>-{p.discountPercent}%</div>
+        )}
+        {p.shipFromCountry && (
+          <div style={{
+            position: 'absolute', bottom: 4, right: 4,
+            background: EU_COUNTRIES.has(p.shipFromCountry) ? 'rgba(34,197,94,0.85)' : 'rgba(0,0,0,0.55)',
+            color: '#fff', fontSize: 9, fontWeight: 600,
+            padding: '1px 5px', borderRadius: 10,
+          }}>{codeToFlag(p.shipFromCountry)} {p.shipFromCountry}</div>
         )}
       </div>
       <div style={{ padding: '6px 8px', flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 0 }}>
@@ -590,6 +609,11 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
   const [adding, setAdding]           = useState(false);
   const [feedback, setFeedback]       = useState('');
   const [showAliFilters, setShowAliFilters] = useState(false);
+  const [euOnly, setEuOnly]           = useState(false);
+
+  const visibleResults = euOnly
+    ? results.filter(p => EU_COUNTRIES.has(p.shipFromCountry ?? ''))
+    : results;
 
   // ── Stato Amazon ────────────────────────────────────────────────────────────
   const dsAmz = settings.dealSearch?.amazon ?? { keywords: '', minDiscount: 0, maxDiscount: 0, minPrice: 0, maxPrice: 0, sort: 'Featured', searchIndexes: '' };
@@ -656,7 +680,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const toggleAll = () =>
-    setSelectedIds(selectedIds.size === results.length ? new Set() : new Set(results.map(r => r.productId)));
+    setSelectedIds(selectedIds.size === visibleResults.length ? new Set() : new Set(visibleResults.map(r => r.productId)));
 
   const addSelectedToQueue = async () => {
     if (!selectedIds.size || adding) return;
@@ -1182,7 +1206,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
               onClick={() => setShowAliFilters(true)}>
               ⚙️
               {(minDiscount > 0 || minPrice > 0 || maxPrice > 0 || deliveryDays > 0 ||
-                activeCats.size > 0 || minRating > 0 || sort !== 'DEFAULT_SORT') && (
+                activeCats.size > 0 || minRating > 0 || sort !== 'DEFAULT_SORT' || euOnly) && (
                 <span style={{ position: 'absolute', top: 3, right: 3, width: 6, height: 6, borderRadius: '50%', background: 'var(--a1)' }} />
               )}
             </button>
@@ -1257,6 +1281,22 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
                     </select>
                   </div>
 
+                  {/* Magazzino EU */}
+                  <div style={{ marginBottom: 12 }}>
+                    <button
+                      className={`btn bfull ${euOnly ? 'bp' : 'bgh'}`}
+                      style={{ fontSize: 13, padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                      onClick={() => setEuOnly(v => !v)}
+                    >
+                      <span style={{ fontSize: 16 }}>🇪🇺</span>
+                      Solo magazzino europeo
+                      {euOnly && <span style={{ marginLeft: 4, fontSize: 11, background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: 10 }}>ATTIVO</span>}
+                    </button>
+                    <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 4, textAlign: 'center' }}>
+                      Filtra i risultati mostrando solo prodotti con magazzino in UE o UK
+                    </div>
+                  </div>
+
                   {/* Ordinamento */}
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 3 }}>ORDINAMENTO</div>
@@ -1305,25 +1345,28 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
           {feedback && <div style={{ margin: '0 16px 8px', padding: '8px 12px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 8, fontSize: 12, color: '#4ade80' }}>{feedback}</div>}
 
           {/* Barra selezione */}
-          {results.length > 0 && (
+          {visibleResults.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px 8px' }}>
               <button className="btn bgh bsm" style={{ fontSize: 11 }} onClick={toggleAll}>
-                {selectedIds.size === results.length ? '☑ Deseleziona' : '☐ Seleziona tutto'}
+                {selectedIds.size === visibleResults.length ? '☑ Deseleziona' : '☐ Seleziona tutto'}
               </button>
               <span style={{ fontSize: 11, color: 'var(--t3)', flex: 1 }}>
-                {results.length} di {total} · {selectedIds.size > 0 ? `${selectedIds.size} selezionati` : 'tocca per selezionare'}
+                {euOnly
+                  ? `${visibleResults.length} EU di ${results.length}`
+                  : `${results.length} di ${total}`
+                } · {selectedIds.size > 0 ? `${selectedIds.size} selezionati` : 'tocca per selezionare'}
               </span>
             </div>
           )}
 
           {/* Griglia risultati */}
-          {searched && !loading && results.length === 0 && !err && (
-            <EmptyState icon="🔍" text="Nessun risultato. Cambia parole chiave o riduci i filtri." />
+          {searched && !loading && visibleResults.length === 0 && !err && (
+            <EmptyState icon="🔍" text={euOnly && results.length > 0 ? 'Nessun prodotto da magazzino EU in questi risultati.' : 'Nessun risultato. Cambia parole chiave o riduci i filtri.'} />
           )}
 
-          {results.length > 0 && (
+          {visibleResults.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '0 16px', paddingBottom: selectedIds.size > 0 ? 90 : 16 }}>
-              {results.map(p => (
+              {visibleResults.map(p => (
                 <DealCard key={p.productId} p={p} selected={selectedIds.has(p.productId)} onToggle={() => toggleSelect(p.productId)} />
               ))}
               {hasMore && (
