@@ -792,8 +792,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     res.json({
       productId,
-      title: skuDetail.title,
-      image: skuDetail.image,
+      title: detail.title,
+      image: detail.image,
       originalPrice: origPrice || salePrice,
       discountedPrice: salePrice,
       discountPercent,
