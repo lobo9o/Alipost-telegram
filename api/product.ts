@@ -346,11 +346,14 @@ async function scrapeAliShipFrom(productId: string): Promise<string | null> {
   }
 
   function extractFrom(html: string, label: string): string | null {
-    // Raccoglie tutti i codici a 2 lettere per ogni chiave JSON, preferisce non-CN
     const pick = (vals: string[]) => vals.find(v => v !== 'CN') ?? vals[0] ?? null;
 
-    // sendCountry / shipFromCountry / fromCountry / storeCountry / countryCode in contesto spedizione
-    for (const key of ['sendCountry', 'shipFromCountry', 'fromCountry', 'storeCountry', 'warehouseCountry', 'senderCountry', 'originPlace']) {
+    // Pattern JSON — tutte le chiavi note per warehouse/spedizione
+    for (const key of [
+      'sendCountry', 'shipFromCountry', 'fromCountry', 'sendGoodsCountry',
+      'storeCountry', 'warehouseCountry', 'senderCountry', 'originPlace',
+      'fromCountryCode', 'originCountryCode', 'shipFromCode',
+    ]) {
       const all = [...html.matchAll(new RegExp(`"${key}"\\s*:\\s*"([A-Z]{2})"`, 'g'))].map(m => m[1]);
       const v = pick(all);
       if (v) { console.log(`[ali] shipFrom [${label}] ${key}:`, v); return v; }
@@ -363,15 +366,23 @@ async function scrapeAliShipFrom(productId: string): Promise<string | null> {
       ?? allShipFrom[0] ?? null;
     if (sfName) {
       const code = sfName.length === 2 ? sfName.toUpperCase() : (NAME_TO_CODE[sfName] ?? null);
-      if (code) { console.log(`[ali] shipFrom [${label}] shipFrom:`, sfName, '→', code); return code; }
+      if (code) { console.log(`[ali] shipFrom [${label}] shipFrom name:`, sfName, '→', code); return code; }
+    }
+
+    // Testo visibile "Ship from France" / "Shipped from France" / "Ships from France"
+    const textMatch = html.match(/[Ss]hip(?:ped|s)?\s+from\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/);
+    if (textMatch) {
+      const name = textMatch[1];
+      const code = NAME_TO_CODE[name];
+      if (code) { console.log(`[ali] shipFrom [${label}] text "Ship from":`, name, '→', code); return code; }
     }
 
     // "country":"FR" dentro blocco freight/logistics
-    const m = html.match(/"(?:freight|freightInfo|logistics|delivery)[^}]{0,400}"country"\s*:\s*"([A-Z]{2})"/s);
+    const m = html.match(/"(?:freight|freightInfo|logistics|delivery|overseaDelivery)[^}]{0,400}"country"\s*:\s*"([A-Z]{2})"/s);
     if (m?.[1]) { console.log(`[ali] shipFrom [${label}] freight.country:`, m[1]); return m[1]; }
 
-    // countryCode generico in blocco shipment/warehouse/store
-    const mc = html.match(/"(?:shipment|warehouse|store|send)[^}]{0,300}"countryCode"\s*:\s*"([A-Z]{2})"/s);
+    // countryCode in blocco shipment/warehouse/store/send
+    const mc = html.match(/"(?:shipment|warehouse|store|send|delivery)[^}]{0,300}"countryCode"\s*:\s*"([A-Z]{2})"/s);
     if (mc?.[1] && mc[1] !== 'CN') { console.log(`[ali] shipFrom [${label}] countryCode:`, mc[1]); return mc[1]; }
 
     return null;
