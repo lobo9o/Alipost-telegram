@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import cron from 'node-cron';
+import { initTgMonitor } from './api/tg-monitor/worker.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -43,6 +44,8 @@ async function main() {
     amazonDealsHandler,
     dealsCacheHandler,
     emojiIdsHandler,
+    tgMonitorAuthHandler,
+    tgMonitorChannelsHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -61,6 +64,8 @@ async function main() {
     loadHandler('api/amazon-deals/index.ts'),
     loadHandler('api/deals-cache/index.ts'),
     loadHandler('api/emoji-ids/index.ts'),
+    loadHandler('api/tg-monitor/auth.ts'),
+    loadHandler('api/tg-monitor/channels.ts'),
   ]);
 
   const app = express();
@@ -88,6 +93,9 @@ async function main() {
   app.all('/api/amazon-deals', amazonDealsHandler);
   app.all('/api/deals-cache', dealsCacheHandler);
   app.all('/api/emoji-ids', emojiIdsHandler);
+  app.all('/api/tg-monitor/auth', tgMonitorAuthHandler);
+  app.all('/api/tg-monitor/channels', tgMonitorChannelsHandler);
+  app.all('/api/tg-monitor/channels/:id', withId(tgMonitorChannelsHandler));
 
   app.get('*', (_req, res) => {
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
@@ -95,6 +103,7 @@ async function main() {
 
   app.listen(PORT, () => {
     console.log(`[server] avviato su http://localhost:${PORT}`);
+    initTgMonitor(PORT);
   });
 
   // Autopost ogni minuto

@@ -150,6 +150,24 @@ async function runMigration() {
     PRIMARY KEY (user_id, emoji_char)
   )`;
 
+  await sql`CREATE TABLE IF NOT EXISTS tg_sessions (
+    id             TEXT PRIMARY KEY,
+    user_id        TEXT NOT NULL UNIQUE,
+    phone          TEXT,
+    session_string TEXT NOT NULL DEFAULT '',
+    status         TEXT NOT NULL DEFAULT 'inactive',
+    created_at     TIMESTAMP WITH TIME ZONE DEFAULT now()
+  )`;
+
+  await sql`CREATE TABLE IF NOT EXISTS tg_monitor_channels (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    channel    TEXT NOT NULL,
+    active     BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    UNIQUE(user_id, channel)
+  )`;
+
   // Seed tag di sistema {boxcoupon} per tutti gli utenti esistenti
   await sql`
     INSERT INTO tags (id, user_id, name, value)
@@ -201,6 +219,14 @@ export function getUserId(req: VercelRequest): string | null {
 }
 
 export function requireUserId(req: VercelRequest, res: VercelResponse): string | null {
+  // Internal server auth: CRON_SECRET + X-Internal-User-Id header
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = (req.headers['authorization'] as string | undefined) ?? '';
+  const internalUserId = req.headers['x-internal-user-id'] as string | undefined;
+  if (cronSecret && authHeader === `Bearer ${cronSecret}` && internalUserId) {
+    return internalUserId;
+  }
+
   const userId = getUserId(req);
   if (!userId) {
     res.status(401).json({ error: 'Apri l\'app tramite Telegram' });

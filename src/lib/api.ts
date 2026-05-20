@@ -245,3 +245,17 @@ export const emojiIdsApi = {
   add: (emoji_char: string, custom_emoji_id: string) => req<{ ok: boolean }>('POST', '/api/emoji-ids', { emoji_char, custom_emoji_id }),
   remove: (emoji_char: string) => req<{ ok: boolean }>('DELETE', '/api/emoji-ids', { emoji_char }),
 };
+
+// ── Telegram Monitor ─────────────────────────────────────────────────────────
+export interface TgMonitorChannel { id: string; channel: string; active: boolean; }
+export const tgMonitorApi = {
+  status: () => req<{ status: string; phone: string | null }>('GET', '/api/tg-monitor/auth'),
+  sendCode: (phone: string) => req<{ codeSent: boolean }>('POST', '/api/tg-monitor/auth', { action: 'sendCode', phone }),
+  signIn: (code: string) => req<{ ok?: boolean; need2FA?: boolean }>('POST', '/api/tg-monitor/auth', { action: 'signIn', code }),
+  confirm2FA: (password: string) => req<{ ok: boolean }>('POST', '/api/tg-monitor/auth', { action: 'confirm2FA', password }),
+  signOut: () => req<{ ok: boolean }>('POST', '/api/tg-monitor/auth', { action: 'signOut' }),
+  listChannels: () => req<TgMonitorChannel[]>('GET', '/api/tg-monitor/channels'),
+  addChannel: (channel: string) => req<{ ok: boolean; id: string }>('POST', '/api/tg-monitor/channels', { channel }),
+  removeChannel: (id: string) => req<{ ok: boolean }>('DELETE', `/api/tg-monitor/channels/${id}`),
+};
+
