@@ -100,13 +100,29 @@ async function startUser(userId: string) {
       const text: string = msg.message ?? '';
       console.log(`[tg-monitor] ${userId} — messaggio da ${chatId}: "${text.slice(0, 80)}"`);
 
-      if (!text) return;
+      // Raccoglie URL sia dal testo che dalle entities (link con testo personalizzato)
+      const urlSet = new Set<string>();
 
-      const urls = text.match(PRODUCT_URL_RE);
-      if (!urls?.length) {
-        console.log(`[tg-monitor] ${userId} — nessun link prodotto trovato`);
+      // URL nel testo plain
+      const textUrls = text.match(PRODUCT_URL_RE) ?? [];
+      textUrls.forEach(u => urlSet.add(u));
+
+      // URL nelle entities Telegram (MessageEntityTextUrl / MessageEntityUrl)
+      const entities: any[] = msg.entities ?? [];
+      for (const entity of entities) {
+        const entityUrl: string = entity.url ?? entity.href ?? '';
+        if (entityUrl) urlSet.add(entityUrl);
+      }
+
+      // Filtra solo URL Amazon/AliExpress
+      const urls = [...urlSet].filter(u => PRODUCT_URL_RE.test(u));
+      PRODUCT_URL_RE.lastIndex = 0; // reset dopo test()
+
+      if (!urls.length) {
+        console.log(`[tg-monitor] ${userId} — nessun link prodotto trovato (entities: ${entities.length})`);
         return;
       }
+      console.log(`[tg-monitor] ${userId} — trovati ${urls.length} link: ${urls.join(', ').slice(0, 120)}`);
 
       const seen = new Set<string>();
       for (const url of urls) {
