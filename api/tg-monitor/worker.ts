@@ -14,6 +14,16 @@ export function initTgMonitor(port: number) {
   serverPort = port;
   cronSecret = process.env.CRON_SECRET || '';
   startAll().catch(e => console.error('[tg-monitor] errore avvio:', e));
+
+  // Watchdog: ogni 5 minuti controlla se i client sono ancora connessi
+  setInterval(() => {
+    for (const [userId, client] of activeClients) {
+      if (!client.connected) {
+        console.log(`[tg-monitor] ${userId} — client disconnesso, riavvio...`);
+        reloadUser(userId);
+      }
+    }
+  }, 5 * 60 * 1000);
 }
 
 export function reloadUser(userId: string) {
@@ -59,7 +69,14 @@ async function startUser(userId: string) {
   const client = new TelegramClient(
     new StringSession(session.session_string),
     apiId, apiHash,
-    { connectionRetries: 5, useWSS: false }
+    {
+      connectionRetries: 10,
+      retryDelay: 2000,
+      autoReconnect: true,
+      useWSS: false,
+      requestRetries: 5,
+      floodSleepThreshold: 60,
+    }
   );
 
   await client.connect();
