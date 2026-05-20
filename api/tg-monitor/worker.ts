@@ -3,10 +3,8 @@ import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage } from 'telegram/events/index.js';
 
-// Regex per estrarre link Amazon e AliExpress dai messaggi
 const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|amzn\.eu|aliexpress\.com|s\.click\.aliexpress\.com|a\.aliexpress\.com)[^\s<>"')]+/gi;
 
-// Mappa userId → client GramJS attivo
 const activeClients = new Map<string, TelegramClient>();
 
 let serverPort = 3000;
@@ -18,7 +16,6 @@ export function initTgMonitor(port: number) {
   startAll().catch(e => console.error('[tg-monitor] errore avvio:', e));
 }
 
-// Ricarica il monitoring per un singolo utente (chiamato da auth/channels)
 export function reloadUser(userId: string) {
   stopUser(userId);
   startUser(userId).catch(e => console.error(`[tg-monitor] errore reload ${userId}:`, e));
@@ -47,10 +44,10 @@ async function startUser(userId: string) {
   `;
   if (!session) return;
 
-  const channels = await sql<{ channel: string }[]>`
+  const channelRows = await sql<{ channel: string }[]>`
     SELECT channel FROM tg_monitor_channels WHERE user_id = ${userId} AND active = true
   `;
-  if (!channels.length) return;
+  if (!channelRows.length) return;
 
   const apiId = parseInt(process.env.TG_API_ID || '0', 10);
   const apiHash = process.env.TG_API_HASH || '';
@@ -68,16 +65,48 @@ async function startUser(userId: string) {
   await client.connect();
   activeClients.set(userId, client);
 
-  const channelList = channels.map(c => c.channel);
-  console.log(`[tg-monitor] ${userId} — monitoring: ${channelList.join(', ')}`);
+  // Risolve ogni canale nel suo ID numerico (più affidabile degli username per il filtro)
+  const monitoredIds = new Set<string>();
+  for (const { channel } of channelRows) {
+    try {
+      const entity = await client.getEntity(channel) as any;
+      const id = String(entity.id);
+      monitoredIds.add(id);
+      // I canali hanno id negativo nella forma -100XXXXXXX
+      monitoredIds.add(`-100${id}`);
+      console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${id}`);
+    } catch (e: any) {
+      console.warn(`[tg-monitor] ${userId} — impossibile risolvere "${channel}": ${e.message}`);
+    }
+  }
 
+  if (!monitoredIds.size) {
+    console.warn(`[tg-monitor] ${userId} — nessun canale risolvibile, monitoring non avviato`);
+    return;
+  }
+
+  // Ascolta TUTTI i messaggi, filtra manualmente per ID canale
   client.addEventHandler(async (event: any) => {
     try {
-      const text: string = event.message?.message ?? '';
+      const msg = event.message;
+      if (!msg) return;
+
+      const chatId = String(msg.chatId ?? msg.peerId?.channelId ?? '');
+      const chatIdNeg = chatId ? `-100${chatId}` : '';
+
+      // Controlla se il messaggio viene da uno dei canali monitorati
+      if (!monitoredIds.has(chatId) && !monitoredIds.has(chatIdNeg)) return;
+
+      const text: string = msg.message ?? '';
+      console.log(`[tg-monitor] ${userId} — messaggio da ${chatId}: "${text.slice(0, 80)}"`);
+
       if (!text) return;
 
       const urls = text.match(PRODUCT_URL_RE);
-      if (!urls?.length) return;
+      if (!urls?.length) {
+        console.log(`[tg-monitor] ${userId} — nessun link prodotto trovato`);
+        return;
+      }
 
       const seen = new Set<string>();
       for (const url of urls) {
@@ -89,7 +118,9 @@ async function startUser(userId: string) {
     } catch (e) {
       console.error('[tg-monitor] errore handler:', e);
     }
-  }, new NewMessage({ chats: channelList }));
+  }, new NewMessage({}));
+
+  console.log(`[tg-monitor] ${userId} — in ascolto su ${monitoredIds.size / 2} canali`);
 }
 
 async function processUrl(userId: string, url: string) {
@@ -101,7 +132,7 @@ async function processUrl(userId: string, url: string) {
   };
   if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
 
-  // 1. Recupera dati prodotto
+  // 1. Dati prodotto
   const productRes = await fetch(
     `http://localhost:${serverPort}/api/product?url=${encodeURIComponent(url)}`,
     { headers }
@@ -112,11 +143,11 @@ async function processUrl(userId: string, url: string) {
   }
   const product = await productRes.json() as any;
   if (!product?.title) {
-    console.warn('[tg-monitor] nessun prodotto trovato per', url);
+    console.warn(`[tg-monitor] prodotto non trovato per ${url}:`, JSON.stringify(product).slice(0, 200));
     return;
   }
 
-  // 2. Carica le impostazioni utente per scegliere il layout e il template
+  // 2. Impostazioni utente
   const settingsRes = await fetch(`http://localhost:${serverPort}/api/settings`, { headers });
   const settings = settingsRes.ok ? await settingsRes.json() as any : {};
 
@@ -147,7 +178,7 @@ async function processUrl(userId: string, url: string) {
     boxcoupon:       product.boxcoupon ?? '',
   };
 
-  // 4. Salva il post in bozza
+  // 4. Salva bozza
   const postRes = await fetch(`http://localhost:${serverPort}/api/posts`, {
     method: 'POST',
     headers,
@@ -159,7 +190,7 @@ async function processUrl(userId: string, url: string) {
   }
   const savedPost = await postRes.json() as any;
 
-  // 5. Aggiunge alla coda come bozza (status=draft, nessuna schedulazione)
+  // 5. Aggiunge alla coda
   const queueRes = await fetch(`http://localhost:${serverPort}/api/autopost`, {
     method: 'POST',
     headers,
@@ -175,5 +206,5 @@ async function processUrl(userId: string, url: string) {
     return;
   }
 
-  console.log(`[tg-monitor] ${userId} — aggiunto in coda: "${product.title?.slice(0, 60)}"`);
+  console.log(`[tg-monitor] ${userId} — ✅ aggiunto in coda: "${product.title?.slice(0, 60)}"`);
 }
