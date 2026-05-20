@@ -149,9 +149,10 @@ async function processUrl(userId: string, url: string) {
   if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
 
   // 1. Dati prodotto
+  const platform: 'amazon' | 'aliexpress' = url.toLowerCase().includes('aliexpress') ? 'aliexpress' : 'amazon';
   const productRes = await fetch(
-    `http://localhost:${serverPort}/api/product?url=${encodeURIComponent(url)}`,
-    { headers }
+    `http://localhost:${serverPort}/api/product`,
+    { method: 'POST', headers, body: JSON.stringify({ platform, url }) }
   );
   if (!productRes.ok) {
     console.warn(`[tg-monitor] /api/product ${productRes.status} per ${url}`);
@@ -168,7 +169,6 @@ async function processUrl(userId: string, url: string) {
   const settings = settingsRes.ok ? await settingsRes.json() as any : {};
 
   // 3. Costruisce il post
-  const platform: 'amazon' | 'aliexpress' = url.toLowerCase().includes('aliexpress') ? 'aliexpress' : 'amazon';
 
   const post = {
     id: crypto.randomUUID(),
