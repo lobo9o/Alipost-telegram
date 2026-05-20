@@ -436,16 +436,31 @@ async function generateTemplateImageServer(
     function textElToSvg(el: any, text: string) {
       if (!el?.enabled || !text?.trim()) return;
       const fs = (Number(el.fontSize) || 36) * 2;
-      const x = Math.round((el.x / 100) * SIZE); const y = Math.round((el.y / 100) * SIZE);
+      const xTop = Math.round((el.x / 100) * SIZE);
+      const yTop = Math.round((el.y / 100) * SIZE);
+      // librsvg usa baseline alfabetico: sposta y in giù di ~0.80*fs per allineare il bordo superiore a yTop
+      const y = yTop + Math.round(fs * 0.80);
       const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
       const family = String(el.fontFamily || 'Impact').replace(/"/g, '');
       const fill = String(el.color || '#ffffff');
-      const deco = el.strikethrough ? ' text-decoration="line-through"' : '';
       const safe = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const common = `x="${x}" y="${y}" font-family="${family}, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}" dominant-baseline="text-before-edge"${deco}`;
+      const common = `x="${xTop}" y="${y}" font-family="${family}, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}"`;
       if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
         svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${safe}</text>`);
-      } else { svgEls.push(`<text ${common} fill="${fill}">${safe}</text>`); }
+      } else {
+        svgEls.push(`<text ${common} fill="${fill}">${safe}</text>`);
+      }
+      // Barrato come linea SVG separata con colore esplicito (text-decoration ignora il fill in librsvg)
+      if (el.strikethrough) {
+        const strkColor = String(el.strikethroughColor || el.color || '#ffffff');
+        // Stima larghezza testo: ~0.55*fs per carattere (approssimazione conservativa)
+        const approxWidth = Math.round(text.length * fs * 0.55);
+        const lx = anchor === 'end' ? xTop - approxWidth : anchor === 'middle' ? xTop - approxWidth / 2 : xTop;
+        // Posizione verticale della barra: ~0.35*fs sopra la baseline = yTop + 0.45*fs
+        const ly = yTop + Math.round(fs * 0.45);
+        const lw = Math.max(1, Math.round(fs * 0.06));
+        svgEls.push(`<line x1="${lx}" y1="${ly}" x2="${lx + approxWidth}" y2="${ly}" stroke="${strkColor}" stroke-width="${lw}" stroke-linecap="round"/>`);
+      }
     }
     textElToSvg(template.prezzo, priceData.prezzo);
     textElToSvg(template.prezzoPrecedente, priceData.prezzoPrecedente);
