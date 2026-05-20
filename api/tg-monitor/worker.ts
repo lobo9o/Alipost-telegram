@@ -141,13 +141,16 @@ async function startUser(userId: string) {
       }
       console.log(`[tg-monitor] ${userId} — trovati ${urls.length} link: ${urls.join(', ').slice(0, 120)}`);
 
+      // Deduplica URL
+      const uniqueUrls: string[] = [];
       const seen = new Set<string>();
       for (const url of urls) {
         const clean = url.replace(/[.,;!?)]+$/, '');
-        if (seen.has(clean)) continue;
-        seen.add(clean);
-        processUrl(userId, clean).catch(e => console.error('[tg-monitor] errore processUrl:', e));
+        if (!seen.has(clean)) { seen.add(clean); uniqueUrls.push(clean); }
       }
+
+      // 1 link → post singolo, 2+ link → post multiplo
+      processMessage(userId, uniqueUrls).catch(e => console.error('[tg-monitor] errore processMessage:', e));
     } catch (e) {
       console.error('[tg-monitor] errore handler:', e);
     }
@@ -156,101 +159,117 @@ async function startUser(userId: string) {
   console.log(`[tg-monitor] ${userId} — in ascolto su ${monitoredIds.size / 2} canali`);
 }
 
-async function processUrl(userId: string, url: string) {
+// Recupera layout e template dal DB per l'utente
+async function getUserLayouts(userId: string) {
+  const layouts = await sql<{ id: string; tipo: string; active: boolean }[]>`
+    SELECT id, tipo, active FROM layouts WHERE user_id = ${userId} ORDER BY created_at ASC
+  `;
+  const templates = await sql<{ id: string }[]>`
+    SELECT id FROM templates WHERE user_id = ${userId} ORDER BY created_at ASC LIMIT 1
+  `;
+  const templateId = templates[0]?.id ?? '';
+
+  const getLayoutId = (platform: 'amazon' | 'aliexpress', multi = false): string => {
+    if (multi) {
+      const m = layouts.find(l => l.tipo === 'multi' && l.active);
+      if (m) return m.id;
+    }
+    const order = platform === 'aliexpress'
+      ? ['aliexpress', 'normal', 'amazon']
+      : ['amazon', 'normal', 'aliexpress'];
+    for (const tipo of order) {
+      const match = layouts.find(l => l.tipo === tipo && l.active);
+      if (match) return match.id;
+    }
+    return layouts.find(l => l.active)?.id ?? layouts[0]?.id ?? '';
+  };
+
+  return { getLayoutId, templateId };
+}
+
+// Processa un singolo URL e restituisce il post salvato, o null se fallisce
+async function fetchProduct(userId: string, url: string, headers: Record<string, string>): Promise<any | null> {
+  const platform: 'amazon' | 'aliexpress' = url.toLowerCase().includes('aliexpress') ? 'aliexpress' : 'amazon';
   console.log(`[tg-monitor] ${userId} — elaboro: ${url}`);
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'x-internal-user-id': userId,
-  };
-  if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
-
-  // 1. Dati prodotto
-  const platform: 'amazon' | 'aliexpress' = url.toLowerCase().includes('aliexpress') ? 'aliexpress' : 'amazon';
   const productRes = await fetch(
     `http://localhost:${serverPort}/api/product`,
     { method: 'POST', headers, body: JSON.stringify({ platform, url }) }
   );
   if (!productRes.ok) {
     console.warn(`[tg-monitor] /api/product ${productRes.status} per ${url}`);
-    return;
+    return null;
   }
   const product = await productRes.json() as any;
   if (!product?.title) {
-    console.warn(`[tg-monitor] prodotto non trovato per ${url}:`, JSON.stringify(product).slice(0, 200));
-    return;
+    console.warn(`[tg-monitor] prodotto non trovato per ${url}`);
+    return null;
   }
+  return { ...product, _platform: platform };
+}
 
-  // 2. Layout attivo per la piattaforma (preferenza: tipo specifico → normal)
-  const layoutTypes = platform === 'aliexpress'
-    ? ['aliexpress', 'normal', 'amazon']
-    : ['amazon', 'normal', 'aliexpress'];
-
-  const layouts = await sql<{ id: string; tipo: string; active: boolean }[]>`
-    SELECT id, tipo, active FROM layouts WHERE user_id = ${userId} ORDER BY created_at ASC
-  `;
-  let layoutId = '';
-  for (const tipo of layoutTypes) {
-    const match = layouts.find(l => l.tipo === tipo && l.active);
-    if (match) { layoutId = match.id; break; }
-  }
-  if (!layoutId) {
-    const any = layouts.find(l => l.active) ?? layouts[0];
-    layoutId = any?.id ?? '';
-  }
-
-  // Template attivo
-  const templates = await sql<{ id: string }[]>`
-    SELECT id FROM templates WHERE user_id = ${userId} ORDER BY created_at ASC LIMIT 1
-  `;
-  const templateId = templates[0]?.id ?? '';
-
-  console.log(`[tg-monitor] ${userId} — layout: ${layoutId || 'nessuno'} template: ${templateId || 'nessuno'}`);
-
-  // 3. Costruisce il post
-  const post = {
-    id: crypto.randomUUID(),
-    platform,
-    sourceUrl:       product.sourceUrl ?? url,
-    productId:       product.productId ?? '',
-    title:           product.title ?? '',
-    image:           product.image ?? '',
-    originalPrice:   product.originalPrice ?? 0,
-    discountedPrice: product.discountedPrice ?? 0,
-    discountPercent: product.discountPercent ?? 0,
-    customText:      '',
-    isHistoricalLow: product.isHistoricalLow ?? false,
-    templateId,
-    layoutId,
-    emoji:           '',
-    shipFromCountry: product.shipFromCountry ?? null,
-    stelle:          product.stelle ?? '',
-    recensioni:      product.recensioni ?? '',
-    cat:             product.cat ?? '',
-    author:          '',
-    coupon:          product.coupon ?? '',
-    boxcoupon:       product.boxcoupon ?? '',
+async function processMessage(userId: string, urls: string[]) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-internal-user-id': userId,
   };
+  if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
 
-  // 4. Salva bozza
-  const postRes = await fetch(`http://localhost:${serverPort}/api/posts`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(post),
-  });
-  if (!postRes.ok) {
-    console.warn('[tg-monitor] errore salvataggio post:', await postRes.text());
-    return;
+  const { getLayoutId, templateId } = await getUserLayouts(userId);
+  const isMulti = urls.length > 1;
+
+  // Processa tutti i link in parallelo
+  const products = (await Promise.all(urls.map(u => fetchProduct(userId, u, headers)))).filter(Boolean);
+  if (!products.length) return;
+
+  console.log(`[tg-monitor] ${userId} — ${isMulti ? 'post multiplo' : 'post singolo'} con ${products.length}/${urls.length} prodotti`);
+
+  // Costruisce e salva ogni post
+  const savedPosts: any[] = [];
+  for (const product of products) {
+    const platform: 'amazon' | 'aliexpress' = product._platform;
+    const layoutId = getLayoutId(platform, isMulti);
+
+    const post = {
+      id:              crypto.randomUUID(),
+      platform,
+      sourceUrl:       product.sourceUrl ?? '',
+      productId:       product.productId ?? '',
+      title:           product.title ?? '',
+      image:           product.image ?? '',
+      originalPrice:   product.originalPrice ?? 0,
+      discountedPrice: product.discountedPrice ?? 0,
+      discountPercent: product.discountPercent ?? 0,
+      customText:      '',
+      isHistoricalLow: product.isHistoricalLow ?? false,
+      templateId,
+      layoutId,
+      emoji:           '',
+      shipFromCountry: product.shipFromCountry ?? null,
+      stelle:          product.stelle ?? '',
+      recensioni:      product.recensioni ?? '',
+      cat:             product.cat ?? '',
+      author:          '',
+      coupon:          product.coupon ?? '',
+      boxcoupon:       product.boxcoupon ?? '',
+    };
+
+    const postRes = await fetch(`http://localhost:${serverPort}/api/posts`, {
+      method: 'POST', headers, body: JSON.stringify(post),
+    });
+    if (!postRes.ok) { console.warn('[tg-monitor] errore salvataggio post:', await postRes.text()); continue; }
+    savedPosts.push(await postRes.json());
   }
-  const savedPost = await postRes.json() as any;
 
-  // 5. Aggiunge alla coda
+  if (!savedPosts.length) return;
+
+  // Aggiunge alla coda: tutti i post in un unico elemento (singolo o multiplo)
   const queueRes = await fetch(`http://localhost:${serverPort}/api/autopost`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
       id: crypto.randomUUID(),
-      posts: [savedPost],
+      posts: savedPosts,
       status: 'draft',
       scheduled: null,
     }),
@@ -260,5 +279,6 @@ async function processUrl(userId: string, url: string) {
     return;
   }
 
-  console.log(`[tg-monitor] ${userId} — ✅ aggiunto in coda: "${product.title?.slice(0, 60)}"`);
+  const titles = savedPosts.map((p: any) => p.title?.slice(0, 40)).join(' + ');
+  console.log(`[tg-monitor] ${userId} — ✅ ${isMulti ? 'multiplo' : 'singolo'} in coda: "${titles}"`);
 }
