@@ -111,8 +111,9 @@ async function startUser(userId: string) {
       const chatId = String(msg.chatId ?? msg.peerId?.channelId ?? '');
       const chatIdNeg = chatId ? `-100${chatId}` : '';
 
-      // Controlla se il messaggio viene da uno dei canali monitorati
-      if (!monitoredIds.has(chatId) && !monitoredIds.has(chatIdNeg)) return;
+      const isMonitored = monitoredIds.has(chatId) || monitoredIds.has(chatIdNeg);
+      console.log(`[tg-monitor] ${userId} — msg chatId=${chatId} monitored=${isMonitored}`);
+      if (!isMonitored) return;
 
       const text: string = msg.message ?? '';
       console.log(`[tg-monitor] ${userId} — messaggio da ${chatId}: "${text.slice(0, 80)}"`);
