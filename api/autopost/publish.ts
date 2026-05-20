@@ -910,7 +910,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const aliCurrSym2 = ALI_CURRENCY_SYM[country] ?? '€';
 
           // Carica template e layout utente (come per Amazon)
-          const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
+          const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1`;
           const aliTemplateId = aliTplRow[0]?.id ?? 'tpl1';
           const aliTemplateCfg = parseTemplateCfg(aliTplRow[0]);
           const aliLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo IN ('aliexpress', 'normal') ORDER BY tipo = 'aliexpress' DESC, created_at ASC LIMIT 1`;
@@ -1061,7 +1061,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         if (multiCandidates.length < 2) multiCandidates = candidates;
         multiCandidates = multiCandidates.slice(0, multiSize);
 
-        const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
+        const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1`;
         const mTemplateId = mTplRow[0]?.id ?? 'tpl1';
         const mTemplateCfg = parseTemplateCfg(mTplRow[0]);
         const mLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`.catch(() => []);
@@ -1108,7 +1108,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ORDER BY tipo = 'amazon' DESC, created_at ASC LIMIT 1
         `;
         const layoutId = amzLayouts[0]?.id ?? '';
-        const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} LIMIT 1`;
+        const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1`;
         const templateId  = tplRow[0]?.id ?? 'tpl1';
         const templateCfg = parseTemplateCfg(tplRow[0]);
 
