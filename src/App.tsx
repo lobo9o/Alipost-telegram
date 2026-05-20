@@ -20,7 +20,6 @@ const NAV_ITEMS: { id: NavPage; label: string }[] = [
   { id: 'search', label: 'Cerca' },
   { id: 'newpost', label: 'Post' },
   { id: 'queue', label: 'Coda' },
-  { id: 'monitor', label: 'Monitor' },
   { id: 'layout', label: 'Layout' },
   { id: 'settings', label: 'Config' },
 ];
