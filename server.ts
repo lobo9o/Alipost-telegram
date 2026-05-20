@@ -113,6 +113,7 @@ async function main() {
       .then((d: any) => {
         if (d.published?.length) console.log('[cron] pubblicati:', d.published);
         if (d.errors?.length)    console.error('[cron] errori:', d.errors);
+        if (d.skipped?.length)   console.log('[cron] skip:', d.skipped.join(' | '));
       })
       .catch(e => console.error('[cron autopost]', e));
   });
