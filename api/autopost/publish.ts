@@ -716,6 +716,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ`.catch(() => {});
     await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS terminata BOOLEAN DEFAULT false`.catch(() => {});
     await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS is_multi BOOLEAN DEFAULT false`.catch(() => {});
+    await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS auto BOOLEAN DEFAULT false`.catch(() => {});
     // Pulizia storico prezzi oltre 180 giorni (fire-and-forget)
     sql`DELETE FROM price_history WHERE recorded_at < now() - interval '180 days'`.catch(() => {});
     migrationDone = true;
@@ -938,7 +939,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             if (genImg) post = { ...post, generatedImage: genImg };
           }
 
-          queueItem = { id: crypto.randomUUID(), posts: [post], silenzioso: null };
+          const _aliAutoId = crypto.randomUUID();
+          await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_aliAutoId}, ${userId}, ${sql.json([post])}, 'published', true)`.catch(e => console.warn('[autopost] ali auto-queue insert:', e.message));
+          queueItem = { id: _aliAutoId, posts: [post], silenzioso: null };
           postsArr  = [post];
           isMulti   = false;
           console.log(`[autopost] auto-search trovato: ${post.title?.slice(0, 50)}`);
@@ -1095,7 +1098,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         post = multiPosts[0];
         postsArr = multiPosts;
         isMulti = true;
-        queueItem = { id: crypto.randomUUID(), posts: multiPosts, silenzioso: null, _autoMulti: true };
+        const _multiAutoId = crypto.randomUUID();
+        await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_multiAutoId}, ${userId}, ${sql.json(multiPosts)}, 'published', true)`.catch(e => console.warn('[autopost] multi auto-queue insert:', e.message));
+        queueItem = { id: _multiAutoId, posts: multiPosts, silenzioso: null, _autoMulti: true };
         console.log(`[autopost] Amazon multi-post auto: ${multiPosts.length} prodotti`);
       } else {
 
@@ -1168,7 +1173,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           if (genImg) post = { ...post, generatedImage: genImg };
         }
 
-        queueItem = { id: crypto.randomUUID(), posts: [post], silenzioso: null };
+        const _amzAutoId = crypto.randomUUID();
+        await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_amzAutoId}, ${userId}, ${sql.json([post])}, 'published', true)`.catch(e => console.warn('[autopost] amz auto-queue insert:', e.message));
+        queueItem = { id: _amzAutoId, posts: [post], silenzioso: null };
         postsArr  = [post];
         isMulti   = false;
         const scoreLog = sortMode === 'score'

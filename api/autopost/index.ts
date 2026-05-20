@@ -31,7 +31,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (req.method === 'GET') {
     const rows = await sql`
       SELECT id, posts, status, scheduled, silenzioso, created_at AS "createdAt"
-      FROM autopost_queue WHERE user_id = ${userId} ORDER BY created_at ASC
+      FROM autopost_queue WHERE user_id = ${userId} AND (auto IS NULL OR auto = false) ORDER BY created_at ASC
     `;
     // Handle legacy rows where posts was stored as JSON string instead of JSONB array
     // Strip generatedImage from GET response — kept client-side only (too heavy for polling)

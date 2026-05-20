@@ -73,6 +73,7 @@ async function runMigration() {
     posts      JSONB NOT NULL DEFAULT '[]',
     status     TEXT NOT NULL CHECK (status IN ('draft', 'scheduled', 'published', 'error')) DEFAULT 'draft',
     scheduled  TIMESTAMP WITH TIME ZONE,
+    auto       BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
   )`;
   await sql`CREATE TABLE IF NOT EXISTS keyboards (
@@ -125,6 +126,7 @@ async function runMigration() {
   await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'legacy'`;
+  await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS auto BOOLEAN DEFAULT false`;
   await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS config JSONB`;
 
   // Aggiunge 'aliexpress' e 'aliexpress_historical_low' ai valori validi per layouts.tipo
