@@ -164,12 +164,33 @@ async function processUrl(userId: string, url: string) {
     return;
   }
 
-  // 2. Impostazioni utente
-  const settingsRes = await fetch(`http://localhost:${serverPort}/api/settings`, { headers });
-  const settings = settingsRes.ok ? await settingsRes.json() as any : {};
+  // 2. Layout attivo per la piattaforma (preferenza: tipo specifico → normal)
+  const layoutTypes = platform === 'aliexpress'
+    ? ['aliexpress', 'normal', 'amazon']
+    : ['amazon', 'normal', 'aliexpress'];
+
+  const layouts = await sql<{ id: string; tipo: string; active: boolean }[]>`
+    SELECT id, tipo, active FROM layouts WHERE user_id = ${userId} ORDER BY created_at ASC
+  `;
+  let layoutId = '';
+  for (const tipo of layoutTypes) {
+    const match = layouts.find(l => l.tipo === tipo && l.active);
+    if (match) { layoutId = match.id; break; }
+  }
+  if (!layoutId) {
+    const any = layouts.find(l => l.active) ?? layouts[0];
+    layoutId = any?.id ?? '';
+  }
+
+  // Template attivo
+  const templates = await sql<{ id: string }[]>`
+    SELECT id FROM templates WHERE user_id = ${userId} ORDER BY created_at ASC LIMIT 1
+  `;
+  const templateId = templates[0]?.id ?? '';
+
+  console.log(`[tg-monitor] ${userId} — layout: ${layoutId || 'nessuno'} template: ${templateId || 'nessuno'}`);
 
   // 3. Costruisce il post
-
   const post = {
     id: crypto.randomUUID(),
     platform,
@@ -182,8 +203,8 @@ async function processUrl(userId: string, url: string) {
     discountPercent: product.discountPercent ?? 0,
     customText:      '',
     isHistoricalLow: product.isHistoricalLow ?? false,
-    templateId:      settings.defaultTemplateId ?? '',
-    layoutId:        settings.defaultLayoutId ?? '',
+    templateId,
+    layoutId,
     emoji:           '',
     shipFromCountry: product.shipFromCountry ?? null,
     stelle:          product.stelle ?? '',
