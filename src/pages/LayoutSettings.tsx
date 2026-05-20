@@ -1144,30 +1144,31 @@ const Chevron = ({ open }: { open: boolean }) => (
   </svg>
 );
 
-// ── Telegram Monitor Section ──────────────────────────────────
-type AuthStep = 'idle' | 'phone' | 'code' | 'twofa' | 'active';
+// ── Monitor Page ──────────────────────────────────────────────
+type AuthStep = 'idle' | 'code' | 'twofa' | 'active';
 
-function TgMonitorSection() {
+export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
   const [step, setStep] = useState<AuthStep>('idle');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [twofa, setTwofa] = useState('');
   const [newChannel, setNewChannel] = useState('');
   const [channels, setChannels] = useState<TgMonitorChannel[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
-    tgMonitorApi.status().then(s => {
+    Promise.all([
+      tgMonitorApi.status(),
+      tgMonitorApi.listChannels(),
+    ]).then(([s, chs]) => {
       if (s.status === 'active') {
         setStep('active');
         setPhone(s.phone ?? '');
       }
-    }).catch(() => {});
-    tgMonitorApi.listChannels().then(setChannels).catch(() => {});
-  }, [open]);
+      setChannels(chs);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
 
   const go = async (fn: () => Promise<void>) => {
     setErr('');
@@ -1185,15 +1186,13 @@ function TgMonitorSection() {
     const res = await tgMonitorApi.signIn(code);
     if (res.need2FA) { setStep('twofa'); return; }
     setStep('active');
-    const chs = await tgMonitorApi.listChannels();
-    setChannels(chs);
+    setChannels(await tgMonitorApi.listChannels());
   });
 
   const handle2FA = () => go(async () => {
     await tgMonitorApi.confirm2FA(twofa);
     setStep('active');
-    const chs = await tgMonitorApi.listChannels();
-    setChannels(chs);
+    setChannels(await tgMonitorApi.listChannels());
   });
 
   const handleSignOut = () => go(async () => {
@@ -1207,8 +1206,7 @@ function TgMonitorSection() {
     if (!newChannel.trim()) return;
     await tgMonitorApi.addChannel(newChannel.trim());
     setNewChannel('');
-    const chs = await tgMonitorApi.listChannels();
-    setChannels(chs);
+    setChannels(await tgMonitorApi.listChannels());
   });
 
   const handleRemove = (id: string) => go(async () => {
@@ -1216,137 +1214,128 @@ function TgMonitorSection() {
     setChannels(prev => prev.filter(c => c.id !== id));
   });
 
-  const isActive = step === 'active';
-
   return (
-    <div style={{ margin: '8px 16px 0' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-          background: 'var(--card)', border: '1px solid var(--bdr)',
-          borderRadius: open ? '10px 10px 0 0' : 10, padding: '12px 14px',
-          cursor: 'pointer', color: 'var(--t1)',
-        }}>
-        <span style={{ fontSize: 18 }}>📡</span>
-        <span style={{ fontWeight: 700, fontSize: 14, flex: 1, textAlign: 'left' }}>Monitor canale Telegram</span>
-        <span className={`api-st ${isActive ? 'api-ok' : 'api-no'}`} style={{ marginRight: 6 }}>
-          {isActive ? `✓ ${channels.length} canali` : 'Off'}
-        </span>
-        <Chevron open={open} />
-      </button>
+    <div className="pg">
+      <PageHeader title="Monitor canali" onBack={() => nav('dash')} />
 
-      {open && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 14px 12px' }}>
-          <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 12, lineHeight: 1.5 }}>
-            Monitora canali Telegram con il tuo account personale. I link Amazon/AliExpress trovati vengono aggiunti automaticamente in coda.
-            <br/>Richiede <b>TG_API_ID</b> e <b>TG_API_HASH</b> nel file .env del server (da <a href="https://my.telegram.org" target="_blank" rel="noreferrer" style={{ color: 'var(--a1)' }}>my.telegram.org</a>).
-          </div>
-
-          {err && <div style={{ background: '#2a0a0a', border: '1px solid #5c1a1a', borderRadius: 8, padding: '8px 12px', color: '#f87171', fontSize: 12, marginBottom: 10 }}>{err}</div>}
-
-          {/* ── Auth Flow ── */}
-          {step === 'idle' && (
-            <div>
-              <div className="fld">
-                <label className="lbl">Numero di telefono (con prefisso +39)</label>
-                <input className="inp" value={phone} onChange={e => setPhone(e.target.value)}
-                  placeholder="+393331234567" type="tel" />
-              </div>
-              <button className="btn bp bfull" onClick={handleSendCode} disabled={loading || !phone.trim()}>
-                {loading ? '⏳ Invio...' : '📲 Invia codice SMS'}
-              </button>
-            </div>
-          )}
-
-          {step === 'phone' && (
-            <div>
-              <div className="fld">
-                <label className="lbl">Numero di telefono</label>
-                <input className="inp" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+393331234567" type="tel" />
-              </div>
-              <button className="btn bp bfull" onClick={handleSendCode} disabled={loading || !phone.trim()}>
-                {loading ? '⏳ Invio...' : '📲 Invia codice SMS'}
-              </button>
-            </div>
-          )}
-
-          {step === 'code' && (
-            <div>
-              <div style={{ padding: '8px 12px', background: 'var(--bg2)', borderRadius: 8, marginBottom: 10, fontSize: 12, color: 'var(--t2)' }}>
-                Codice inviato a <b>{phone}</b>
-              </div>
-              <div className="fld">
-                <label className="lbl">Codice di verifica</label>
-                <input className="inp" value={code} onChange={e => setCode(e.target.value)}
-                  placeholder="12345" inputMode="numeric" maxLength={6} />
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn bfull" onClick={() => { setStep('idle'); setCode(''); }} style={{ flex: 1 }}>← Cambia numero</button>
-                <button className="btn bp bfull" onClick={handleSignIn} disabled={loading || !code.trim()} style={{ flex: 2 }}>
-                  {loading ? '⏳...' : '✅ Verifica'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 'twofa' && (
-            <div>
-              <div style={{ padding: '8px 12px', background: 'var(--bg2)', borderRadius: 8, marginBottom: 10, fontSize: 12, color: 'var(--t2)' }}>
-                Account protetto da verifica in due passaggi
-              </div>
-              <div className="fld">
-                <label className="lbl">Password 2FA</label>
-                <input className="inp" value={twofa} onChange={e => setTwofa(e.target.value)}
-                  placeholder="Password cloud Telegram" type="password" />
-              </div>
-              <button className="btn bp bfull" onClick={handle2FA} disabled={loading || !twofa.trim()}>
-                {loading ? '⏳...' : '🔐 Conferma'}
-              </button>
-            </div>
-          )}
-
-          {step === 'active' && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '8px 12px', background: 'var(--bg2)', borderRadius: 8 }}>
-                <span style={{ color: '#4ade80', fontSize: 14 }}>✓ Connesso</span>
-                <span style={{ fontSize: 13, color: 'var(--t2)', flex: 1 }}>{phone}</span>
-                <button className="btn" onClick={handleSignOut} disabled={loading}
-                  style={{ fontSize: 11, padding: '4px 10px', background: '#2a0a0a', color: '#f87171', border: '1px solid #5c1a1a', borderRadius: 6 }}>
-                  Disconnetti
-                </button>
-              </div>
-
-              {/* Lista canali */}
-              {channels.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: 1, marginBottom: 8 }}>CANALI MONITORATI</div>
-                  {channels.map(ch => (
-                    <div key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--bg2)', borderRadius: 8, marginBottom: 6 }}>
-                      <span style={{ flex: 1, fontSize: 13, color: 'var(--t1)', wordBreak: 'break-all' }}>{ch.channel}</span>
-                      <button className="btn" onClick={() => handleRemove(ch.id)} disabled={loading}
-                        style={{ fontSize: 11, padding: '3px 8px', background: '#2a0a0a', color: '#f87171', border: '1px solid #5c1a1a', borderRadius: 5 }}>
-                        Rimuovi
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Aggiungi canale */}
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: 1, marginBottom: 8 }}>AGGIUNGI CANALE</div>
-              <div className="fld" style={{ margin: 0 }}>
-                <input className="inp" value={newChannel} onChange={e => setNewChannel(e.target.value)}
-                  placeholder="@username o https://t.me/username" />
-              </div>
-              <div style={{ height: 8 }} />
-              <button className="btn bp bfull" onClick={handleAddChannel} disabled={loading || !newChannel.trim()}>
-                {loading ? '⏳...' : '➕ Aggiungi canale'}
-              </button>
-            </div>
-          )}
+      {err && (
+        <div style={{ margin: '0 16px 12px', background: '#2a0a0a', border: '1px solid #5c1a1a', borderRadius: 8, padding: '10px 12px', color: '#f87171', fontSize: 13 }}>
+          {err}
         </div>
       )}
+
+      <div style={{ margin: '0 16px' }}>
+        {/* ── Descrizione ── */}
+        {step === 'idle' && !loading && (
+          <div style={{ padding: '12px 14px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 16, fontSize: 13, color: 'var(--t2)', lineHeight: 1.6 }}>
+            Connetti il tuo account Telegram per monitorare canali che non gestisci. Ogni link Amazon o AliExpress trovato viene aggiunto automaticamente in coda.
+          </div>
+        )}
+
+        {/* ── Inserimento numero ── */}
+        {step === 'idle' && (
+          <div>
+            <div className="fld">
+              <label className="lbl">Numero di telefono (con prefisso)</label>
+              <input className="inp" value={phone} onChange={e => setPhone(e.target.value)}
+                placeholder="+393331234567" type="tel" autoFocus />
+            </div>
+            <button className="btn bp bfull" onClick={handleSendCode} disabled={loading || !phone.trim()}>
+              {loading ? '⏳ Invio in corso...' : '📲 Invia codice di verifica'}
+            </button>
+          </div>
+        )}
+
+        {/* ── Inserimento codice OTP ── */}
+        {step === 'code' && (
+          <div>
+            <div style={{ padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 14, fontSize: 13, color: 'var(--t2)' }}>
+              Codice inviato su Telegram a <b style={{ color: 'var(--t1)' }}>{phone}</b>
+            </div>
+            <div className="fld">
+              <label className="lbl">Codice di verifica</label>
+              <input className="inp" value={code} onChange={e => setCode(e.target.value)}
+                placeholder="12345" inputMode="numeric" maxLength={6} autoFocus />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" onClick={() => { setStep('idle'); setCode(''); }} style={{ flex: 1 }}>← Cambia</button>
+              <button className="btn bp" onClick={handleSignIn} disabled={loading || !code.trim()} style={{ flex: 2 }}>
+                {loading ? '⏳...' : '✅ Verifica'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Password 2FA ── */}
+        {step === 'twofa' && (
+          <div>
+            <div style={{ padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 14, fontSize: 13, color: 'var(--t2)' }}>
+              Account protetto da verifica in due passaggi
+            </div>
+            <div className="fld">
+              <label className="lbl">Password cloud Telegram</label>
+              <input className="inp" value={twofa} onChange={e => setTwofa(e.target.value)}
+                placeholder="La tua password 2FA" type="password" autoFocus />
+            </div>
+            <button className="btn bp bfull" onClick={handle2FA} disabled={loading || !twofa.trim()}>
+              {loading ? '⏳...' : '🔐 Conferma'}
+            </button>
+          </div>
+        )}
+
+        {/* ── Account connesso ── */}
+        {step === 'active' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 16 }}>
+              <span style={{ fontSize: 20 }}>📡</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#4ade80' }}>Monitoraggio attivo</div>
+                <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{phone}</div>
+              </div>
+              <button className="btn" onClick={handleSignOut} disabled={loading}
+                style={{ fontSize: 12, padding: '5px 12px', background: '#2a0a0a', color: '#f87171', border: '1px solid #5c1a1a', borderRadius: 7 }}>
+                Disconnetti
+              </button>
+            </div>
+
+            {/* Lista canali monitorati */}
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: 1, marginBottom: 8 }}>
+              CANALI MONITORATI {channels.length > 0 && `(${channels.length})`}
+            </div>
+
+            {channels.length === 0 && (
+              <div style={{ padding: '12px 14px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 14, fontSize: 13, color: 'var(--t3)', textAlign: 'center' }}>
+                Nessun canale aggiunto
+              </div>
+            )}
+
+            {channels.map(ch => (
+              <div key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 16 }}>📢</span>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--t1)', wordBreak: 'break-all' }}>{ch.channel}</span>
+                <button className="btn" onClick={() => handleRemove(ch.id)} disabled={loading}
+                  style={{ fontSize: 12, padding: '4px 10px', background: '#2a0a0a', color: '#f87171', border: '1px solid #5c1a1a', borderRadius: 6, flexShrink: 0 }}>
+                  Rimuovi
+                </button>
+              </div>
+            ))}
+
+            {/* Aggiungi canale */}
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: 1, margin: '16px 0 8px' }}>
+              AGGIUNGI CANALE
+            </div>
+            <div className="fld" style={{ margin: 0 }}>
+              <input className="inp" value={newChannel} onChange={e => setNewChannel(e.target.value)}
+                placeholder="@username o https://t.me/username"
+                onKeyDown={e => e.key === 'Enter' && handleAddChannel()} />
+            </div>
+            <div style={{ height: 8 }} />
+            <button className="btn bp bfull" onClick={handleAddChannel} disabled={loading || !newChannel.trim()}>
+              {loading ? '⏳...' : '➕ Aggiungi canale'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1382,9 +1371,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   return (
     <div className="pg">
       <PageHeader title="Impostazioni" onBack={() => nav('dash')} />
-
-      {/* ── TELEGRAM MONITOR ── */}
-      <TgMonitorSection />
 
       {/* ── AMAZON ── */}
       <div style={{ margin: '8px 16px 0' }}>
