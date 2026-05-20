@@ -219,12 +219,16 @@ export function getUserId(req: VercelRequest): string | null {
 }
 
 export function requireUserId(req: VercelRequest, res: VercelResponse): string | null {
-  // Internal server auth: CRON_SECRET + X-Internal-User-Id header
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = (req.headers['authorization'] as string | undefined) ?? '';
   const internalUserId = req.headers['x-internal-user-id'] as string | undefined;
-  if (cronSecret && authHeader === `Bearer ${cronSecret}` && internalUserId) {
-    return internalUserId;
+  if (internalUserId) {
+    // Fidarsi se la richiesta viene da localhost (worker interno)
+    const remoteIp: string = (req as any).ip ?? (req.socket as any)?.remoteAddress ?? '';
+    const isLocalhost = remoteIp === '127.0.0.1' || remoteIp === '::1' || remoteIp === '::ffff:127.0.0.1';
+    // Oppure se ha un CRON_SECRET valido
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = (req.headers['authorization'] as string | undefined) ?? '';
+    const validSecret = cronSecret && authHeader === `Bearer ${cronSecret}`;
+    if (isLocalhost || validSecret) return internalUserId;
   }
 
   const userId = getUserId(req);
