@@ -1,5 +1,5 @@
 import sql from '../../lib/db.js';
-import { TelegramClient } from 'telegram';
+import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage } from 'telegram/events/index.js';
 
@@ -114,8 +114,11 @@ async function startUser(userId: string) {
         const entityRef: any = isNumeric ? BigInt(channel) : channel;
         const entity = await client.getEntity(entityRef) as any;
         addChannelIds(entity.id);
-        // Forza la sottoscrizione agli aggiornamenti del canale per questa sessione GramJS
-        await client.getMessages(entity, { limit: 1 }).catch(() => {});
+        // Forza l'inizializzazione dello stato MTProto per questo canale specifico —
+        // senza questo Telegram non invia aggiornamenti ai canali "non visti" dalla sessione
+        await client.invoke(new Api.messages.GetPeerDialogs({
+          peers: [new Api.InputDialogPeer({ peer: await client.getInputEntity(entity) })],
+        })).catch(() => {});
         console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} (tentativo ${attempt})`);
         resolved = true;
       } catch (e: any) {
