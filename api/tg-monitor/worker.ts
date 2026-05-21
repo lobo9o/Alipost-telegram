@@ -82,18 +82,33 @@ async function startUser(userId: string) {
   await client.connect();
   activeClients.set(userId, client);
 
+  // Normalizza un ID canale Telegram nelle sue forme canoniche
+  // es. "-1003798740494" → core="3798740494", aggiunge anche "-1003798740494"
+  function addChannelIds(id: string | bigint) {
+    const s = String(id).replace(/^-/, ''); // rimuove il meno iniziale
+    // Telegram channel ID in forma "100XXXXXXXXX" — rimuove il prefisso 100
+    const core = s.startsWith('100') && s.length >= 12 ? s.slice(3) : s;
+    monitoredIds.add(core);
+    monitoredIds.add(`-100${core}`);
+  }
+
   // Risolve ogni canale nel suo ID numerico (più affidabile degli username per il filtro)
   const monitoredIds = new Set<string>();
   for (const { channel } of channelRows) {
+    const isNumeric = /^-?\d+$/.test(channel);
+
+    // Fallback diretto: se è un ID numerico lo aggiungiamo subito senza passare da getEntity
+    // Questo garantisce il monitoring anche se getEntity fallisce (es. connessione instabile)
+    if (isNumeric) addChannelIds(channel);
+
     try {
-      const entity = await client.getEntity(channel) as any;
-      const id = String(entity.id);
-      monitoredIds.add(id);
-      // I canali hanno id negativo nella forma -100XXXXXXX
-      monitoredIds.add(`-100${id}`);
-      console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${id}`);
+      // GramJS richiede BigInt per ID numerici, non stringa grezza
+      const entityRef: any = isNumeric ? BigInt(channel) : channel;
+      const entity = await client.getEntity(entityRef) as any;
+      addChannelIds(entity.id);
+      console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id}`);
     } catch (e: any) {
-      console.warn(`[tg-monitor] ${userId} — impossibile risolvere "${channel}": ${e.message}`);
+      console.warn(`[tg-monitor] ${userId} — impossibile risolvere "${channel}": ${e.message}${isNumeric ? ' (ID numerico già aggiunto come fallback)' : ''}`);
     }
   }
 
@@ -108,15 +123,18 @@ async function startUser(userId: string) {
       const msg = event.message;
       if (!msg) return;
 
-      const chatId = String(msg.chatId ?? msg.peerId?.channelId ?? '');
-      const chatIdNeg = chatId ? `-100${chatId}` : '';
+      const rawId = String(msg.chatId ?? msg.peerId?.channelId ?? '');
+      if (!rawId || rawId === '0') return;
 
-      const isMonitored = monitoredIds.has(chatId) || monitoredIds.has(chatIdNeg);
-      console.log(`[tg-monitor] ${userId} — msg chatId=${chatId} monitored=${isMonitored}`);
+      // Normalizza per il matching: estrae il core ID
+      const pos = rawId.replace(/^-/, '');
+      const core = pos.startsWith('100') && pos.length >= 12 ? pos.slice(3) : pos;
+      const isMonitored = monitoredIds.has(rawId) || monitoredIds.has(core) || monitoredIds.has(`-100${core}`);
+      console.log(`[tg-monitor] ${userId} — msg chatId=${rawId} monitored=${isMonitored}`);
       if (!isMonitored) return;
 
       const text: string = msg.message ?? '';
-      console.log(`[tg-monitor] ${userId} — messaggio da ${chatId}: "${text.slice(0, 80)}"`);
+      console.log(`[tg-monitor] ${userId} — messaggio da ${rawId}: "${text.slice(0, 80)}"`);
 
       // Raccoglie URL sia dal testo che dalle entities (link con testo personalizzato)
       const urlSet = new Set<string>();
