@@ -6,6 +6,7 @@ import { NewMessage } from 'telegram/events/index.js';
 const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|amzn\.eu|aliexpress\.com|s\.click\.aliexpress\.com|a\.aliexpress\.com)[^\s<>"')]+/gi;
 
 const activeClients = new Map<string, TelegramClient>();
+const activePolls = new Map<string, ReturnType<typeof setInterval>>();
 
 let serverPort = 3000;
 let cronSecret = '';
@@ -46,6 +47,8 @@ async function stopUser(userId: string) {
     try { await existing.disconnect(); } catch { /* ignora */ }
     activeClients.delete(userId);
   }
+  const poll = activePolls.get(userId);
+  if (poll) { clearInterval(poll); activePolls.delete(userId); }
 }
 
 async function startUser(userId: string) {
@@ -100,6 +103,8 @@ async function startUser(userId: string) {
   // Risolve ogni canale nel suo ID numerico
   const monitoredIds = new Set<string>();
   const unresolvedChannels: string[] = []; // canali username non risolti all'avvio
+  const channelEntities: Array<{ entity: any; core: string; lastMsgId: number }> = [];
+  const processedMsgIds = new Set<string>(); // dedup push+polling
 
   console.log(`[tg-monitor] ${userId} — canali da risolvere: ${channelRows.map(r => r.channel).join(', ')}`);
 
@@ -119,7 +124,12 @@ async function startUser(userId: string) {
         await client.invoke(new Api.messages.GetPeerDialogs({
           peers: [new Api.InputDialogPeer({ peer: await client.getInputEntity(entity) })],
         })).catch(() => {});
-        console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} (tentativo ${attempt})`);
+        // Registra entità per polling di fallback e inizializza lastMsgId
+        const initMsgs = await client.getMessages(entity, { limit: 1 }).catch(() => [] as any[]);
+        const entityCore = (() => { const s = String(entity.id).replace(/^-/, ''); return s.startsWith('100') && s.length >= 12 ? s.slice(3) : s; })();
+        const initLastId = (initMsgs as any[])[0]?.id ?? 0;
+        channelEntities.push({ entity, core: entityCore, lastMsgId: initLastId });
+        console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId} (tentativo ${attempt})`);
         resolved = true;
       } catch (e: any) {
         console.warn(`[tg-monitor] ${userId} — tentativo ${attempt}/3 fallito per "${channel}": ${e.message}`);
@@ -167,6 +177,13 @@ async function startUser(userId: string) {
       console.log(`[tg-monitor] ${userId} — msg chatId=${rawId} monitored=${isMonitored}`);
       if (!isMonitored) return;
 
+      // Dedup con polling
+      const msgKey = `${core}:${msg.id ?? ''}`;
+      if (processedMsgIds.has(msgKey)) return;
+      processedMsgIds.add(msgKey);
+      const chInfo = channelEntities.find(c => c.core === core);
+      if (chInfo && (msg.id ?? 0) > chInfo.lastMsgId) chInfo.lastMsgId = msg.id;
+
       const text: string = msg.message ?? '';
       console.log(`[tg-monitor] ${userId} — messaggio da ${rawId}: "${text.slice(0, 80)}"`);
 
@@ -209,7 +226,43 @@ async function startUser(userId: string) {
     }
   }, new NewMessage({}));
 
-  console.log(`[tg-monitor] ${userId} — in ascolto su ${monitoredIds.size / 2} canali`);
+  // Polling di fallback: interroga ogni canale direttamente ogni 60s.
+  // Cattura messaggi per cui Telegram non invia aggiornamenti push alla sessione
+  // (es. canali "broadcast-only" non ancora "visti" dalla sessione MTProto).
+  const pollId = setInterval(async () => {
+    for (const info of channelEntities) {
+      try {
+        const msgs = await client.getMessages(info.entity, { limit: 10, minId: info.lastMsgId }) as any[];
+        if (!msgs.length) continue;
+        console.log(`[tg-monitor] ${userId} — poll ${info.core}: ${msgs.length} nuovi messaggi`);
+        for (const msg of [...msgs].reverse()) {
+          const msgId: number = (msg as any).id ?? 0;
+          if (!msgId) continue;
+          const mk = `${info.core}:${msgId}`;
+          if (processedMsgIds.has(mk)) continue;
+          processedMsgIds.add(mk);
+          if (msgId > info.lastMsgId) info.lastMsgId = msgId;
+          const text: string = (msg as any).message ?? '';
+          const urlSet = new Set<string>();
+          (text.match(PRODUCT_URL_RE) ?? []).forEach((u: string) => urlSet.add(u));
+          ((msg as any).entities ?? []).forEach((ent: any) => { const u = ent.url ?? ent.href ?? ''; if (u) urlSet.add(u); });
+          const urls = [...urlSet].filter(u => PRODUCT_URL_RE.test(u));
+          PRODUCT_URL_RE.lastIndex = 0;
+          if (!urls.length) continue;
+          console.log(`[tg-monitor] ${userId} — poll trovati ${urls.length} link in msg ${info.core}/${msgId}`);
+          const uniqueUrls: string[] = [];
+          const seen = new Set<string>();
+          for (const url of urls) { const clean = url.replace(/[.,;!?)]+$/, ''); if (!seen.has(clean)) { seen.add(clean); uniqueUrls.push(clean); } }
+          processMessage(userId, uniqueUrls).catch(e => console.error('[tg-monitor] errore processMessage (poll):', e));
+        }
+      } catch (e: any) {
+        console.warn(`[tg-monitor] ${userId} — poll error ${info.core}: ${e.message}`);
+      }
+    }
+  }, 60_000);
+  activePolls.set(userId, pollId);
+
+  console.log(`[tg-monitor] ${userId} — in ascolto su ${monitoredIds.size / 2} canali (push + poll 60s)`);
 }
 
 // Recupera layout e template dal DB per l'utente
