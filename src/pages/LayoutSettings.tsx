@@ -1340,6 +1340,26 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
   );
 }
 
+function SettingsMenuItem({ icon, label, sub, onClick }: { icon: string; label: string; sub?: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+      background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10,
+      padding: '14px 14px', cursor: 'pointer', color: 'var(--t1)', textAlign: 'left',
+      marginBottom: 10,
+    }}>
+      <span style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 14 }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>{sub}</div>}
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width={16} height={16} style={{ color: 'var(--t3)', flexShrink: 0 }}>
+        <path d="M9 18l6-6-6-6" />
+      </svg>
+    </button>
+  );
+}
+
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const { settings, setSettings } = useApp();
   const [s, setS] = useState(settings);
@@ -1347,7 +1367,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [saveErr, setSaveErr] = useState('');
   const [openAmz, setOpenAmz] = useState(false);
   const [openAli, setOpenAli] = useState(false);
-  const [tab, setTab] = useState<'general' | 'admin'>('general');
+  const [subPage, setSubPage] = useState<null | 'general' | 'admin'>(null);
 
   React.useEffect(() => { setS(settings); }, [settings]);
 
@@ -1369,16 +1389,29 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const setAli = (field: keyof typeof s.aliexpress, value: string | boolean) =>
     setS(prev => ({ ...prev, aliexpress: { ...prev.aliexpress, [field]: value } }));
 
-  return (
+  // ── Menu principale ──────────────────────────────────────────
+  if (!subPage) return (
     <div className="pg">
       <PageHeader title="Impostazioni" onBack={() => nav('dash')} />
-      <SwitchTabs
-        options={[['general', '⚙️ Generali'], ['admin', '🔐 Admin']]}
-        value={tab} onChange={v => setTab(v as 'general' | 'admin')}
-      />
+      <div style={{ padding: '16px 16px 0' }}>
+        <SettingsMenuItem
+          icon="⚙️" label="Generali"
+          sub="Autopost, orari, intervallo, notifiche"
+          onClick={() => setSubPage('general')}
+        />
+        <SettingsMenuItem
+          icon="🔐" label="Admin"
+          sub="Credenziali Amazon, AliExpress, canali Telegram"
+          onClick={() => setSubPage('admin')}
+        />
+      </div>
+    </div>
+  );
 
-      {/* ── TAB ADMIN: credenziali e canali ── */}
-      {tab === 'admin' && <>
+  {/* ── SOTTO-PAGINA ADMIN: credenziali e canali ── */}
+  if (subPage === 'admin') return (
+    <div className="pg">
+      <PageHeader title="Admin" onBack={() => setSubPage(null)} />
 
       {/* ── AMAZON ── */}
       <div style={{ margin: '8px 16px 0' }}>
@@ -1550,11 +1583,13 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         {saved && <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a2a0a', border: '1px solid #1a5c1a', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>✓ Impostazioni salvate con successo</div>}
         {saveErr && <ErrorBanner>{saveErr}</ErrorBanner>}
       </div>
+    </div>
+  );
 
-      </>}
-
-      {/* ── TAB GENERALI: autopost, timing, deal search ── */}
-      {tab === 'general' && <>
+  {/* ── SOTTO-PAGINA GENERALI: autopost, timing, deal search ── */}
+  return (
+    <div className="pg">
+      <PageHeader title="Generali" onBack={() => setSubPage(null)} />
 
       {/* ── AUTOPOST ── */}
       <div className="stit">AUTOPOST</div>
@@ -1710,8 +1745,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         {saved && <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a2a0a', border: '1px solid #1a5c1a', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>✓ Impostazioni salvate con successo</div>}
         {saveErr && <ErrorBanner>{saveErr}</ErrorBanner>}
       </div>
-
-      </>}
     </div>
   );
 }
