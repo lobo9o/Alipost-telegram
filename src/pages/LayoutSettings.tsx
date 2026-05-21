@@ -440,78 +440,63 @@ function readAsBase64(file: File): Promise<string> {
   });
 }
 
-// Arrow-based position control — replaces drag joystick
-function PositionArrows({ x, y, onChange }: {
-  x: number; y: number;
-  onChange: (x: number, y: number) => void;
-}) {
-  const [step, setStep] = useState(3);
-
-  const move = (dx: number, dy: number) => {
-    onChange(
-      Math.min(95, Math.max(0, Math.round(x + dx * step))),
-      Math.min(95, Math.max(0, Math.round(y + dy * step))),
-    );
-  };
-
-  const arrowBtn: React.CSSProperties = {
-    width: 48, height: 48, padding: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
-  };
-
+function DragHint({ x, y, onCenter }: { x: number; y: number; onCenter: () => void }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-        <span className="lbl" style={{ marginBottom: 0 }}>POSIZIONE</span>
-        <span style={{ fontSize: 10, color: 'var(--t3)', marginLeft: 'auto' }}>X:{x}% · Y:{y}%</span>
-      </div>
-      {/* Step selector */}
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0 }}>Passo:</span>
-        {[1, 3, 5, 10].map(s => (
-          <button key={s} className={`btn bsm ${step === s ? 'bp' : 'bgh'}`}
-            style={{ fontSize: 10, padding: '2px 10px' }}
-            onClick={() => setStep(s)}>{s}%</button>
-        ))}
-      </div>
-      {/* Arrow pad */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 48px)', gap: 4, justifyContent: 'center' }}>
-        <div />
-        <button className="btn bgh" style={arrowBtn} onClick={() => move(0, -1)}>↑</button>
-        <div />
-        <button className="btn bgh" style={arrowBtn} onClick={() => move(-1, 0)}>←</button>
-        <div style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg3)', borderRadius: 8, fontSize: 20, color: 'var(--t3)' }}>✛</div>
-        <button className="btn bgh" style={arrowBtn} onClick={() => move(1, 0)}>→</button>
-        <div />
-        <button className="btn bgh" style={arrowBtn} onClick={() => move(0, 1)}>↓</button>
-        <div />
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+      <span style={{ fontSize: 11, color: 'var(--t3)', flex: 1 }}>↕ Trascina sull'anteprima</span>
+      <span style={{ fontSize: 10, color: 'var(--t3)' }}>X:{x}% · Y:{y}%</span>
+      <button className="btn bgh bsm" onClick={onCenter} title="Centra" style={{ padding: '2px 10px' }}>⊕ Centra</button>
     </div>
   );
 }
 
-function SizeSlider({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE' }: {
-  value: number; onChange: (v: number) => void; min?: number; max?: number; label?: string;
+function ZoomControls({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE', step = 2 }: {
+  value: number; onChange: (v: number) => void; min?: number; max?: number; label?: string; step?: number;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
       <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>{label}</span>
-      <input type="range" min={min} max={max} value={value}
-        style={{ flex: 2, accentColor: 'var(--a1)' }}
-        onChange={e => onChange(Number(e.target.value))} />
-      <span style={{ fontSize: 11, color: 'var(--t2)', width: 32, textAlign: 'right' }}>{value}%</span>
+      <button className="btn bgh bsm" style={{ padding: '2px 12px' }}
+        onClick={() => onChange(Math.max(min, value - step))}>🔍−</button>
+      <span style={{ fontSize: 11, color: 'var(--t2)', width: 34, textAlign: 'center' }}>{value}%</span>
+      <button className="btn bgh bsm" style={{ padding: '2px 12px' }}
+        onClick={() => onChange(Math.min(max, value + step))}>🔍+</button>
     </div>
   );
 }
 
 const CANVAS_SIZE_CONST = 1024;
 
-export function TemplatePreviewer({ tpl, terminata, platform = 'amazon' }: { tpl: Template; terminata?: TerminataConfig; platform?: 'amazon' | 'aliexpress' }) {
+export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', activeEl, onDragMove }: {
+  tpl: Template; terminata?: TerminataConfig; platform?: 'amazon' | 'aliexpress';
+  activeEl?: { x: number; y: number };
+  onDragMove?: (x: number, y: number) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(340);
   useEffect(() => {
     if (containerRef.current) setContainerW(containerRef.current.clientWidth);
   }, []);
+  const dragging = useRef<{ startX: number; startY: number; elX: number; elY: number } | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!activeEl || !onDragMove) return;
+    e.preventDefault();
+    dragging.current = { startX: e.clientX, startY: e.clientY, elX: activeEl.x, elY: activeEl.y };
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current || !onDragMove || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const dx = ((e.clientX - dragging.current.startX) / rect.width) * 100;
+    const dy = ((e.clientY - dragging.current.startY) / rect.height) * 100;
+    const newX = Math.min(95, Math.max(0, Math.round(dragging.current.elX + dx)));
+    const newY = Math.min(95, Math.max(0, Math.round(dragging.current.elY + dy)));
+    onDragMove(newX, newY);
+  };
+
+  const handlePointerUp = () => { dragging.current = null; };
 
   const pp = tpl.product;
   // fontScale esatto: canvas usa fontSize*2 su 1024px, quindi nella preview usiamo lo stesso rapporto
@@ -601,11 +586,19 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon' }: { tpl
   );
 
   return (
-    <div ref={containerRef} style={{
-      margin: '12px 16px', borderRadius: 10, overflow: 'hidden',
-      position: 'relative', aspectRatio: '1/1', background: tpl.bgColor,
-      boxShadow: '0 2px 16px rgba(0,0,0,0.4)', isolation: 'isolate',
-    }}>
+    <div ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      style={{
+        margin: '12px 16px', borderRadius: 10, overflow: 'hidden',
+        position: 'relative', aspectRatio: '1/1', background: tpl.bgColor,
+        boxShadow: '0 2px 16px rgba(0,0,0,0.4)', isolation: 'isolate',
+        cursor: activeEl && onDragMove ? 'grab' : 'default',
+        touchAction: activeEl && onDragMove ? 'none' : 'auto',
+        userSelect: 'none',
+      }}>
       {/* Contenuto template — con eventuale grayscale terminata */}
       <div style={{
         position: 'absolute', inset: 0,
@@ -644,9 +637,9 @@ function ProductPanel({ el, onUpdate }: {
 }) {
   return (
     <>
-      <InfoBanner>📦 Riquadro dove verrà inserita l'immagine Amazon/AliExpress. Spostalo e ridimensionalo secondo le tue preferenze.</InfoBanner>
-      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
-      <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={20} max={100} label="DIMENSIONE RIQUADRO" />
+      <InfoBanner>📦 Riquadro dove verrà inserita l'immagine Amazon/AliExpress. Trascinalo sull'anteprima e usa 🔍 per ridimensionarlo.</InfoBanner>
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50 })} />
+      <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={20} max={100} label="DIMENSIONE RIQUADRO" />
     </>
   );
 }
@@ -658,8 +651,8 @@ function OverlayImgPanel({ el, onUpdate, onFile }: {
 }) {
   return (
     <>
-      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
-      <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={10} max={100} />
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50 })} />
+      <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={10} max={100} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
         🖼️ {el.src ? '✓ Overlay caricato — cambia' : 'Carica overlay PNG'}
         <input type="file" accept="image/png,image/webp" style={{ display: 'none' }}
@@ -680,8 +673,8 @@ function BadgeImgPanel({ el, onUpdate, onFile }: {
 }) {
   return (
     <>
-      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
-      <SizeSlider value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={50} />
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50 })} />
+      <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={50} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
         🏆 {el.src ? '✓ Icona caricata — cambia' : 'Carica icona badge'}
         <input type="file" accept="image/*" style={{ display: 'none' }}
@@ -725,8 +718,8 @@ function StorePanel({ tpl, onUpdate, onPreviewPlatform }: {
           </button>
         ))}
       </div>
-      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate(key, { x, y })} />
-      <SizeSlider value={el.size} onChange={v => onUpdate(key, { size: v })} min={5} max={40} />
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate(key, { x: 50, y: 50 })} />
+      <ZoomControls value={el.size} onChange={v => onUpdate(key, { size: v })} min={5} max={40} />
     </>
   );
 }
@@ -770,7 +763,7 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
         </div>
       )}
 
-      <PositionArrows x={el.x} y={el.y} onChange={(x, y) => onUpdate({ x, y })} />
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50 })} />
 
       {/* Direzione crescita testo */}
       <div style={{ marginBottom: 12 }}>
@@ -940,6 +933,25 @@ function TemplateSection() {
   const isTextKey = (k: ComponentKey): k is 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' =>
     ['prezzo', 'prezzoPrecedente', 'sconto', 'testoCustom'].includes(k);
 
+  const getActiveDragEl = (): { x: number; y: number } | null => {
+    if (!activePanel || activePanel === 'terminata') return null;
+    if (activePanel === 'product') return tpl.product;
+    if (activePanel === 'overlay') return tpl.overlay;
+    if (activePanel === 'badge') return tpl.badge;
+    if (activePanel === 'store') return previewPlatform === 'amazon' ? tpl.storeAmazon : tpl.storeAliexpress;
+    if (isTextKey(activePanel)) return tpl[activePanel] as TextEl;
+    return null;
+  };
+
+  const handleDragMove = (x: number, y: number) => {
+    if (!activePanel) return;
+    if (activePanel === 'product') { updateProduct({ x, y }); return; }
+    if (activePanel === 'overlay') { updateImg('overlay', { x, y }); return; }
+    if (activePanel === 'badge') { updateImg('badge', { x, y }); return; }
+    if (activePanel === 'store') { updateImg(previewPlatform === 'amazon' ? 'storeAmazon' : 'storeAliexpress', { x, y }); return; }
+    if (isTextKey(activePanel)) updateText(activePanel, { x, y });
+  };
+
   const toggleEnabled = (id: ComponentKey) => {
     if (id === 'product' || id === 'terminata') return;
     const cur = getElEnabled(id, tpl);
@@ -1020,8 +1032,12 @@ function TemplateSection() {
         </div>
       )}
 
-      {/* Anteprima live */}
-      <TemplatePreviewer tpl={tpl} platform={previewPlatform} />
+      {/* Anteprima live — drag per spostare l'elemento attivo */}
+      <TemplatePreviewer
+        tpl={tpl} platform={previewPlatform}
+        activeEl={getActiveDragEl() ?? undefined}
+        onDragMove={handleDragMove}
+      />
 
       {/* Pannello attivo — frecce subito sotto l'anteprima */}
       {activePanel && (
@@ -1102,14 +1118,18 @@ function TerminataPanel() {
         </div>
       </div>
 
-      {/* Anteprima reale del template con overlay terminata */}
+      {/* Anteprima reale — trascina per spostare il testo overlay */}
       <div className="lbl" style={{ marginBottom: 4 }}>ANTEPRIMA</div>
-      {activeTpl && <TemplatePreviewer tpl={activeTpl} terminata={cfg} />}
-
-      {/* Frecce posizione */}
-      <PositionArrows
+      {activeTpl && (
+        <TemplatePreviewer
+          tpl={activeTpl} terminata={cfg}
+          activeEl={{ x: cfg.overlayTextX, y: cfg.overlayTextY }}
+          onDragMove={(x, y) => setCfg(prev => ({ ...prev, overlayTextX: x, overlayTextY: y }))}
+        />
+      )}
+      <DragHint
         x={cfg.overlayTextX} y={cfg.overlayTextY}
-        onChange={(x, y) => setCfg(prev => ({ ...prev, overlayTextX: x, overlayTextY: y }))}
+        onCenter={() => setCfg(prev => ({ ...prev, overlayTextX: 50, overlayTextY: 50 }))}
       />
 
       <div className="stit">ELEMENTI VISIBILI</div>
