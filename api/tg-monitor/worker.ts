@@ -343,8 +343,9 @@ async function processMessage(userId: string, urls: string[]) {
     const post = {
       id:              crypto.randomUUID(),
       platform,
-      sourceUrl:       product.sourceUrl ?? '',
-      productId:       product.productId ?? '',
+      // product API restituisce `affiliateUrl` (non sourceUrl) e per Amazon `asin` (non productId)
+      sourceUrl:       product.affiliateUrl ?? product.sourceUrl ?? '',
+      productId:       product.asin ?? product.productId ?? '',
       title:           product.title ?? '',
       image:           product.image ?? '',
       originalPrice:   product.originalPrice ?? 0,
@@ -359,7 +360,7 @@ async function processMessage(userId: string, urls: string[]) {
       stelle:          product.stelle ?? '',
       recensioni:      product.recensioni ?? '',
       cat:             product.cat ?? '',
-      author:          '',
+      author:          product.author ?? '',
       coupon:          product.coupon ?? '',
       boxcoupon:       product.boxcoupon ?? '',
     };
