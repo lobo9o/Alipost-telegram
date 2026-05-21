@@ -171,20 +171,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const tmpl = tmplResult as Template[] | null;
       if (tmpl !== null) {
         if (tmpl.length > 0) {
-          const normalized = tmpl.map(t => {
-            const base = { ...makeDefaultTemplate(t.id), ...t };
-            // Migrazione: se c'è il vecchio campo store, copialo in entrambi
-            if ((t as any).store && !t.storeAmazon) base.storeAmazon = (t as any).store;
-            if ((t as any).store && !t.storeAliexpress) base.storeAliexpress = (t as any).store;
-            return base;
-          });
-          setTemplates(normalized);
+          // Usa l'ultimo template (più recente) — elimina i duplicati creati dal bug
+          const latest = tmpl[tmpl.length - 1];
+          const base = { ...makeDefaultTemplate(latest.id), ...latest };
+          if ((latest as any).store && !latest.storeAmazon) base.storeAmazon = (latest as any).store;
+          if ((latest as any).store && !latest.storeAliexpress) base.storeAliexpress = (latest as any).store;
+          setTemplates([base]);
+          if (tmpl.length > 1) {
+            tmpl.slice(0, -1).forEach(old => templatesApi.delete(old.id).catch(() => {}));
+          }
+          templateFromDB.current = true;
         } else {
+          // Nessun template nel DB: crea e usa l'id assegnato dal server (UUID)
           const def = makeDefaultTemplate('tpl1');
-          templatesApi.create(def).catch(() => {});
           setTemplates([def]);
+          templatesApi.create(def).then(created => {
+            setTemplates([{ ...makeDefaultTemplate(created.id), ...created }]);
+            templateFromDB.current = true;
+          }).catch(() => {});
+          // templateFromDB.current resta false finché create non risponde
         }
-        templateFromDB.current = true;
       }
       // else: API fallita → templateFromDB resta false, il template di default in stato è solo visivo
       const rawS = s as AppSettings & { _publishedCount?: number };
