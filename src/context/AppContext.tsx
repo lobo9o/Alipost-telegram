@@ -171,15 +171,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const tmpl = tmplResult as Template[] | null;
       if (tmpl !== null) {
         if (tmpl.length > 0) {
-          // Usa l'ultimo template (più recente) — elimina i duplicati creati dal bug
-          const latest = tmpl[tmpl.length - 1];
-          const base = { ...makeDefaultTemplate(latest.id), ...latest };
-          if ((latest as any).store && !latest.storeAmazon) base.storeAmazon = (latest as any).store;
-          if ((latest as any).store && !latest.storeAliexpress) base.storeAliexpress = (latest as any).store;
+          // Usa il primo template (più vecchio = quello configurato dall'utente)
+          // Non eliminare mai template automaticamente: l'utente potrebbe averne configurati
+          const first = tmpl[0];
+          const base = { ...makeDefaultTemplate(first.id), ...first };
+          if ((first as any).store && !first.storeAmazon) base.storeAmazon = (first as any).store;
+          if ((first as any).store && !first.storeAliexpress) base.storeAliexpress = (first as any).store;
           setTemplates([base]);
-          if (tmpl.length > 1) {
-            tmpl.slice(0, -1).forEach(old => templatesApi.delete(old.id).catch(() => {}));
-          }
           templateFromDB.current = true;
         } else {
           // Nessun template nel DB: crea e usa l'id assegnato dal server (UUID)
