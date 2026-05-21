@@ -1347,6 +1347,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [saveErr, setSaveErr] = useState('');
   const [openAmz, setOpenAmz] = useState(false);
   const [openAli, setOpenAli] = useState(false);
+  const [tab, setTab] = useState<'general' | 'admin'>('general');
 
   React.useEffect(() => { setS(settings); }, [settings]);
 
@@ -1371,6 +1372,13 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   return (
     <div className="pg">
       <PageHeader title="Impostazioni" onBack={() => nav('dash')} />
+      <SwitchTabs
+        options={[['general', '⚙️ Generali'], ['admin', '🔐 Admin']]}
+        value={tab} onChange={v => setTab(v as 'general' | 'admin')}
+      />
+
+      {/* ── TAB ADMIN: credenziali e canali ── */}
+      {tab === 'admin' && <>
 
       {/* ── AMAZON ── */}
       <div style={{ margin: '8px 16px 0' }}>
@@ -1536,6 +1544,18 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           onClick={() => setS(prev => ({ ...prev, channels: [...prev.channels, ''] }))}>+ Aggiungi canale</button>
       </div>
 
+      {/* Salva (Admin) */}
+      <div className="fld">
+        <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>
+        {saved && <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a2a0a', border: '1px solid #1a5c1a', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>✓ Impostazioni salvate con successo</div>}
+        {saveErr && <ErrorBanner>{saveErr}</ErrorBanner>}
+      </div>
+
+      </>}
+
+      {/* ── TAB GENERALI: autopost, timing, deal search ── */}
+      {tab === 'general' && <>
+
       {/* ── AUTOPOST ── */}
       <div className="stit">AUTOPOST</div>
       <ToggleRow label="AutoPost attivo" sub="Pubblicazione automatica programmata" value={s.attivo} onChange={v => setS({ ...s, attivo: v })} />
@@ -1690,6 +1710,8 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         {saved && <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a2a0a', border: '1px solid #1a5c1a', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>✓ Impostazioni salvate con successo</div>}
         {saveErr && <ErrorBanner>{saveErr}</ErrorBanner>}
       </div>
+
+      </>}
     </div>
   );
 }
