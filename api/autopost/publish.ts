@@ -1192,6 +1192,57 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       skipped.push(`${userId}: coda vuota o tutti i prezzi scaduti`);
     } else {
 
+    // ── Seleziona layout se il post non ne ha uno ────────────────────────────
+    if (!post.layoutId) {
+      const platform = String(post.platform ?? 'amazon');
+      const [autoLayout] = await sql`
+        SELECT id FROM layouts WHERE user_id = ${userId}
+          AND tipo IN ('amazon', 'normal', 'aliexpress')
+        ORDER BY
+          (tipo = ${platform === 'aliexpress' ? 'aliexpress' : 'amazon'}) DESC,
+          (tipo = 'normal') DESC,
+          created_at ASC
+        LIMIT 1
+      `.catch(() => [null]);
+      if (autoLayout?.id) {
+        post = { ...post, layoutId: String(autoLayout.id) };
+        console.log(`[autopost] layout assegnato al publish: ${autoLayout.id}`);
+      }
+    }
+
+    // ── Genera immagine dal template al momento della pubblicazione ───────────
+    // Si applica ai post senza generatedImage (es. da tg-monitor, o auto-ricerca
+    // senza template configurato al momento della creazione).
+    // Garantisce che l'immagine usi sempre il template corrente al publish.
+    if (!post.generatedImage && post.image && String(post.image).startsWith('http')
+        && Number(post.discountedPrice ?? 0) > 0) {
+      const CSYM: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
+      const currSym = post.platform === 'aliexpress'
+        ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
+        : (CSYM[String(cfg.amazon?.currency ?? 'EUR').toUpperCase()] ?? '€');
+
+      const [pubTpl] = await sql`
+        SELECT id, config FROM templates WHERE user_id = ${userId}
+          AND tipo NOT IN ('historical_low')
+        ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1
+      `.catch(() => [null]);
+
+      if (pubTpl) {
+        const pubCfg = parseTemplateCfg(pubTpl);
+        if (pubCfg) {
+          const genImg = await generateTemplateImageServer(pubCfg, String(post.image), String(post.platform ?? 'amazon'), {
+            prezzo:           `${currSym}${Number(post.discountedPrice).toFixed(2)}`,
+            prezzoPrecedente: `${currSym}${Number(post.originalPrice).toFixed(2)}`,
+            sconto:           `-${Number(post.discountPercent)}%`,
+          }).catch(() => null);
+          if (genImg) {
+            post = { ...post, generatedImage: genImg };
+            console.log(`[autopost] immagine generata al publish con template ${pubTpl.id}`);
+          }
+        }
+      }
+    }
+
     // ── Controlla minimo storico ──────────────────────────────────────────────
     if (post.productId && Number(post.discountedPrice ?? 0) > 0) {
       const [histRow] = await sql`
