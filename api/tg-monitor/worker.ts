@@ -82,6 +82,9 @@ async function startUser(userId: string) {
   await client.connect();
   // Breve pausa per stabilizzare la connessione prima di chiamare getEntity
   await new Promise(r => setTimeout(r, 3000));
+  // Carica i dialoghi per inizializzare il pts di ogni canale — senza questo
+  // GramJS non riceve aggiornamenti dai canali non ancora "visti" dalla sessione
+  await client.getDialogs({ limit: 100 }).catch(() => {});
   activeClients.set(userId, client);
 
   // Normalizza un ID canale Telegram nelle sue forme canoniche
