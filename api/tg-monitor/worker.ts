@@ -28,8 +28,10 @@ export function initTgMonitor(port: number) {
 }
 
 export function reloadUser(userId: string) {
-  stopUser(userId);
-  startUser(userId).catch(e => console.error(`[tg-monitor] errore reload ${userId}:`, e));
+  // Await stopUser prima di startUser: evita race condition tra vecchio poll e nuovo
+  stopUser(userId).then(() =>
+    startUser(userId).catch(e => console.error(`[tg-monitor] errore reload ${userId}:`, e))
+  );
 }
 
 async function startAll() {
@@ -42,13 +44,15 @@ async function startAll() {
 }
 
 async function stopUser(userId: string) {
-  const existing = activeClients.get(userId);
-  if (existing) {
-    try { await existing.disconnect(); } catch { /* ignora */ }
-    activeClients.delete(userId);
-  }
+  // Rimuovi subito da maps (sincrono) prima di qualsiasi async,
+  // così startUser non trova valori stale se parte in parallelo
   const poll = activePolls.get(userId);
   if (poll) { clearInterval(poll); activePolls.delete(userId); }
+  const existing = activeClients.get(userId);
+  if (existing) {
+    activeClients.delete(userId);
+    try { await existing.disconnect(); } catch { /* ignora */ }
+  }
 }
 
 async function startUser(userId: string) {
