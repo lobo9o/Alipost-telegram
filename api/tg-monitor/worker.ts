@@ -80,37 +80,47 @@ async function startUser(userId: string) {
   );
 
   await client.connect();
+  // Breve pausa per stabilizzare la connessione prima di chiamare getEntity
+  await new Promise(r => setTimeout(r, 3000));
   activeClients.set(userId, client);
 
   // Normalizza un ID canale Telegram nelle sue forme canoniche
   // es. "-1003798740494" → core="3798740494", aggiunge anche "-1003798740494"
   function addChannelIds(id: string | bigint) {
-    const s = String(id).replace(/^-/, ''); // rimuove il meno iniziale
-    // Telegram channel ID in forma "100XXXXXXXXX" — rimuove il prefisso 100
+    const s = String(id).replace(/^-/, '');
     const core = s.startsWith('100') && s.length >= 12 ? s.slice(3) : s;
     monitoredIds.add(core);
     monitoredIds.add(`-100${core}`);
+    monitoredIds.add(s); // forma con eventuale prefisso 100
   }
 
-  // Risolve ogni canale nel suo ID numerico (più affidabile degli username per il filtro)
+  // Risolve ogni canale nel suo ID numerico
   const monitoredIds = new Set<string>();
+  const unresolvedChannels: string[] = []; // canali username non risolti all'avvio
+
+  console.log(`[tg-monitor] ${userId} — canali da risolvere: ${channelRows.map(r => r.channel).join(', ')}`);
+
   for (const { channel } of channelRows) {
     const isNumeric = /^-?\d+$/.test(channel);
+    if (isNumeric) addChannelIds(channel); // fallback immediato per ID numerici
 
-    // Fallback diretto: se è un ID numerico lo aggiungiamo subito senza passare da getEntity
-    // Questo garantisce il monitoring anche se getEntity fallisce (es. connessione instabile)
-    if (isNumeric) addChannelIds(channel);
-
-    try {
-      // GramJS richiede BigInt per ID numerici, non stringa grezza
-      const entityRef: any = isNumeric ? BigInt(channel) : channel;
-      const entity = await client.getEntity(entityRef) as any;
-      addChannelIds(entity.id);
-      console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id}`);
-    } catch (e: any) {
-      console.warn(`[tg-monitor] ${userId} — impossibile risolvere "${channel}": ${e.message}${isNumeric ? ' (ID numerico già aggiunto come fallback)' : ''}`);
+    let resolved = false;
+    for (let attempt = 1; attempt <= 3 && !resolved; attempt++) {
+      try {
+        if (attempt > 1) await new Promise(r => setTimeout(r, 4000 * attempt));
+        const entityRef: any = isNumeric ? BigInt(channel) : channel;
+        const entity = await client.getEntity(entityRef) as any;
+        addChannelIds(entity.id);
+        console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} (tentativo ${attempt})`);
+        resolved = true;
+      } catch (e: any) {
+        console.warn(`[tg-monitor] ${userId} — tentativo ${attempt}/3 fallito per "${channel}": ${e.message}`);
+      }
     }
+    if (!resolved && !isNumeric) unresolvedChannels.push(channel);
   }
+
+  console.log(`[tg-monitor] ${userId} — monitoredIds dopo risoluzione: [${[...monitoredIds].join(', ')}]`);
 
   if (!monitoredIds.size) {
     console.warn(`[tg-monitor] ${userId} — nessun canale risolvibile, monitoring non avviato`);
@@ -129,7 +139,23 @@ async function startUser(userId: string) {
       // Normalizza per il matching: estrae il core ID
       const pos = rawId.replace(/^-/, '');
       const core = pos.startsWith('100') && pos.length >= 12 ? pos.slice(3) : pos;
-      const isMonitored = monitoredIds.has(rawId) || monitoredIds.has(core) || monitoredIds.has(`-100${core}`);
+      let isMonitored = monitoredIds.has(rawId) || monitoredIds.has(core) || monitoredIds.has(`-100${core}`);
+
+      // Lazy resolution: se non è monitorato e ci sono canali username non risolti all'avvio,
+      // prova a risolverli ora e controlla se corrispondono al chatId ricevuto
+      if (!isMonitored && unresolvedChannels.length > 0) {
+        for (let i = unresolvedChannels.length - 1; i >= 0; i--) {
+          const ch = unresolvedChannels[i];
+          try {
+            const entity = await client.getEntity(ch) as any;
+            addChannelIds(entity.id);
+            console.log(`[tg-monitor] ${userId} — risolto lazily "${ch}" → ${entity.id}`);
+            unresolvedChannels.splice(i, 1); // rimosso dalla lista pending
+          } catch { /* ignora */ }
+        }
+        isMonitored = monitoredIds.has(rawId) || monitoredIds.has(core) || monitoredIds.has(`-100${core}`);
+      }
+
       console.log(`[tg-monitor] ${userId} — msg chatId=${rawId} monitored=${isMonitored}`);
       if (!isMonitored) return;
 
