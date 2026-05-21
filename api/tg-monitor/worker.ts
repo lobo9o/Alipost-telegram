@@ -111,6 +111,8 @@ async function startUser(userId: string) {
         const entityRef: any = isNumeric ? BigInt(channel) : channel;
         const entity = await client.getEntity(entityRef) as any;
         addChannelIds(entity.id);
+        // Forza la sottoscrizione agli aggiornamenti del canale per questa sessione GramJS
+        await client.getMessages(entity, { limit: 1 }).catch(() => {});
         console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} (tentativo ${attempt})`);
         resolved = true;
       } catch (e: any) {
