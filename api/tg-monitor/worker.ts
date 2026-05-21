@@ -205,9 +205,9 @@ async function startUser(userId: string) {
         if (entityUrl) urlSet.add(entityUrl);
       }
 
-      // Filtra solo URL Amazon/AliExpress
-      const urls = [...urlSet].filter(u => PRODUCT_URL_RE.test(u));
-      PRODUCT_URL_RE.lastIndex = 0; // reset dopo test()
+      // Filtra solo URL Amazon/AliExpress — reset lastIndex prima di ogni test()
+      // perché la regex ha flag /g e lastIndex persiste tra chiamate .test() consecutive
+      const urls = [...urlSet].filter(u => { PRODUCT_URL_RE.lastIndex = 0; return PRODUCT_URL_RE.test(u); });
 
       if (!urls.length) {
         console.log(`[tg-monitor] ${userId} — nessun link prodotto trovato (entities: ${entities.length})`);
@@ -250,8 +250,7 @@ async function startUser(userId: string) {
           const urlSet = new Set<string>();
           (text.match(PRODUCT_URL_RE) ?? []).forEach((u: string) => urlSet.add(u));
           ((msg as any).entities ?? []).forEach((ent: any) => { const u = ent.url ?? ent.href ?? ''; if (u) urlSet.add(u); });
-          const urls = [...urlSet].filter(u => PRODUCT_URL_RE.test(u));
-          PRODUCT_URL_RE.lastIndex = 0;
+          const urls = [...urlSet].filter(u => { PRODUCT_URL_RE.lastIndex = 0; return PRODUCT_URL_RE.test(u); });
           if (!urls.length) continue;
           console.log(`[tg-monitor] ${userId} — poll trovati ${urls.length} link in msg ${info.core}/${msgId}`);
           const uniqueUrls: string[] = [];
