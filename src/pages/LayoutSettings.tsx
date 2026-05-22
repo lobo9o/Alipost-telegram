@@ -594,11 +594,24 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', activeE
       style={{
         margin: '12px 16px', borderRadius: 10, overflow: 'hidden',
         position: 'relative', aspectRatio: '1/1', background: tpl.bgColor,
-        boxShadow: '0 2px 16px rgba(0,0,0,0.4)', isolation: 'isolate',
+        boxShadow: activeEl && onDragMove
+          ? '0 0 0 3px var(--a1), 0 2px 16px rgba(0,0,0,0.4)'
+          : '0 2px 16px rgba(0,0,0,0.4)',
+        isolation: 'isolate',
         cursor: activeEl && onDragMove ? 'grab' : 'default',
         touchAction: activeEl && onDragMove ? 'none' : 'auto',
         userSelect: 'none',
+        transition: 'box-shadow .2s',
       }}>
+      {/* Hint drag visivo quando elemento attivo */}
+      {activeEl && onDragMove && (
+        <div style={{
+          position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--a1)', color: '#fff',
+          fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
+          pointerEvents: 'none', zIndex: 20, whiteSpace: 'nowrap', opacity: 0.92,
+        }}>↕ trascina per spostare</div>
+      )}
       {/* Contenuto template — con eventuale grayscale terminata */}
       <div style={{
         position: 'absolute', inset: 0,
