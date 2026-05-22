@@ -465,42 +465,19 @@ function ZoomControls({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE
   );
 }
 
-const CANVAS_SIZE_CONST = 1024;
-
-export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', activeEl, onDragMove }: {
+export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrowMove }: {
   tpl: Template; terminata?: TerminataConfig; platform?: 'amazon' | 'aliexpress';
-  activeEl?: { x: number; y: number };
-  onDragMove?: (x: number, y: number) => void;
+  onArrowMove?: (dx: number, dy: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(340);
   useEffect(() => {
     if (containerRef.current) setContainerW(containerRef.current.clientWidth);
   }, []);
-  const dragging = useRef<{ startX: number; startY: number; elX: number; elY: number } | null>(null);
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!activeEl || !onDragMove) return;
-    e.preventDefault();
-    dragging.current = { startX: e.clientX, startY: e.clientY, elX: activeEl.x, elY: activeEl.y };
-    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragging.current || !onDragMove || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const dx = ((e.clientX - dragging.current.startX) / rect.width) * 100;
-    const dy = ((e.clientY - dragging.current.startY) / rect.height) * 100;
-    const newX = Math.min(95, Math.max(0, Math.round(dragging.current.elX + dx)));
-    const newY = Math.min(95, Math.max(0, Math.round(dragging.current.elY + dy)));
-    onDragMove(newX, newY);
-  };
-
-  const handlePointerUp = () => { dragging.current = null; };
 
   const pp = tpl.product;
   // fontScale esatto: canvas usa fontSize*2 su 1024px, quindi nella preview usiamo lo stesso rapporto
-  const fontScale = (2 * containerW) / CANVAS_SIZE_CONST;
+  const fontScale = (2 * containerW) / (tpl.canvasW ?? 1024);
   // fontSize per il testo terminata: uguale al canvas (overlayTextSize% di containerW)
   const terminataFontPx = terminata ? (terminata.overlayTextSize / 100) * containerW : 0;
 
@@ -585,33 +562,27 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', activeE
     </>
   );
 
+  const arrowBtnStyle: React.CSSProperties = {
+    position: 'absolute', width: 40, height: 40, borderRadius: '50%',
+    background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 18,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    border: '1.5px solid rgba(255,255,255,0.25)', cursor: 'pointer', zIndex: 20,
+    backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+  };
+
   return (
     <div ref={containerRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
       style={{
         margin: '12px 16px', borderRadius: 10, overflow: 'hidden',
-        position: 'relative', aspectRatio: '1/1', background: tpl.bgColor,
-        boxShadow: activeEl && onDragMove
+        position: 'relative', aspectRatio: `${tpl.canvasW ?? 1024}/${tpl.canvasH ?? 1024}`, background: tpl.bgColor,
+        boxShadow: onArrowMove
           ? '0 0 0 3px var(--a1), 0 2px 16px rgba(0,0,0,0.4)'
           : '0 2px 16px rgba(0,0,0,0.4)',
         isolation: 'isolate',
-        cursor: activeEl && onDragMove ? 'grab' : 'default',
-        touchAction: activeEl && onDragMove ? 'none' : 'auto',
+        cursor: 'default',
         userSelect: 'none',
         transition: 'box-shadow .2s',
       }}>
-      {/* Hint drag visivo quando elemento attivo */}
-      {activeEl && onDragMove && (
-        <div style={{
-          position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--a1)', color: '#fff',
-          fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-          pointerEvents: 'none', zIndex: 20, whiteSpace: 'nowrap', opacity: 0.92,
-        }}>↕ trascina per spostare</div>
-      )}
       {/* Contenuto template — con eventuale grayscale terminata */}
       <div style={{
         position: 'absolute', inset: 0,
@@ -638,6 +609,16 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', activeE
           {terminata.overlayText}
         </div>
       )}
+
+      {/* Bottoni freccia sovrapposti quando elemento attivo */}
+      {onArrowMove && (
+        <>
+          <button onClick={() => onArrowMove(0, -1)} style={{ ...arrowBtnStyle, top: 8, left: '50%', transform: 'translateX(-50%)' }}>↑</button>
+          <button onClick={() => onArrowMove(0, 1)} style={{ ...arrowBtnStyle, bottom: 8, left: '50%', transform: 'translateX(-50%)' }}>↓</button>
+          <button onClick={() => onArrowMove(-1, 0)} style={{ ...arrowBtnStyle, left: 8, top: '50%', transform: 'translateY(-50%)' }}>←</button>
+          <button onClick={() => onArrowMove(1, 0)} style={{ ...arrowBtnStyle, right: 8, top: '50%', transform: 'translateY(-50%)' }}>→</button>
+        </>
+      )}
     </div>
   );
 }
@@ -650,8 +631,8 @@ function ProductPanel({ el, onUpdate }: {
 }) {
   return (
     <>
-      <InfoBanner>📦 Riquadro dove verrà inserita l'immagine Amazon/AliExpress. Trascinalo sull'anteprima e usa 🔍 per ridimensionarlo.</InfoBanner>
-      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50 })} />
+      <InfoBanner>📦 Riquadro dove verrà inserita l'immagine Amazon/AliExpress. Usale frecce sull'anteprima per spostarlo e usa 🔍 per ridimensionarlo.</InfoBanner>
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
       <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={20} max={100} label="DIMENSIONE RIQUADRO" />
     </>
   );
@@ -664,7 +645,7 @@ function OverlayImgPanel({ el, onUpdate, onFile }: {
 }) {
   return (
     <>
-      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50 })} />
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
       <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={10} max={100} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
         🖼️ {el.src ? '✓ Overlay caricato — cambia' : 'Carica overlay PNG'}
@@ -686,7 +667,7 @@ function BadgeImgPanel({ el, onUpdate, onFile }: {
 }) {
   return (
     <>
-      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50 })} />
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
       <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={50} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
         🏆 {el.src ? '✓ Icona caricata — cambia' : 'Carica icona badge'}
@@ -731,7 +712,7 @@ function StorePanel({ tpl, onUpdate, onPreviewPlatform }: {
           </button>
         ))}
       </div>
-      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate(key, { x: 50, y: 50 })} />
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate(key, { x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
       <ZoomControls value={el.size} onChange={v => onUpdate(key, { size: v })} min={5} max={40} />
     </>
   );
@@ -892,6 +873,7 @@ function TemplateSection() {
   const [activePanel, setActivePanel] = useState<ComponentKey | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [previewPlatform, setPreviewPlatform] = useState<'amazon' | 'aliexpress'>('amazon');
+  const [arrowStep, setArrowStep] = useState(1);
 
   const tpl = templates[0] ?? makeDefaultTemplate('tpl1');
 
@@ -940,29 +922,40 @@ function TemplateSection() {
   const handleFile = async (key: 'overlay' | 'badge', file: File | null) => {
     if (!file) return;
     const b64 = await readAsBase64(file);
+    if (key === 'overlay') {
+      const img = new Image();
+      img.onload = () => {
+        const w = Math.min(1320, Math.max(600, img.naturalWidth));
+        const h = Math.min(800, Math.max(600, img.naturalHeight));
+        updateTpl({ canvasW: w, canvasH: h });
+      };
+      img.src = b64 as string;
+    }
     updateImg(key, { src: b64 });
   };
 
   const isTextKey = (k: ComponentKey): k is 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' =>
     ['prezzo', 'prezzoPrecedente', 'sconto', 'testoCustom'].includes(k);
 
-  const getActiveDragEl = (): { x: number; y: number } | null => {
-    if (!activePanel || activePanel === 'terminata') return null;
-    if (activePanel === 'product') return tpl.product;
-    if (activePanel === 'overlay') return tpl.overlay;
-    if (activePanel === 'badge') return tpl.badge;
-    if (activePanel === 'store') return previewPlatform === 'amazon' ? tpl.storeAmazon : tpl.storeAliexpress;
-    if (isTextKey(activePanel)) return tpl[activePanel] as TextEl;
-    return null;
-  };
-
-  const handleDragMove = (x: number, y: number) => {
+  const handleArrowMove = (dx: number, dy: number) => {
     if (!activePanel) return;
-    if (activePanel === 'product') { updateProduct({ x, y }); return; }
-    if (activePanel === 'overlay') { updateImg('overlay', { x, y }); return; }
-    if (activePanel === 'badge') { updateImg('badge', { x, y }); return; }
-    if (activePanel === 'store') { updateImg(previewPlatform === 'amazon' ? 'storeAmazon' : 'storeAliexpress', { x, y }); return; }
-    if (isTextKey(activePanel)) updateText(activePanel, { x, y });
+    const step = arrowStep;
+    const clampPos = (v: number) => Math.min(95, Math.max(0, parseFloat((v + dx * step).toFixed(1))));
+    const clampPosY = (v: number) => Math.min(95, Math.max(0, parseFloat((v + dy * step).toFixed(1))));
+    if (activePanel === 'product') {
+      updateProduct({ x: clampPos(tpl.product.x), y: clampPosY(tpl.product.y) });
+    } else if (activePanel === 'overlay') {
+      updateImg('overlay', { x: clampPos(tpl.overlay.x), y: clampPosY(tpl.overlay.y) });
+    } else if (activePanel === 'badge') {
+      updateImg('badge', { x: clampPos(tpl.badge.x), y: clampPosY(tpl.badge.y) });
+    } else if (activePanel === 'store') {
+      const key = previewPlatform === 'amazon' ? 'storeAmazon' : 'storeAliexpress';
+      const el = previewPlatform === 'amazon' ? tpl.storeAmazon : tpl.storeAliexpress;
+      updateImg(key, { x: clampPos(el.x), y: clampPosY(el.y) });
+    } else if (isTextKey(activePanel)) {
+      const el = tpl[activePanel] as TextEl;
+      updateText(activePanel, { x: clampPos(el.x), y: clampPosY(el.y) });
+    }
   };
 
   const toggleEnabled = (id: ComponentKey) => {
@@ -1045,12 +1038,23 @@ function TemplateSection() {
         </div>
       )}
 
-      {/* Anteprima live — drag per spostare l'elemento attivo */}
+      {/* Anteprima live — frecce per spostare l'elemento attivo */}
       <TemplatePreviewer
         tpl={tpl} platform={previewPlatform}
-        activeEl={getActiveDragEl() ?? undefined}
-        onDragMove={handleDragMove}
+        onArrowMove={activePanel && activePanel !== 'terminata' ? handleArrowMove : undefined}
       />
+
+      {/* Selettore step frecce */}
+      {activePanel && activePanel !== 'terminata' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 16px 0' }}>
+          <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0 }}>Passo:</span>
+          {[0.5, 1, 3, 5, 10].map(s => (
+            <button key={s} className={`btn bsm ${arrowStep === s ? 'bp' : 'bgh'}`}
+              style={{ fontSize: 10, padding: '2px 8px' }}
+              onClick={() => setArrowStep(s)}>{s}%</button>
+          ))}
+        </div>
+      )}
 
       {/* Pannello attivo — frecce subito sotto l'anteprima */}
       {activePanel && (
@@ -1096,6 +1100,16 @@ function TerminataPanel() {
   const { settings, setSettings, layouts, templates } = useApp();
   const [cfg, setCfg] = useState<TerminataConfig>(settings.terminata ?? DEFAULT_TERMINATA);
   const [saved, setSaved] = useState(false);
+  const [terminataStep, setTerminataStep] = useState(1);
+
+  const handleTerminataArrow = (dx: number, dy: number) => {
+    const s = terminataStep;
+    setCfg(prev => ({
+      ...prev,
+      overlayTextX: Math.min(95, Math.max(0, parseFloat((prev.overlayTextX + dx * s).toFixed(1)))),
+      overlayTextY: Math.min(95, Math.max(0, parseFloat((prev.overlayTextY + dy * s).toFixed(1)))),
+    }));
+  };
 
   const update = <K extends keyof TerminataConfig>(k: K, v: TerminataConfig[K]) =>
     setCfg(prev => ({ ...prev, [k]: v }));
@@ -1131,15 +1145,22 @@ function TerminataPanel() {
         </div>
       </div>
 
-      {/* Anteprima reale — trascina per spostare il testo overlay */}
+      {/* Anteprima reale — frecce per spostare il testo overlay */}
       <div className="lbl" style={{ marginBottom: 4 }}>ANTEPRIMA</div>
       {activeTpl && (
         <TemplatePreviewer
           tpl={activeTpl} terminata={cfg}
-          activeEl={{ x: cfg.overlayTextX, y: cfg.overlayTextY }}
-          onDragMove={(x, y) => setCfg(prev => ({ ...prev, overlayTextX: x, overlayTextY: y }))}
+          onArrowMove={handleTerminataArrow}
         />
       )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 0 0' }}>
+        <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0 }}>Passo:</span>
+        {[0.5, 1, 3].map(s => (
+          <button key={s} className={`btn bsm ${terminataStep === s ? 'bp' : 'bgh'}`}
+            style={{ fontSize: 10, padding: '2px 8px' }}
+            onClick={() => setTerminataStep(s)}>{s}%</button>
+        ))}
+      </div>
       <DragHint
         x={cfg.overlayTextX} y={cfg.overlayTextY}
         onCenter={() => setCfg(prev => ({ ...prev, overlayTextX: 50, overlayTextY: 50 }))}

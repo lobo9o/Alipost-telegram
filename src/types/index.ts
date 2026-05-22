@@ -91,6 +91,8 @@ export interface TextEl {
   strikethroughColor: string;
   textAnchor: 'left' | 'right' | 'center';
   text: string;
+  currencyPos?: 'before' | 'after';
+  decimalFontScale?: number;
 }
 
 export interface ImgEl {
@@ -103,6 +105,8 @@ export interface ImgEl {
 
 export interface Template {
   id: string;
+  canvasW: number;
+  canvasH: number;
   bgColor: string;
   product: ElementLayout;
   overlay: ImgEl;
@@ -131,6 +135,8 @@ const defImg = (o: Partial<ImgEl> = {}): ImgEl => ({
 export function makeDefaultTemplate(id = 'tpl1'): Template {
   return {
     id,
+    canvasW: 1024,
+    canvasH: 1024,
     bgColor: '#ffffff',
     product: { x: 5, y: 5, size: 90 },
     overlay: defImg({ size: 100 }),

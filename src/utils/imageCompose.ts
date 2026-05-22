@@ -1,7 +1,5 @@
 import { Template, TextEl, TerminataConfig } from '../types';
 
-const CANVAS_SIZE = 1024;
-
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -16,20 +14,23 @@ function drawContained(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   el: { x: number; y: number; size: number },
+  canvasW: number,
+  canvasH: number,
+  canvasRef: number,
 ) {
-  const x = (el.x / 100) * CANVAS_SIZE;
-  const y = (el.y / 100) * CANVAS_SIZE;
-  const box = (el.size / 100) * CANVAS_SIZE;
+  const x = (el.x / 100) * canvasW;
+  const y = (el.y / 100) * canvasH;
+  const box = (el.size / 100) * canvasRef;
   const ratio = Math.min(box / img.naturalWidth, box / img.naturalHeight);
   const dw = img.naturalWidth * ratio;
   const dh = img.naturalHeight * ratio;
   ctx.drawImage(img, x + (box - dw) / 2, y + (box - dh) / 2, dw, dh);
 }
 
-function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string) {
+function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, canvasW: number, canvasH: number) {
   if (!el.enabled || !text) return;
-  const x = (el.x / 100) * CANVAS_SIZE;
-  const y = (el.y / 100) * CANVAS_SIZE;
+  const x = (el.x / 100) * canvasW;
+  const y = (el.y / 100) * canvasH;
   const fs = el.fontSize * 2; // template px → 1024 canvas
 
   const anchor = el.textAnchor ?? 'left';
@@ -87,19 +88,22 @@ export async function generatePostImage(
   } = {},
 ): Promise<string> {
   const canvas = document.createElement('canvas');
-  canvas.width = CANVAS_SIZE;
-  canvas.height = CANVAS_SIZE;
+  const canvasW = template.canvasW ?? 1024;
+  const canvasH = template.canvasH ?? 1024;
+  const canvasRef = Math.min(canvasW, canvasH);
+  canvas.width = canvasW;
+  canvas.height = canvasH;
   const ctx = canvas.getContext('2d')!;
 
   // Background
   ctx.fillStyle = template.bgColor || '#ffffff';
-  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  ctx.fillRect(0, 0, canvasW, canvasH);
 
   // Product image via CORS proxy
   if (productImageUrl && productImageUrl.startsWith('http')) {
     try {
       const img = await loadImage(`/api/posts?img=${encodeURIComponent(productImageUrl)}`);
-      drawContained(ctx, img, template.product);
+      drawContained(ctx, img, template.product, canvasW, canvasH, canvasRef);
     } catch { /* skip on error */ }
   }
 
@@ -108,7 +112,7 @@ export async function generatePostImage(
     try {
       const img = await loadImage(template.overlay.src);
       const el = template.overlay;
-      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, (el.size / 100) * CANVAS_SIZE, (el.size / 100) * CANVAS_SIZE);
+      ctx.drawImage(img, (el.x / 100) * canvasW, (el.y / 100) * canvasH, (el.size / 100) * canvasW, (el.size / 100) * canvasH);
     } catch { /* skip */ }
   }
 
@@ -117,26 +121,26 @@ export async function generatePostImage(
   if (storeEl?.enabled) {
     try {
       const img = await loadImage(makeStoreImageUrl(platform));
-      const h = (storeEl.size / 100) * STORE_SCALE[platform] * CANVAS_SIZE;
+      const h = (storeEl.size / 100) * STORE_SCALE[platform] * canvasRef;
       const w = h * (img.naturalWidth / img.naturalHeight);
-      ctx.drawImage(img, (storeEl.x / 100) * CANVAS_SIZE, (storeEl.y / 100) * CANVAS_SIZE, w, h);
+      ctx.drawImage(img, (storeEl.x / 100) * canvasW, (storeEl.y / 100) * canvasH, w, h);
     } catch { /* skip */ }
   }
 
   // Text elements
-  drawTextEl(ctx, template.prezzo, values.prezzo ?? template.prezzo.text);
-  drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text);
-  drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text);
-  drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text);
+  drawTextEl(ctx, template.prezzo, values.prezzo ?? template.prezzo.text, canvasW, canvasH);
+  drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text, canvasW, canvasH);
+  drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text, canvasW, canvasH);
+  drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text, canvasW, canvasH);
 
   // Badge — ULTIMO livello, sopra tutto incluso il testo
   if (template.badge.enabled && isHistoricalLow && template.badge.src) {
     try {
       const img = await loadImage(template.badge.src);
       const el = template.badge;
-      const w = (el.size / 100) * CANVAS_SIZE;
+      const w = (el.size / 100) * canvasRef;
       const h = (img.naturalHeight / img.naturalWidth) * w;
-      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, w, h);
+      ctx.drawImage(img, (el.x / 100) * canvasW, (el.y / 100) * canvasH, w, h);
     } catch { /* skip */ }
   }
 
@@ -149,7 +153,7 @@ export async function generateMultiPostImage(imageUrls: string[]): Promise<strin
   const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);
   // Celle quadrate, canvas esattamente cellSize*cols × cellSize*rows (niente pixel scoperti)
-  const cellSize = Math.round(CANVAS_SIZE / cols);
+  const cellSize = Math.round(1024 / cols);
   const canvasW = cellSize * cols;
   const canvasH = cellSize * rows;
 
@@ -195,17 +199,20 @@ export async function generateTerminataImage(
   values: { prezzo?: string; prezzoPrecedente?: string; sconto?: string; testoCustom?: string } = {},
 ): Promise<string> {
   const canvas = document.createElement('canvas');
-  canvas.width = CANVAS_SIZE;
-  canvas.height = CANVAS_SIZE;
+  const canvasW = template.canvasW ?? 1024;
+  const canvasH = template.canvasH ?? 1024;
+  const canvasRef = Math.min(canvasW, canvasH);
+  canvas.width = canvasW;
+  canvas.height = canvasH;
   const ctx = canvas.getContext('2d')!;
 
   ctx.fillStyle = template.bgColor || '#ffffff';
-  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  ctx.fillRect(0, 0, canvasW, canvasH);
 
   if (productImageUrl && productImageUrl.startsWith('http')) {
     try {
       const img = await loadImage(`/api/posts?img=${encodeURIComponent(productImageUrl)}`);
-      drawContained(ctx, img, template.product);
+      drawContained(ctx, img, template.product, canvasW, canvasH, canvasRef);
     } catch { /* skip */ }
   }
 
@@ -213,7 +220,7 @@ export async function generateTerminataImage(
     try {
       const img = await loadImage(template.overlay.src);
       const el = template.overlay;
-      ctx.drawImage(img, (el.x / 100) * CANVAS_SIZE, (el.y / 100) * CANVAS_SIZE, (el.size / 100) * CANVAS_SIZE, (el.size / 100) * CANVAS_SIZE);
+      ctx.drawImage(img, (el.x / 100) * canvasW, (el.y / 100) * canvasH, (el.size / 100) * canvasW, (el.size / 100) * canvasH);
     } catch { /* skip */ }
   }
 
@@ -221,15 +228,15 @@ export async function generateTerminataImage(
   if (storeEl2?.enabled) {
     try {
       const img = await loadImage(makeStoreImageUrl(platform));
-      const h = (storeEl2.size / 100) * STORE_SCALE[platform] * CANVAS_SIZE;
+      const h = (storeEl2.size / 100) * STORE_SCALE[platform] * canvasRef;
       const w = h * (img.naturalWidth / img.naturalHeight);
-      ctx.drawImage(img, (storeEl2.x / 100) * CANVAS_SIZE, (storeEl2.y / 100) * CANVAS_SIZE, w, h);
+      ctx.drawImage(img, (storeEl2.x / 100) * canvasW, (storeEl2.y / 100) * canvasH, w, h);
     } catch { /* skip */ }
   }
 
   // Grayscale sull'intera immagine (prodotto + overlay + store)
   if (config.grayscale) {
-    const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    const imageData = ctx.getImageData(0, 0, canvasW, canvasH);
     const d = imageData.data;
     for (let i = 0; i < d.length; i += 4) {
       const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
@@ -238,15 +245,15 @@ export async function generateTerminataImage(
     ctx.putImageData(imageData, 0, 0);
   }
 
-  if (config.showPrezzo) drawTextEl(ctx, template.prezzo, values.prezzo ?? template.prezzo.text);
-  if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text);
-  if (config.showSconto) drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text);
-  drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text);
+  if (config.showPrezzo) drawTextEl(ctx, template.prezzo, values.prezzo ?? template.prezzo.text, canvasW, canvasH);
+  if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text, canvasW, canvasH);
+  if (config.showSconto) drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text, canvasW, canvasH);
+  drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text, canvasW, canvasH);
 
   if (config.overlayText) {
-    const fs = (config.overlayTextSize / 100) * CANVAS_SIZE;
-    const tx = (config.overlayTextX / 100) * CANVAS_SIZE;
-    const ty = (config.overlayTextY / 100) * CANVAS_SIZE;
+    const fs = (config.overlayTextSize / 100) * canvasRef;
+    const tx = (config.overlayTextX / 100) * canvasW;
+    const ty = (config.overlayTextY / 100) * canvasH;
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
