@@ -112,9 +112,9 @@ async function refreshUserCache(userId: string): Promise<void> {
   const cfg = (typeof settingsRow.data === 'string' ? JSON.parse(settingsRow.data) : settingsRow.data) as Record<string, any>;
 
   const userHasCreds = !!(cfg.amazon?.credentialId && cfg.amazon?.credentialSecret);
-  const credentialId     = cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '';
-  const credentialSecret = cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '';
-  const affiliateTag     = cfg.amazon?.affiliateTag || process.env.AMAZON_AFFILIATE_TAG || '';
+  const credentialId     = (cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '').trim();
+  const credentialSecret = (cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '').trim();
+  const affiliateTag     = (cfg.amazon?.affiliateTag || process.env.AMAZON_AFFILIATE_TAG || '').trim();
   const version          = userHasCreds
     ? (cfg.amazon?.version || process.env.AMAZON_VERSION || '2.2')
     : (process.env.AMAZON_VERSION || '2.2');

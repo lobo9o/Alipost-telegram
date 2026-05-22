@@ -40,10 +40,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
 
   const userHasCreds     = !!(cfg.amazon?.credentialId && cfg.amazon?.credentialSecret);
-  const credentialId     = cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '';
-  const credentialSecret = cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '';
+  const credentialId     = (cfg.amazon?.credentialId     || process.env.AMAZON_CREDENTIAL_ID     || '').trim();
+  const credentialSecret = (cfg.amazon?.credentialSecret || process.env.AMAZON_CREDENTIAL_SECRET || '').trim();
   const apiTag           = userHasCreds ? (cfg.amazon?.affiliateTag || '') : (process.env.AMAZON_AFFILIATE_TAG || '');
-  const affiliateTag     = cfg.amazon?.affiliateTag || process.env.AMAZON_AFFILIATE_TAG || '';
+  const affiliateTag     = (cfg.amazon?.affiliateTag || process.env.AMAZON_AFFILIATE_TAG || '').trim();
   const version          = userHasCreds
     ? (cfg.amazon?.version || process.env.AMAZON_VERSION || '2.2')
     : (process.env.AMAZON_VERSION || '2.2');
