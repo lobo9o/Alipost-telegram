@@ -171,8 +171,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const tmpl = tmplResult as Template[] | null;
       if (tmpl !== null) {
         if (tmpl.length > 0) {
-          // Usa il primo template (più vecchio = quello configurato dall'utente)
-          // Non eliminare mai template automaticamente: l'utente potrebbe averne configurati
+          // Usa il primo template (più recente = quello configurato dall'utente)
           const first = tmpl[0];
           const base = { ...makeDefaultTemplate(first.id), ...first };
           if ((first as any).store && !first.storeAmazon) base.storeAmazon = (first as any).store;

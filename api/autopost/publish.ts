@@ -255,11 +255,13 @@ async function generateTemplateImageServer(
         } catch { /* ignore */ }
       }
 
-      const SIZE = 1024;
-      const canvas = createCanvas(SIZE, SIZE);
+      const canvasW = Number(template.canvasW) || 1024;
+      const canvasH = Number(template.canvasH) || 1024;
+      const canvasRef = Math.min(canvasW, canvasH); // lato quadrato riferimento (come imageCompose)
+      const canvas = createCanvas(canvasW, canvasH);
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = template.bgColor || '#ffffff';
-      ctx.fillRect(0, 0, SIZE, SIZE);
+      ctx.fillRect(0, 0, canvasW, canvasH);
 
       async function fetchImgBufC(url: string): Promise<Buffer | null> {
         try {
@@ -278,8 +280,8 @@ async function generateTemplateImageServer(
           if (buf) {
             const img = await loadImage(buf);
             const el = template.product ?? { x: 5, y: 5, size: 90 };
-            const x = (el.x / 100) * SIZE; const y = (el.y / 100) * SIZE;
-            const box = (el.size / 100) * SIZE;
+            const x = (el.x / 100) * canvasW; const y = (el.y / 100) * canvasH;
+            const box = (el.size / 100) * canvasRef; // box quadrato
             const ratio = Math.min(box / img.width, box / img.height);
             const dw = img.width * ratio; const dh = img.height * ratio;
             ctx.drawImage(img, x + (box - dw) / 2, y + (box - dh) / 2, dw, dh);
@@ -292,7 +294,12 @@ async function generateTemplateImageServer(
           const src = String(template.overlay.src);
           const img = await loadImage(src.startsWith('http') ? (await fetchImgBufC(src) ?? src) : src);
           const el = template.overlay;
-          ctx.drawImage(img, (el.x / 100) * SIZE, (el.y / 100) * SIZE, (el.size / 100) * SIZE, (el.size / 100) * SIZE);
+          // contain rettangolare: uguale a imageCompose e alla preview CSS objectFit:contain
+          const boxX = (el.x / 100) * canvasW; const boxY = (el.y / 100) * canvasH;
+          const boxW = (el.size / 100) * canvasW; const boxH = (el.size / 100) * canvasH;
+          const ratio = Math.min(boxW / img.width, boxH / img.height);
+          const dw = img.width * ratio; const dh = img.height * ratio;
+          ctx.drawImage(img, boxX + (boxW - dw) / 2, boxY + (boxH - dh) / 2, dw, dh);
         } catch (e: any) { console.warn('[tpl] overlay:', e.message); }
       }
 
@@ -305,16 +312,16 @@ async function generateTemplateImageServer(
           const __dir = dirname(fileURLToPath(import.meta.url));
           const pngPath = join(__dir, '../../public', platform === 'amazon' ? 'store-amazon.png' : 'store-aliexpress.png');
           const img = await loadImage(pngPath);
-          const h = (storeEl.size / 100) * storeScale * SIZE;
+          const h = (storeEl.size / 100) * storeScale * canvasRef;
           const w = h * (img.width / img.height);
-          ctx.drawImage(img, (storeEl.x / 100) * SIZE, (storeEl.y / 100) * SIZE, w, h);
+          ctx.drawImage(img, (storeEl.x / 100) * canvasW, (storeEl.y / 100) * canvasH, w, h);
         } catch (e: any) { console.warn('[tpl] store:', e.message); }
       }
 
       const drawTextEl = (el: any, text: string, debugName?: string) => {
         if (!el?.enabled || !text?.trim()) return;
         const fs = (Number(el.fontSize) || 36) * 2;
-        const x = (el.x / 100) * SIZE; const y = (el.y / 100) * SIZE;
+        const x = (el.x / 100) * canvasW; const y = (el.y / 100) * canvasH;
         const anchor = el.textAnchor === 'right' ? 'right' : el.textAnchor === 'center' ? 'center' : 'left';
         if (debugName) console.log(`[tpl] ${debugName}: color=${JSON.stringify(el.color)} strikethroughColor=${JSON.stringify(el.strikethroughColor)} strokeColor=${JSON.stringify(el.strokeColor)} strikethrough=${el.strikethrough}`);
         ctx.save();
@@ -349,9 +356,9 @@ async function generateTemplateImageServer(
           const badgeBuf = src.startsWith('http') ? (await fetchImgBufC(src) ?? null) : null;
           const badgeImg = await loadImage(badgeBuf ?? src);
           const el = template.badge;
-          const w = ((el.size ?? 30) / 100) * SIZE;
+          const w = ((el.size ?? 30) / 100) * canvasRef;
           const h = (badgeImg.height / badgeImg.width) * w;
-          ctx.drawImage(badgeImg, ((el.x ?? 0) / 100) * SIZE, ((el.y ?? 0) / 100) * SIZE, w, h);
+          ctx.drawImage(badgeImg, ((el.x ?? 0) / 100) * canvasW, ((el.y ?? 0) / 100) * canvasH, w, h);
         } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
       }
 
@@ -369,7 +376,9 @@ async function generateTemplateImageServer(
     if (!sharpMod) { console.warn('[tpl] né canvas né sharp disponibili'); return null; }
     const sharp = (sharpMod.default ?? sharpMod) as any;
 
-    const SIZE = 1024;
+    const sW = Number(template.canvasW) || 1024;
+    const sH = Number(template.canvasH) || 1024;
+    const sRef = Math.min(sW, sH); // lato quadrato riferimento
     const bgHex = String(template.bgColor || '#ffffff').replace('#', '').padEnd(6, 'f');
     const bgR = parseInt(bgHex.slice(0, 2), 16) || 255;
     const bgG = parseInt(bgHex.slice(2, 4), 16) || 255;
@@ -399,8 +408,8 @@ async function generateTemplateImageServer(
         const buf = await fetchImgBuf(productImageUrl);
         if (buf) {
           const el = template.product ?? { x: 5, y: 5, size: 90 };
-          const box = Math.round((el.size / 100) * SIZE);
-          const elLeft = Math.round((el.x / 100) * SIZE); const elTop = Math.round((el.y / 100) * SIZE);
+          const box = Math.round((el.size / 100) * sRef); // box quadrato
+          const elLeft = Math.round((el.x / 100) * sW); const elTop = Math.round((el.y / 100) * sH);
           const { data, info } = await sharp(buf).resize(box, box, { fit: 'inside' }).toBuffer({ resolveWithObject: true });
           composites.push({ input: data, left: elLeft + Math.round((box - info.width) / 2), top: elTop + Math.round((box - info.height) / 2) });
         }
@@ -411,9 +420,11 @@ async function generateTemplateImageServer(
       try {
         const buf = await bufFromSrc(String(template.overlay.src));
         if (buf) {
-          const el = template.overlay; const s = Math.round((el.size / 100) * SIZE);
-          const resized = await sharp(buf).resize(s, s, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
-          composites.push({ input: resized, left: Math.round((el.x / 100) * SIZE), top: Math.round((el.y / 100) * SIZE) });
+          const el = template.overlay;
+          // contain rettangolare: box width×height proporzionato al canvas
+          const boxW = Math.round((el.size / 100) * sW); const boxH = Math.round((el.size / 100) * sH);
+          const resized = await sharp(buf).resize(boxW, boxH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+          composites.push({ input: resized, left: Math.round((el.x / 100) * sW), top: Math.round((el.y / 100) * sH) });
         }
       } catch (e: any) { console.warn('[tpl] overlay:', e.message); }
     }
@@ -426,9 +437,9 @@ async function generateTemplateImageServer(
         const __dir = dirname(fileURLToPath(import.meta.url));
         const pngPath = join(__dir, '../../public', platform === 'amazon' ? 'store-amazon.png' : 'store-aliexpress.png');
         const storeBuf = await fs.readFile(pngPath); const meta = await sharp(storeBuf).metadata();
-        const h = Math.round((storeElS.size / 100) * storeScaleS * SIZE);
+        const h = Math.round((storeElS.size / 100) * storeScaleS * sRef);
         const w = Math.round(h * ((meta.width ?? 1) / (meta.height ?? 1)));
-        composites.push({ input: await sharp(storeBuf).resize(w, h).toBuffer(), left: Math.round((storeElS.x / 100) * SIZE), top: Math.round((storeElS.y / 100) * SIZE) });
+        composites.push({ input: await sharp(storeBuf).resize(w, h).toBuffer(), left: Math.round((storeElS.x / 100) * sW), top: Math.round((storeElS.y / 100) * sH) });
       } catch (e: any) { console.warn('[tpl] store:', e.message); }
     }
 
@@ -436,8 +447,8 @@ async function generateTemplateImageServer(
     function textElToSvg(el: any, text: string) {
       if (!el?.enabled || !text?.trim()) return;
       const fs = (Number(el.fontSize) || 36) * 2;
-      const xTop = Math.round((el.x / 100) * SIZE);
-      const yTop = Math.round((el.y / 100) * SIZE);
+      const xTop = Math.round((el.x / 100) * sW);
+      const yTop = Math.round((el.y / 100) * sH);
       // librsvg usa baseline alfabetico: sposta y in giù di ~0.80*fs per allineare il bordo superiore a yTop
       const y = yTop + Math.round(fs * 0.80);
       const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
@@ -466,21 +477,21 @@ async function generateTemplateImageServer(
     textElToSvg(template.prezzoPrecedente, priceData.prezzoPrecedente);
     textElToSvg(template.sconto, priceData.sconto);
     textElToSvg(template.testoCustom, template.testoCustom?.text ?? '');
-    if (svgEls.length > 0) composites.push({ input: Buffer.from(`<svg width="${SIZE}" height="${SIZE}" xmlns="http://www.w3.org/2000/svg">${svgEls.join('')}</svg>`) });
+    if (svgEls.length > 0) composites.push({ input: Buffer.from(`<svg width="${sW}" height="${sH}" xmlns="http://www.w3.org/2000/svg">${svgEls.join('')}</svg>`) });
 
     if (isHistoricalLow && template.badge?.enabled && template.badge?.src) {
       try {
         const buf = await bufFromSrc(String(template.badge.src));
         if (buf) {
           const el = template.badge; const meta = await sharp(buf).metadata();
-          const w = Math.round(((el.size ?? 30) / 100) * SIZE); const h = Math.round(w * ((meta.height ?? 1) / (meta.width ?? 1)));
-          composites.push({ input: await sharp(buf).resize(w, h).png().toBuffer(), left: Math.round(((el.x ?? 0) / 100) * SIZE), top: Math.round(((el.y ?? 0) / 100) * SIZE) });
+          const w = Math.round(((el.size ?? 30) / 100) * sRef); const h = Math.round(w * ((meta.height ?? 1) / (meta.width ?? 1)));
+          composites.push({ input: await sharp(buf).resize(w, h).png().toBuffer(), left: Math.round(((el.x ?? 0) / 100) * sW), top: Math.round(((el.y ?? 0) / 100) * sH) });
         }
       } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
     }
 
     const result = await sharp({
-      create: { width: SIZE, height: SIZE, channels: 3, background: { r: bgR, g: bgG, b: bgB } },
+      create: { width: sW, height: sH, channels: 3, background: { r: bgR, g: bgG, b: bgB } },
     })
       .composite(composites)
       .jpeg({ quality: 88 })
@@ -911,7 +922,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const aliCurrSym2 = ALI_CURRENCY_SYM[country] ?? '€';
 
           // Carica template e layout utente (come per Amazon)
-          const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1`;
+          const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at DESC LIMIT 1`;
           const aliTemplateId = aliTplRow[0]?.id ?? 'tpl1';
           const aliTemplateCfg = parseTemplateCfg(aliTplRow[0]);
           const aliLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo IN ('aliexpress', 'normal') ORDER BY tipo = 'aliexpress' DESC, created_at ASC LIMIT 1`;
@@ -1064,7 +1075,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         if (multiCandidates.length < 2) multiCandidates = candidates;
         multiCandidates = multiCandidates.slice(0, multiSize);
 
-        const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1`;
+        const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at DESC LIMIT 1`;
         const mTemplateId = mTplRow[0]?.id ?? 'tpl1';
         const mTemplateCfg = parseTemplateCfg(mTplRow[0]);
         const mLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`.catch(() => []);
@@ -1113,7 +1124,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ORDER BY tipo = 'amazon' DESC, created_at ASC LIMIT 1
         `;
         const layoutId = amzLayouts[0]?.id ?? '';
-        const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1`;
+        const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at DESC LIMIT 1`;
         const templateId  = tplRow[0]?.id ?? 'tpl1';
         const templateCfg = parseTemplateCfg(tplRow[0]);
 
@@ -1224,7 +1235,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const [pubTpl] = await sql`
         SELECT id, config FROM templates WHERE user_id = ${userId}
           AND tipo NOT IN ('historical_low')
-        ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1
+        ORDER BY (tipo = 'normal') DESC, created_at DESC LIMIT 1
       `.catch(() => [null]);
 
       if (pubTpl) {

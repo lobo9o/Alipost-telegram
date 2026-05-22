@@ -19,8 +19,6 @@ function CustomTextEditor({ initialValue, onSave, rows = 2 }: { initialValue: st
 }
 
 // ── Template image preview (reused in PostCard + standalone) ──
-const CANVAS_SIZE_PREVIEW = 1024;
-
 function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
   const hasImage = post.image && post.image !== 'placeholder.jpg';
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,8 +26,6 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
   React.useEffect(() => {
     if (containerRef.current) setContainerW(containerRef.current.clientWidth);
   }, []);
-  // Stesso calcolo di TemplatePreviewer in LayoutSettings: canvas usa fontSize*2 su 1024px
-  const fontScale = (2 * containerW) / CANVAS_SIZE_PREVIEW;
 
   if (!template) {
     return (
@@ -51,22 +47,29 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
     );
   }
 
+  const canvasW = template.canvasW ?? 1024;
+  const canvasH = template.canvasH ?? 1024;
+  const containerH = containerW * canvasH / canvasW;
+  const previewRef = Math.min(containerW, containerH); // lato quadrato riferimento = imageCompose canvasRef
+  const fontScale = (2 * containerW) / canvasW;
+
   const pp = template.product;
+  const ppBoxPx = (pp.size / 100) * previewRef; // box quadrato in pixel
   return (
     <div ref={containerRef} style={{
       margin: '0 16px 12px', borderRadius: 10, overflow: 'hidden',
-      position: 'relative', aspectRatio: '1/1', background: template.bgColor,
+      position: 'relative', aspectRatio: `${canvasW}/${canvasH}`, background: template.bgColor,
       boxShadow: '0 2px 16px rgba(0,0,0,0.35)', isolation: 'isolate',
     }}>
-      {/* Product image at template position */}
+      {/* Product image at template position — box quadrato come imageCompose */}
       <div style={{
         position: 'absolute', left: `${pp.x}%`, top: `${pp.y}%`,
-        width: `${pp.size}%`, height: `${pp.size}%`,
+        width: ppBoxPx, height: ppBoxPx,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {hasImage
           ? <img src={post.image} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-          : <span style={{ fontSize: `${pp.size * 0.55}px` }}>{post.emoji}</span>
+          : <span style={{ fontSize: `${ppBoxPx * 0.55}px` }}>{post.emoji}</span>
         }
       </div>
 

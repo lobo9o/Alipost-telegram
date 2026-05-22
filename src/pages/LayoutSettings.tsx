@@ -476,17 +476,24 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrow
   }, []);
 
   const pp = tpl.product;
+  const canvasW = tpl.canvasW ?? 1024;
+  const canvasH = tpl.canvasH ?? 1024;
+  // previewRef: lato del quadrato di riferimento nella preview, uguale a imageCompose canvasRef
+  const containerH = containerW * canvasH / canvasW;
+  const previewRef = Math.min(containerW, containerH);
+  const ppBoxPx = (pp.size / 100) * previewRef; // box quadrato in pixel
+
   // fontScale esatto: canvas usa fontSize*2 su 1024px, quindi nella preview usiamo lo stesso rapporto
-  const fontScale = (2 * containerW) / (tpl.canvasW ?? 1024);
+  const fontScale = (2 * containerW) / canvasW;
   // fontSize per il testo terminata: uguale al canvas (overlayTextSize% di containerW)
   const terminataFontPx = terminata ? (terminata.overlayTextSize / 100) * containerW : 0;
 
   const innerContent = (
     <>
-      {/* Product placeholder box */}
+      {/* Product placeholder box — quadrato come in imageCompose (usa previewRef, non %) */}
       <div style={{
         position: 'absolute', left: `${pp.x}%`, top: `${pp.y}%`,
-        width: `${pp.size}%`, height: `${pp.size}%`,
+        width: ppBoxPx, height: ppBoxPx,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: '1px dashed rgba(128,128,128,0.3)',
         background: 'rgba(128,128,128,0.06)',
@@ -861,15 +868,41 @@ function TemplateSection() {
   const [showInfo, setShowInfo] = useState(false);
   const [previewPlatform, setPreviewPlatform] = useState<'amazon' | 'aliexpress'>('amazon');
   const [arrowStep, setArrowStep] = useState(1);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref che tiene sempre l'ultimo template aggiornato per il salvataggio keepalive
+  const latestTplRef = useRef<Template | null>(null);
 
   const tpl = templates[0] ?? makeDefaultTemplate('tpl1');
 
+  // Aggiorna il ref ogni render così visibilitychange vede sempre l'ultimo stato
+  latestTplRef.current = templates[0] ?? null;
+
   const saveTpl = (t: Template) => {
-    if (!templateFromDB.current) return; // blocca salvataggio se template non confermato dal DB
-    templatesApi.update(t.id, t).catch(e => {
-      if (String(e?.message).includes('Not found')) templatesApi.create(t).catch(() => {});
-    });
+    if (!templateFromDB.current) return;
+    latestTplRef.current = t;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      templatesApi.update(t.id, t).catch(e => {
+        if (String(e?.message).includes('Not found')) templatesApi.create(t).catch(() => {});
+      });
+    }, 800);
   };
+
+  // Salvataggio keepalive quando l'utente chiude la mini-app (visibilitychange)
+  useEffect(() => {
+    const handleHide = () => {
+      if (!document.hidden) return;
+      const t = latestTplRef.current;
+      if (!t || !templateFromDB.current) return;
+      if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+      const initData = (window as any).Telegram?.WebApp?.initData ?? '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (initData) headers['x-tg-init-data'] = initData;
+      fetch(`/api/templates/${t.id}`, { method: 'PUT', headers, body: JSON.stringify(t), keepalive: true }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', handleHide);
+    return () => document.removeEventListener('visibilitychange', handleHide);
+  }, []);  // eslint-disable-line
 
   const updateTpl = (changes: Partial<Template>) => {
     setTemplates(ts => {

@@ -8,6 +8,25 @@ const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|
 const activeClients = new Map<string, TelegramClient>();
 const activePolls = new Map<string, ReturnType<typeof setInterval>>();
 
+// Dedup prodotti: evita post identici se lo stesso prodotto appare in 2 messaggi ravvicinati
+// userId → Map<productId, timestampMs>
+const recentQueuedByUser = new Map<string, Map<string, number>>();
+const DEDUP_TTL_MS = 5 * 60 * 1000; // 5 minuti
+
+function wasRecentlyQueued(userId: string, productIds: string[]): boolean {
+  const now = Date.now();
+  const m = recentQueuedByUser.get(userId);
+  if (!m) return false;
+  return productIds.some(id => (m.get(id) ?? 0) > now - DEDUP_TTL_MS);
+}
+
+function markQueued(userId: string, productIds: string[]) {
+  const now = Date.now();
+  if (!recentQueuedByUser.has(userId)) recentQueuedByUser.set(userId, new Map());
+  const m = recentQueuedByUser.get(userId)!;
+  productIds.forEach(id => m.set(id, now));
+}
+
 let serverPort = 3000;
 let cronSecret = '';
 
@@ -331,6 +350,13 @@ async function processMessage(userId: string, urls: string[]) {
   const products = (await Promise.all(urls.map(u => fetchProduct(userId, u, headers)))).filter(Boolean);
   if (!products.length) return;
 
+  // Dedup: stessi prodotti già accodati negli ultimi 5 minuti (es. stesso link in 2 messaggi distinti)
+  const productIds = products.map((p: any) => (p.asin ?? p.productId ?? '').toString()).filter(Boolean);
+  if (productIds.length > 0 && wasRecentlyQueued(userId, productIds)) {
+    console.log(`[tg-monitor] ${userId} — dedup skip: prodotti già in coda (${productIds.join(',')})`);
+    return;
+  }
+
   console.log(`[tg-monitor] ${userId} — ${isMulti ? 'post multiplo' : 'post singolo'} con ${products.length}/${urls.length} prodotti`);
 
   // Costruisce e salva ogni post
@@ -388,6 +414,9 @@ async function processMessage(userId: string, urls: string[]) {
     console.warn('[tg-monitor] errore aggiunta coda:', await queueRes.text());
     return;
   }
+
+  // Registra prodotti come "accodati di recente" per dedup
+  if (productIds.length > 0) markQueued(userId, productIds);
 
   const titles = savedPosts.map((p: any) => p.title?.slice(0, 40)).join(' + ');
   console.log(`[tg-monitor] ${userId} — ✅ ${isMulti ? 'multiplo' : 'singolo'} in coda: "${titles}"`);
