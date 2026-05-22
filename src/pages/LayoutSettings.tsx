@@ -912,8 +912,16 @@ function TemplateSection() {
     if (key === 'overlay') {
       const img = new Image();
       img.onload = () => {
-        const w = Math.min(1320, Math.max(600, img.naturalWidth));
-        const h = Math.min(800, Math.max(600, img.naturalHeight));
+        // Scala proporzionalmente: lato lungo max 2048px (Telegram comprime oltre, Safari crasha)
+        // Rispetta anche il limite Telegram: aspect ratio max 20:1
+        const MAX_SIDE = 2048;
+        const longest = Math.max(img.naturalWidth, img.naturalHeight);
+        const scale = longest > MAX_SIDE ? MAX_SIDE / longest : 1;
+        let w = Math.round(img.naturalWidth * scale);
+        let h = Math.round(img.naturalHeight * scale);
+        // Corregge aspect ratio estremi (limite Telegram 20:1)
+        if (w / h > 20) h = Math.round(w / 20);
+        if (h / w > 20) w = Math.round(h / 20);
         updateTpl({ canvasW: w, canvasH: h });
       };
       img.src = b64 as string;
