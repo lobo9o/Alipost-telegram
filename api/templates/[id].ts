@@ -22,7 +22,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // PUT — update config column
   const { id: _id, ...config } = req.body ?? {};
   const [row] = await sql`
-    UPDATE templates SET config = ${sql.json(config)}
+    UPDATE templates SET config = ${sql.json(config)}, updated_at = NOW()
     WHERE id = ${id} AND user_id = ${userId}
     RETURNING id, config
   `;

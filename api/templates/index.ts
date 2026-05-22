@@ -7,13 +7,29 @@ function parseConfig(raw: unknown, id: string) {
   return { id, ...cfg };
 }
 
+// Lazy migration — eseguita una volta per processo
+let migrated = false;
+async function ensureUpdatedAt() {
+  if (migrated) return;
+  await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`.catch(() => {});
+  migrated = true;
+}
+
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['GET', 'POST'], req, res)) return;
   const userId = requireUserId(req, res);
   if (!userId) return;
 
+  await ensureUpdatedAt();
+
   if (req.method === 'GET') {
-    const rows = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} ORDER BY created_at DESC`;
+    // updated_at DESC NULLS LAST → l'ultimo modificato dall'utente viene primo
+    // Poi canvasW NOT NULL → preferisce template con dimensioni configurate
+    // Poi created_at DESC → tra pari, il più recente
+    const rows = await sql`
+      SELECT id, config FROM templates WHERE user_id = ${userId}
+      ORDER BY updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC
+    `;
     if ((rows as any[]).length === 0) { res.json([]); return; }
 
     const result: any[] = [];
@@ -23,7 +39,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         cfg.storeAmazon = cfg.store;
         cfg.storeAliexpress = cfg.store;
         const { id: _id, ...configToSave } = cfg;
-        await sql`UPDATE templates SET config = ${sql.json(configToSave)} WHERE id = ${r.id} AND user_id = ${userId}`.catch(() => {});
+        await sql`UPDATE templates SET config = ${sql.json(configToSave)}, updated_at = NOW() WHERE id = ${r.id} AND user_id = ${userId}`.catch(() => {});
       }
       result.push(cfg);
     }
