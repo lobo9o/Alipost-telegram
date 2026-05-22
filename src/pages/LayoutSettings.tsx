@@ -745,10 +745,11 @@ const FONTS = [
   'The Blacklist',
 ];
 
-function TextElPanel({ el, onUpdate, showTextInput = false }: {
+function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024 }: {
   el: TextEl;
   onUpdate: (ch: Partial<TextEl>) => void;
   showTextInput?: boolean;
+  canvasH?: number;
 }) {
   return (
     <>
@@ -759,7 +760,10 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
         </div>
       )}
 
-      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50, textAnchor: 'center' })} />
+      <DragHint x={el.x} y={el.y} onCenter={() => {
+        const yCenter = Math.round(Math.max(0, 50 - (el.fontSize / canvasH) * 100));
+        onUpdate({ x: 50, y: yCenter, textAnchor: 'center' });
+      }} />
 
       {/* Direzione crescita testo */}
       <div style={{ marginBottom: 12 }}>
@@ -979,7 +983,7 @@ function TemplateSection() {
     }
     if (isTextKey(activePanel)) {
       const el = tpl[activePanel] as TextEl;
-      return { value: el.fontSize, min: 10, max: 80, unit: 'px' as const, onChange: (v: number) => updateText(activePanel, { fontSize: v }) };
+      return { value: el.fontSize, min: 10, max: 300, unit: 'px' as const, onChange: (v: number) => updateText(activePanel, { fontSize: v }) };
     }
     return null;
   };
@@ -987,8 +991,8 @@ function TemplateSection() {
   const handleArrowMove = (dx: number, dy: number) => {
     if (!activePanel) return;
     const step = arrowStep;
-    const clampPos = (v: number) => Math.min(95, Math.max(0, parseFloat((v + dx * step).toFixed(1))));
-    const clampPosY = (v: number) => Math.min(95, Math.max(0, parseFloat((v + dy * step).toFixed(1))));
+    const clampPos = (v: number) => Math.min(100, Math.max(0, parseFloat((v + dx * step).toFixed(1))));
+    const clampPosY = (v: number) => Math.min(100, Math.max(0, parseFloat((v + dy * step).toFixed(1))));
     if (activePanel === 'product') {
       updateProduct({ x: clampPos(tpl.product.x), y: clampPosY(tpl.product.y) });
     } else if (activePanel === 'overlay') {
@@ -1136,6 +1140,7 @@ function TemplateSection() {
               el={tpl[activePanel] as TextEl}
               onUpdate={ch => updateText(activePanel as 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom', ch)}
               showTextInput={activePanel === 'testoCustom'}
+              canvasH={tpl.canvasH ?? 1024}
             />
           )}
           {activePanel === 'terminata' && <TerminataPanel />}
