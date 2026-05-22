@@ -423,7 +423,7 @@ async function generateTemplateImageServer(
           const el = template.overlay;
           // contain rettangolare: box width×height proporzionato al canvas
           const boxW = Math.round((el.size / 100) * sW); const boxH = Math.round((el.size / 100) * sH);
-          const resized = await sharp(buf).resize(boxW, boxH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+          const resized = await sharp(buf).resize(boxW, boxH, { fit: 'inside' }).png().toBuffer();
           composites.push({ input: resized, left: Math.round((el.x / 100) * sW), top: Math.round((el.y / 100) * sH) });
         }
       } catch (e: any) { console.warn('[tpl] overlay:', e.message); }
@@ -922,7 +922,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const aliCurrSym2 = ALI_CURRENCY_SYM[country] ?? '€';
 
           // Carica template e layout utente (come per Amazon)
-          const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at DESC LIMIT 1`;
+          const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1`;
           const aliTemplateId = aliTplRow[0]?.id ?? 'tpl1';
           const aliTemplateCfg = parseTemplateCfg(aliTplRow[0]);
           const aliLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo IN ('aliexpress', 'normal') ORDER BY tipo = 'aliexpress' DESC, created_at ASC LIMIT 1`;
@@ -940,22 +940,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             shipFromCountry: String(candidate.product_country || '').toUpperCase() || undefined,
           };
 
-          // Genera immagine template server-side
-          if (aliTemplateCfg && candidate.product_main_image_url) {
-            const genImg = await generateTemplateImageServer(aliTemplateCfg, String(candidate.product_main_image_url), 'aliexpress', {
-              prezzo:           `${aliCurrSym2}${salePrice.toFixed(2)}`,
-              prezzoPrecedente: `${aliCurrSym2}${origPrice.toFixed(2)}`,
-              sconto:           `-${discPct}%`,
-            }).catch(() => null);
-            if (genImg) post = { ...post, generatedImage: genImg };
-          }
-
           const _aliAutoId = crypto.randomUUID();
-          await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_aliAutoId}, ${userId}, ${sql.json([post])}, 'published', true)`.catch(e => console.warn('[autopost] ali auto-queue insert:', e.message));
-          queueItem = { id: _aliAutoId, posts: [post], silenzioso: null };
-          postsArr  = [post];
-          isMulti   = false;
-          console.log(`[autopost] auto-search trovato: ${post.title?.slice(0, 50)}`);
+          await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_aliAutoId}, ${userId}, ${sql.json([post])}, 'draft', true)`.catch(e => console.warn('[autopost] ali auto-queue insert:', e.message));
+          console.log(`[autopost] auto-search in coda (draft): ${post.title?.slice(0, 50)}`);
+          continue;
         } else {
           console.log(`[autopost] auto-search: nessun prodotto nuovo trovato per userId=${userId}`);
         }
@@ -1075,7 +1063,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         if (multiCandidates.length < 2) multiCandidates = candidates;
         multiCandidates = multiCandidates.slice(0, multiSize);
 
-        const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at DESC LIMIT 1`;
+        const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1`;
         const mTemplateId = mTplRow[0]?.id ?? 'tpl1';
         const mTemplateCfg = parseTemplateCfg(mTplRow[0]);
         const mLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`.catch(() => []);
@@ -1094,25 +1082,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           cat: cand.category || undefined,
         }));
 
-        // Genera immagine del primo prodotto per il post multiplo
-        const fc = multiCandidates[0];
-        const fcSym = CSYM_M[String(fc.currency ?? 'EUR').toUpperCase()] ?? '€';
-        if (mTemplateCfg && fc.image) {
-          const genImg = await generateTemplateImageServer(mTemplateCfg, String(fc.image), 'amazon', {
-            prezzo: `${fcSym}${Number(fc.discounted_price).toFixed(2)}`,
-            prezzoPrecedente: `${fcSym}${Number(fc.original_price).toFixed(2)}`,
-            sconto: `-${Number(fc.discount_percent)}%`,
-          }).catch(() => null);
-          if (genImg) multiPosts[0] = { ...multiPosts[0], generatedImage: genImg };
-        }
-
-        post = multiPosts[0];
-        postsArr = multiPosts;
-        isMulti = true;
         const _multiAutoId = crypto.randomUUID();
-        await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_multiAutoId}, ${userId}, ${sql.json(multiPosts)}, 'published', true)`.catch(e => console.warn('[autopost] multi auto-queue insert:', e.message));
-        queueItem = { id: _multiAutoId, posts: multiPosts, silenzioso: null, _autoMulti: true };
-        console.log(`[autopost] Amazon multi-post auto: ${multiPosts.length} prodotti`);
+        await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_multiAutoId}, ${userId}, ${sql.json(multiPosts)}, 'draft', true)`.catch(e => console.warn('[autopost] multi auto-queue insert:', e.message));
+        console.log(`[autopost] Amazon multi-post in coda (draft): ${multiPosts.length} prodotti`);
+        continue;
       } else {
 
       const amzCandidate = candidates[0] ?? null;
@@ -1124,7 +1097,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ORDER BY tipo = 'amazon' DESC, created_at ASC LIMIT 1
         `;
         const layoutId = amzLayouts[0]?.id ?? '';
-        const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, created_at DESC LIMIT 1`;
+        const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1`;
         const templateId  = tplRow[0]?.id ?? 'tpl1';
         const templateCfg = parseTemplateCfg(tplRow[0]);
 
@@ -1174,25 +1147,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           cat:        amzCandidate.category || undefined,
         };
 
-        // Genera immagine template server-side (sharp)
-        if (templateCfg && amzCandidate.image) {
-          const genImg = await generateTemplateImageServer(templateCfg, String(amzCandidate.image), 'amazon', {
-            prezzo:           `${currSym}${discountedPrice.toFixed(2)}`,
-            prezzoPrecedente: `${currSym}${originalPrice.toFixed(2)}`,
-            sconto:           `-${discountPercent}%`,
-          });
-          if (genImg) post = { ...post, generatedImage: genImg };
-        }
-
         const _amzAutoId = crypto.randomUUID();
-        await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_amzAutoId}, ${userId}, ${sql.json([post])}, 'published', true)`.catch(e => console.warn('[autopost] amz auto-queue insert:', e.message));
-        queueItem = { id: _amzAutoId, posts: [post], silenzioso: null };
-        postsArr  = [post];
-        isMulti   = false;
+        await sql`INSERT INTO autopost_queue (id, user_id, posts, status, auto) VALUES (${_amzAutoId}, ${userId}, ${sql.json([post])}, 'draft', true)`.catch(e => console.warn('[autopost] amz auto-queue insert:', e.message));
         const scoreLog = sortMode === 'score'
           ? ` score=${computeScore({ discountPercent, reviewRating: amzCandidate.review_rating, reviewCount: amzCandidate.review_count }, { discount: wDiscount, rating: wRating, reviews: wReviews }).toFixed(2)}`
           : '';
-        console.log(`[autopost] Amazon pool: ${post.title?.slice(0, 50)} (${discountPercent}%${scoreLog})`);
+        console.log(`[autopost] Amazon pool in coda (draft): ${post.title?.slice(0, 50)} (${discountPercent}%${scoreLog})`);
+        continue;
       } else {
         console.log(`[autopost] Amazon pool vuoto o tutti già pubblicati userId=${userId}`);
       }
@@ -1235,7 +1196,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const [pubTpl] = await sql`
         SELECT id, config FROM templates WHERE user_id = ${userId}
           AND tipo NOT IN ('historical_low')
-        ORDER BY (tipo = 'normal') DESC, created_at DESC LIMIT 1
+        ORDER BY (tipo = 'normal') DESC, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
       `.catch(() => [null]);
 
       if (pubTpl) {
