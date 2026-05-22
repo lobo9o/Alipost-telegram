@@ -107,12 +107,19 @@ export async function generatePostImage(
     } catch { /* skip on error */ }
   }
 
-  // Overlay PNG
+  // Overlay PNG — contain rettangolare: box usa canvasW×canvasH come la preview CSS
   if (template.overlay.enabled && template.overlay.src) {
     try {
       const img = await loadImage(template.overlay.src);
       const el = template.overlay;
-      ctx.drawImage(img, (el.x / 100) * canvasW, (el.y / 100) * canvasH, (el.size / 100) * canvasW, (el.size / 100) * canvasH);
+      const boxX = (el.x / 100) * canvasW;
+      const boxY = (el.y / 100) * canvasH;
+      const boxW = (el.size / 100) * canvasW;
+      const boxH = (el.size / 100) * canvasH;
+      const ratio = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight);
+      const dw = img.naturalWidth * ratio;
+      const dh = img.naturalHeight * ratio;
+      ctx.drawImage(img, boxX + (boxW - dw) / 2, boxY + (boxH - dh) / 2, dw, dh);
     } catch { /* skip */ }
   }
 

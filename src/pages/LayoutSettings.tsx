@@ -922,7 +922,9 @@ function TemplateSection() {
         // Corregge aspect ratio estremi (limite Telegram 20:1)
         if (w / h > 20) h = Math.round(w / 20);
         if (h / w > 20) w = Math.round(h / 20);
+        // Reset overlay a dimensione piena: riempie il canvas senza bordi bianchi
         updateTpl({ canvasW: w, canvasH: h });
+        updateImg('overlay', { x: 0, y: 0, size: 100 });
       };
       img.src = b64 as string;
     }
