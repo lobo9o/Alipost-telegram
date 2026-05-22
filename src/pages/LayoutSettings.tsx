@@ -633,7 +633,6 @@ function ProductPanel({ el, onUpdate }: {
     <>
       <InfoBanner>📦 Riquadro dove verrà inserita l'immagine Amazon/AliExpress. Usale frecce sull'anteprima per spostarlo e usa 🔍 per ridimensionarlo.</InfoBanner>
       <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
-      <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={20} max={100} label="DIMENSIONE RIQUADRO" />
     </>
   );
 }
@@ -646,7 +645,6 @@ function OverlayImgPanel({ el, onUpdate, onFile }: {
   return (
     <>
       <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
-      <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={10} max={100} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
         🖼️ {el.src ? '✓ Overlay caricato — cambia' : 'Carica overlay PNG'}
         <input type="file" accept="image/png,image/webp" style={{ display: 'none' }}
@@ -668,7 +666,6 @@ function BadgeImgPanel({ el, onUpdate, onFile }: {
   return (
     <>
       <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
-      <ZoomControls value={el.size} onChange={v => onUpdate({ size: v })} min={5} max={50} />
       <label className="btn bs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', justifyContent: 'center', marginBottom: 6 }}>
         🏆 {el.src ? '✓ Icona caricata — cambia' : 'Carica icona badge'}
         <input type="file" accept="image/*" style={{ display: 'none' }}
@@ -713,7 +710,6 @@ function StorePanel({ tpl, onUpdate, onPreviewPlatform }: {
         ))}
       </div>
       <DragHint x={el.x} y={el.y} onCenter={() => onUpdate(key, { x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
-      <ZoomControls value={el.size} onChange={v => onUpdate(key, { size: v })} min={5} max={40} />
     </>
   );
 }
@@ -937,6 +933,19 @@ function TemplateSection() {
   const isTextKey = (k: ComponentKey): k is 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' =>
     ['prezzo', 'prezzoPrecedente', 'sconto', 'testoCustom'].includes(k);
 
+  const getActiveZoom = (): { value: number; min: number; max: number; onChange: (v: number) => void } | null => {
+    if (!activePanel || activePanel === 'terminata' || isTextKey(activePanel)) return null;
+    if (activePanel === 'product') return { value: tpl.product.size, min: 20, max: 100, onChange: v => updateProduct({ size: v }) };
+    if (activePanel === 'overlay') return { value: tpl.overlay.size, min: 10, max: 100, onChange: v => updateImg('overlay', { size: v }) };
+    if (activePanel === 'badge') return { value: tpl.badge.size, min: 5, max: 50, onChange: v => updateImg('badge', { size: v }) };
+    if (activePanel === 'store') {
+      const k = previewPlatform === 'amazon' ? 'storeAmazon' : 'storeAliexpress';
+      const el = previewPlatform === 'amazon' ? tpl.storeAmazon : tpl.storeAliexpress;
+      return { value: el.size, min: 5, max: 40, onChange: v => updateImg(k, { size: v }) };
+    }
+    return null;
+  };
+
   const handleArrowMove = (dx: number, dy: number) => {
     if (!activePanel) return;
     const step = arrowStep;
@@ -1044,17 +1053,30 @@ function TemplateSection() {
         onArrowMove={activePanel && activePanel !== 'terminata' ? handleArrowMove : undefined}
       />
 
-      {/* Selettore step frecce */}
-      {activePanel && activePanel !== 'terminata' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 16px 0' }}>
-          <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0 }}>Passo:</span>
-          {[0.5, 1, 3, 5, 10].map(s => (
-            <button key={s} className={`btn bsm ${arrowStep === s ? 'bp' : 'bgh'}`}
-              style={{ fontSize: 10, padding: '2px 8px' }}
-              onClick={() => setArrowStep(s)}>{s}%</button>
-          ))}
-        </div>
-      )}
+      {/* Selettore step + zoom sulla stessa riga */}
+      {activePanel && activePanel !== 'terminata' && (() => {
+        const zoom = getActiveZoom();
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 16px 0', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0 }}>Passo:</span>
+            {[0.5, 1, 3, 5, 10].map(s => (
+              <button key={s} className={`btn bsm ${arrowStep === s ? 'bp' : 'bgh'}`}
+                style={{ fontSize: 10, padding: '2px 8px' }}
+                onClick={() => setArrowStep(s)}>{s}%</button>
+            ))}
+            {zoom && (
+              <>
+                <div style={{ width: 1, height: 16, background: 'var(--bd)', margin: '0 2px', flexShrink: 0 }} />
+                <button className="btn bgh bsm" style={{ padding: '2px 10px' }}
+                  onClick={() => zoom.onChange(Math.max(zoom.min, zoom.value - 2))}>🔍−</button>
+                <span style={{ fontSize: 11, color: 'var(--t2)', width: 30, textAlign: 'center' }}>{zoom.value}%</span>
+                <button className="btn bgh bsm" style={{ padding: '2px 10px' }}
+                  onClick={() => zoom.onChange(Math.min(zoom.max, zoom.value + 2))}>🔍+</button>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Pannello attivo — frecce subito sotto l'anteprima */}
       {activePanel && (
