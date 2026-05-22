@@ -631,7 +631,6 @@ function ProductPanel({ el, onUpdate }: {
 }) {
   return (
     <>
-      <InfoBanner>📦 Riquadro dove verrà inserita l'immagine Amazon/AliExpress. Usale frecce sull'anteprima per spostarlo e usa 🔍 per ridimensionarlo.</InfoBanner>
       <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: Math.round((100 - el.size) / 2), y: Math.round((100 - el.size) / 2) })} />
     </>
   );
@@ -753,7 +752,7 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
         </div>
       )}
 
-      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50 })} />
+      <DragHint x={el.x} y={el.y} onCenter={() => onUpdate({ x: 50, y: 50, textAnchor: 'center' })} />
 
       {/* Direzione crescita testo */}
       <div style={{ marginBottom: 12 }}>
@@ -766,14 +765,6 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
           <button className={`btn bsm ${el.textAnchor === 'right' ? 'bp' : 'bgh'}`}
             style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'right' })}>Destra ▶</button>
         </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>DIMENSIONE FONT</span>
-        <input type="range" min={10} max={80} value={el.fontSize}
-          style={{ flex: 2, accentColor: 'var(--a1)' }}
-          onChange={e => onUpdate({ fontSize: Number(e.target.value) })} />
-        <span style={{ fontSize: 11, color: 'var(--t2)', width: 32, textAlign: 'right' }}>{el.fontSize}px</span>
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -834,8 +825,8 @@ function TextElPanel({ el, onUpdate, showTextInput = false }: {
 type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store' | 'terminata';
 
 const COMP_INFO: Record<ComponentKey, string> = {
-  product:          '📦 Riquadro dove apparirà la foto del prodotto. Spostalo con le frecce e ridimensionalo con lo slider.',
-  overlay:          '🖼️ Immagine sovrapposta (cornice, sfondo decorativo). Carica un PNG con trasparenza. Spostalo e ridimensionalo.',
+  product:          '📦 Riquadro dove verrà inserita la foto del prodotto Amazon/AliExpress. Usa le frecce sull\'anteprima per spostarlo e 🔍 per ridimensionarlo.',
+  overlay:          '🖼️ Immagine sovrapposta (cornice, sfondo decorativo). Carica un PNG con trasparenza. Dimensioni canvas: min 600×600, max 1320×800 — si adatta automaticamente alle dimensioni dell\'overlay caricato.',
   badge:            '🏆 Icona visibile solo sui prodotti al minimo storico. Viene disegnata sopra tutti gli altri layer. Carica un PNG e posizionalo.',
   prezzo:           '💰 Prezzo scontato — inserito automaticamente dal post. Spostalo, scegli font e colore.',
   prezzoPrecedente: '📉 Prezzo precedente (barrato) — inserito automaticamente. Puoi cambiare il colore della barra barrata separatamente.',
@@ -933,15 +924,19 @@ function TemplateSection() {
   const isTextKey = (k: ComponentKey): k is 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' =>
     ['prezzo', 'prezzoPrecedente', 'sconto', 'testoCustom'].includes(k);
 
-  const getActiveZoom = (): { value: number; min: number; max: number; onChange: (v: number) => void } | null => {
-    if (!activePanel || activePanel === 'terminata' || isTextKey(activePanel)) return null;
-    if (activePanel === 'product') return { value: tpl.product.size, min: 20, max: 100, onChange: v => updateProduct({ size: v }) };
-    if (activePanel === 'overlay') return { value: tpl.overlay.size, min: 10, max: 100, onChange: v => updateImg('overlay', { size: v }) };
-    if (activePanel === 'badge') return { value: tpl.badge.size, min: 5, max: 50, onChange: v => updateImg('badge', { size: v }) };
+  const getActiveZoom = (): { value: number; min: number; max: number; unit: string; onChange: (v: number) => void } | null => {
+    if (!activePanel || activePanel === 'terminata') return null;
+    if (activePanel === 'product') return { value: tpl.product.size, min: 20, max: 100, unit: '%' as const, onChange: v => updateProduct({ size: v }) };
+    if (activePanel === 'overlay') return { value: tpl.overlay.size, min: 10, max: 100, unit: '%' as const, onChange: v => updateImg('overlay', { size: v }) };
+    if (activePanel === 'badge') return { value: tpl.badge.size, min: 5, max: 50, unit: '%' as const, onChange: v => updateImg('badge', { size: v }) };
     if (activePanel === 'store') {
       const k = previewPlatform === 'amazon' ? 'storeAmazon' : 'storeAliexpress';
       const el = previewPlatform === 'amazon' ? tpl.storeAmazon : tpl.storeAliexpress;
-      return { value: el.size, min: 5, max: 40, onChange: v => updateImg(k, { size: v }) };
+      return { value: el.size, min: 5, max: 40, unit: '%' as const, onChange: v => updateImg(k, { size: v }) };
+    }
+    if (isTextKey(activePanel)) {
+      const el = tpl[activePanel] as TextEl;
+      return { value: el.fontSize, min: 10, max: 80, unit: 'px' as const, onChange: (v: number) => updateText(activePanel, { fontSize: v }) };
     }
     return null;
   };
@@ -1069,7 +1064,7 @@ function TemplateSection() {
                 <div style={{ width: 1, height: 16, background: 'var(--bd)', margin: '0 2px', flexShrink: 0 }} />
                 <button className="btn bgh bsm" style={{ padding: '2px 10px' }}
                   onClick={() => zoom.onChange(Math.max(zoom.min, zoom.value - 2))}>🔍−</button>
-                <span style={{ fontSize: 11, color: 'var(--t2)', width: 30, textAlign: 'center' }}>{zoom.value}%</span>
+                <span style={{ fontSize: 11, color: 'var(--t2)', width: 36, textAlign: 'center' }}>{zoom.value}{zoom.unit ?? '%'}</span>
                 <button className="btn bgh bsm" style={{ padding: '2px 10px' }}
                   onClick={() => zoom.onChange(Math.min(zoom.max, zoom.value + 2))}>🔍+</button>
               </>
