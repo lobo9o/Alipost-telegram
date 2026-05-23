@@ -289,11 +289,14 @@ async function startUser(userId: string) {
 
 // Recupera layout e template dal DB per l'utente
 async function getUserLayouts(userId: string) {
+  await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`.catch(() => {});
+
   const layouts = await sql<{ id: string; tipo: string; active: boolean }[]>`
     SELECT id, tipo, active FROM layouts WHERE user_id = ${userId} ORDER BY created_at ASC
   `;
   const templates = await sql<{ id: string }[]>`
-    SELECT id FROM templates WHERE user_id = ${userId} ORDER BY created_at ASC LIMIT 1
+    SELECT id FROM templates WHERE user_id = ${userId}
+    ORDER BY updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
   `;
   const templateId = templates[0]?.id ?? '';
 
@@ -301,6 +304,7 @@ async function getUserLayouts(userId: string) {
     if (multi) {
       const m = layouts.find(l => l.tipo === 'multi' && l.active);
       if (m) return m.id;
+      return layouts.find(l => l.tipo === 'multi')?.id ?? '';
     }
     const order = platform === 'aliexpress'
       ? ['aliexpress', 'normal', 'amazon']
@@ -309,7 +313,10 @@ async function getUserLayouts(userId: string) {
       const match = layouts.find(l => l.tipo === tipo && l.active);
       if (match) return match.id;
     }
-    return layouts.find(l => l.active)?.id ?? layouts[0]?.id ?? '';
+    // Fallback per post singoli: mai restituire il layout multi
+    return layouts.find(l => l.active && l.tipo !== 'multi')?.id
+      ?? layouts.find(l => l.tipo !== 'multi')?.id
+      ?? '';
   };
 
   return { getLayoutId, templateId };

@@ -1283,12 +1283,27 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     try {
       // Carica layout testo (con eventuale tastiera associata)
-      // Per post multiplo usa il layout di tipo 'multi'; altrimenti usa layoutId del post
-      const [layoutRow] = isMulti
-        ? await sql`SELECT body, keyboard_id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`
-        : post.layoutId
-          ? await sql`SELECT body, keyboard_id FROM layouts WHERE id = ${post.layoutId} AND user_id = ${userId}`
-          : [null];
+      // Per post multiplo usa il layout di tipo 'multi'; altrimenti usa layoutId del post (mai multi)
+      let layoutRow: any = null;
+      if (isMulti) {
+        [layoutRow] = await sql`SELECT body, keyboard_id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`;
+      } else if (post.layoutId) {
+        // Prende il layout per ID solo se NON è di tipo multi
+        [layoutRow] = await sql`SELECT body, keyboard_id FROM layouts WHERE id = ${post.layoutId} AND user_id = ${userId} AND tipo != 'multi'`;
+        // Fallback: se layoutId punta a un multi, seleziona il layout singolo corretto
+        if (!layoutRow) {
+          const platform = String(post.platform ?? 'amazon');
+          [layoutRow] = await sql`
+            SELECT body, keyboard_id FROM layouts WHERE user_id = ${userId}
+              AND tipo IN ('amazon', 'normal', 'aliexpress')
+            ORDER BY
+              (tipo = ${platform === 'aliexpress' ? 'aliexpress' : 'amazon'}) DESC,
+              (tipo = 'normal') DESC,
+              created_at ASC
+            LIMIT 1
+          `.catch(() => [null]);
+        }
+      }
 
       // Tastiera: usa quella del layout se impostata, altrimenti quella del post
       const effectiveKeyboardId = layoutRow?.keyboard_id || post.keyboardId;
