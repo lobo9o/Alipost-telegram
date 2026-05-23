@@ -145,7 +145,7 @@ export async function generatePostImage(
     try {
       const img = await loadImage(template.badge.src);
       const el = template.badge;
-      const w = (el.size / 100) * canvasRef;
+      const w = (el.size / 100) * canvasW;
       const h = (img.naturalHeight / img.naturalWidth) * w;
       ctx.drawImage(img, (el.x / 100) * canvasW, (el.y / 100) * canvasH, w, h);
     } catch { /* skip */ }

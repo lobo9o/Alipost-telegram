@@ -356,7 +356,7 @@ async function generateTemplateImageServer(
           const badgeBuf = src.startsWith('http') ? (await fetchImgBufC(src) ?? null) : null;
           const badgeImg = await loadImage(badgeBuf ?? src);
           const el = template.badge;
-          const w = ((el.size ?? 30) / 100) * canvasRef;
+          const w = ((el.size ?? 30) / 100) * canvasW;
           const h = (badgeImg.height / badgeImg.width) * w;
           ctx.drawImage(badgeImg, ((el.x ?? 0) / 100) * canvasW, ((el.y ?? 0) / 100) * canvasH, w, h);
         } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
@@ -484,7 +484,7 @@ async function generateTemplateImageServer(
         const buf = await bufFromSrc(String(template.badge.src));
         if (buf) {
           const el = template.badge; const meta = await sharp(buf).metadata();
-          const w = Math.round(((el.size ?? 30) / 100) * sRef); const h = Math.round(w * ((meta.height ?? 1) / (meta.width ?? 1)));
+          const w = Math.round(((el.size ?? 30) / 100) * sW); const h = Math.round(w * ((meta.height ?? 1) / (meta.width ?? 1)));
           composites.push({ input: await sharp(buf).resize(w, h).png().toBuffer(), left: Math.round(((el.x ?? 0) / 100) * sW), top: Math.round(((el.y ?? 0) / 100) * sH) });
         }
       } catch (e: any) { console.warn('[tpl] hl-badge:', e.message); }
