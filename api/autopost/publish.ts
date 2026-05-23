@@ -504,6 +504,63 @@ async function generateTemplateImageServer(
   }
 }
 
+// Genera immagine composita (griglia) per post multipli lato server — replica la logica
+// di generateMultiPostImage (imageCompose.ts) usando sharp invece di canvas browser.
+async function generateMultiImageServer(imageUrls: string[]): Promise<string | null> {
+  const n = imageUrls.filter(Boolean).length;
+  if (n === 0) return null;
+  try {
+    const sharpMod = await import('sharp').catch(() => null) as any;
+    if (!sharpMod) return null;
+    const sharp = (sharpMod.default ?? sharpMod) as any;
+
+    const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
+    const rows = Math.ceil(n / cols);
+    const cellSize = Math.round(1024 / cols);
+    const canvasW = cellSize * cols;
+    const canvasH = cellSize * rows;
+    const PAD = 4;
+
+    async function fetchBuf(url: string): Promise<Buffer | null> {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' } });
+        clearTimeout(t);
+        if (!r.ok) return null;
+        return Buffer.from(await r.arrayBuffer());
+      } catch { return null; }
+    }
+
+    const base = await sharp({ create: { width: canvasW, height: canvasH, channels: 3, background: { r: 255, g: 255, b: 255 } } }).png().toBuffer();
+    const composites: any[] = [];
+    const validUrls = imageUrls.filter(Boolean);
+
+    for (let i = 0; i < validUrls.length; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const itemsInRow = Math.min(cols, validUrls.length - row * cols);
+      const rowOffsetX = Math.floor(((cols - itemsInRow) * cellSize) / 2);
+      const cellX = rowOffsetX + col * cellSize;
+      const cellY = row * cellSize;
+      const buf = await fetchBuf(validUrls[i]);
+      if (!buf) continue;
+      const availW = cellSize - PAD * 2;
+      const availH = cellSize - PAD * 2;
+      const { data, info } = await sharp(buf).resize(availW, availH, { fit: 'inside' }).toBuffer({ resolveWithObject: true });
+      const left = cellX + PAD + Math.round((availW - info.width) / 2);
+      const top  = cellY + PAD + Math.round((availH - info.height) / 2);
+      composites.push({ input: data, left, top });
+    }
+
+    const result = await sharp(base).composite(composites).jpeg({ quality: 88 }).toBuffer();
+    return `data:image/jpeg;base64,${result.toString('base64')}`;
+  } catch (e: any) {
+    console.warn('[multiImg] errore composita:', e.message);
+    return null;
+  }
+}
+
 function safeCaption(html: string, maxLen: number): string {
   if (html.length <= maxLen) return html;
   const stack: string[] = [];
@@ -1410,6 +1467,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
 
       const channel = channels[0];
+
+      // Per post multipli senza immagine composita: genera griglia server-side
+      if (isMulti && !post.generatedImage) {
+        const multiImgUrls = (postsArr as Record<string, any>[])
+          .map(p => String(p.image ?? ''))
+          .filter(u => u.startsWith('http'));
+        if (multiImgUrls.length > 0) {
+          const composita = await generateMultiImageServer(multiImgUrls);
+          if (composita) {
+            post = { ...post, generatedImage: composita };
+            console.log(`[autopost] immagine composita multi generata (${multiImgUrls.length} prodotti)`);
+          }
+        }
+      }
+
       const hasGeneratedImage = post.generatedImage && String(post.generatedImage).startsWith('data:image/');
       const hasUrlImage = !hasGeneratedImage && post.image && post.image !== 'placeholder.jpg' && String(post.image).startsWith('http');
 

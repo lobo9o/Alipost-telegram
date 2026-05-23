@@ -8,23 +8,24 @@ const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|
 const activeClients = new Map<string, TelegramClient>();
 const activePolls = new Map<string, ReturnType<typeof setInterval>>();
 
-// Dedup prodotti: evita post identici se lo stesso prodotto appare in 2 messaggi ravvicinati
-// userId → Map<productId, timestampMs>
-const recentQueuedByUser = new Map<string, Map<string, number>>();
-const DEDUP_TTL_MS = 5 * 60 * 1000; // 5 minuti
-
-function wasRecentlyQueued(userId: string, productIds: string[]): boolean {
-  const now = Date.now();
-  const m = recentQueuedByUser.get(userId);
-  if (!m) return false;
-  return productIds.some(id => (m.get(id) ?? 0) > now - DEDUP_TTL_MS);
-}
-
-function markQueued(userId: string, productIds: string[]) {
-  const now = Date.now();
-  if (!recentQueuedByUser.has(userId)) recentQueuedByUser.set(userId, new Map());
-  const m = recentQueuedByUser.get(userId)!;
-  productIds.forEach(id => m.set(id, now));
+// Dedup prodotti: controlla sul DB se gli stessi productId sono già in coda
+// (resistente ai riavvii PM2, a differenza della precedente versione in-memory)
+async function wasRecentlyQueuedDB(userId: string, productIds: string[]): Promise<boolean> {
+  if (!productIds.length) return false;
+  try {
+    const recent = await sql<{ posts: unknown }[]>`
+      SELECT posts FROM autopost_queue
+      WHERE user_id = ${userId}
+        AND status IN ('draft', 'published')
+        AND created_at > NOW() - INTERVAL '10 minutes'
+    `;
+    for (const row of recent) {
+      const posts: any[] = typeof row.posts === 'string' ? JSON.parse(row.posts) : (row.posts as any[]) ?? [];
+      const queuedIds = posts.map((p: any) => String(p.productId ?? p.asin ?? '')).filter(Boolean);
+      if (productIds.some(id => queuedIds.includes(id))) return true;
+    }
+  } catch { /* ignora errori DB */ }
+  return false;
 }
 
 let serverPort = 3000;
@@ -357,9 +358,9 @@ async function processMessage(userId: string, urls: string[]) {
   const products = (await Promise.all(urls.map(u => fetchProduct(userId, u, headers)))).filter(Boolean);
   if (!products.length) return;
 
-  // Dedup: stessi prodotti già accodati negli ultimi 5 minuti (es. stesso link in 2 messaggi distinti)
+  // Dedup DB: stessi prodotti già in coda negli ultimi 10 minuti
   const productIds = products.map((p: any) => (p.asin ?? p.productId ?? '').toString()).filter(Boolean);
-  if (productIds.length > 0 && wasRecentlyQueued(userId, productIds)) {
+  if (productIds.length > 0 && await wasRecentlyQueuedDB(userId, productIds)) {
     console.log(`[tg-monitor] ${userId} — dedup skip: prodotti già in coda (${productIds.join(',')})`);
     return;
   }
@@ -422,8 +423,7 @@ async function processMessage(userId: string, urls: string[]) {
     return;
   }
 
-  // Registra prodotti come "accodati di recente" per dedup
-  if (productIds.length > 0) markQueued(userId, productIds);
+  // La coda DB è già aggiornata — nessuna operazione in-memory necessaria
 
   const titles = savedPosts.map((p: any) => p.title?.slice(0, 40)).join(' + ');
   console.log(`[tg-monitor] ${userId} — ✅ ${isMulti ? 'multiplo' : 'singolo'} in coda: "${titles}"`);
