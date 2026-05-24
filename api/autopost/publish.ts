@@ -1240,10 +1240,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
 
     // ── Genera immagine dal template al momento della pubblicazione ───────────
-    // Si applica ai post senza generatedImage (es. da tg-monitor, o auto-ricerca
+    // Si applica ai post singoli senza generatedImage (es. da tg-monitor, o auto-ricerca
     // senza template configurato al momento della creazione).
-    // Garantisce che l'immagine usi sempre il template corrente al publish.
-    if (!post.generatedImage && post.image && String(post.image).startsWith('http')
+    // Per i multi-post la composita viene generata più avanti con generateMultiImageServer.
+    if (!isMulti && !post.generatedImage && post.image && String(post.image).startsWith('http')
         && Number(post.discountedPrice ?? 0) > 0) {
       const CSYM: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
       const currSym = post.platform === 'aliexpress'
@@ -1272,8 +1272,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
-    // ── Controlla minimo storico ──────────────────────────────────────────────
-    if (post.productId && Number(post.discountedPrice ?? 0) > 0) {
+    // ── Controlla minimo storico (solo post singoli) ──────────────────────────
+    if (!isMulti && post.productId && Number(post.discountedPrice ?? 0) > 0) {
       const [histRow] = await sql`
         SELECT MIN(price)::float AS min_price, COUNT(*)::int AS cnt
         FROM price_history WHERE product_id = ${post.productId} AND platform = ${post.platform}
