@@ -243,16 +243,39 @@ async function generateTemplateImageServer(
     try {
       const { createCanvas, loadImage, registerFont } = canvasMod;
 
+      const { existsSync } = await import('fs');
+      const { dirname: _dir, join: _join } = await import('path');
+      const { fileURLToPath: _ftu } = await import('url');
+      const __serverDir = _dir(_ftu(import.meta.url));
+      // Percorso dei font nella cartella build (copiati da public/fonts via npm run build)
+      const fontsDir = _join(__serverDir, '../../build/fonts');
+
       const impactPaths = [
         '/usr/share/fonts/truetype/msttcorefonts/Impact.ttf',
         '/usr/share/fonts/truetype/impact.ttf',
         '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
       ];
       for (const p of impactPaths) {
+        try { if (existsSync(p)) { registerFont(p, { family: 'Impact' }); break; } } catch { /* ignore */ }
+      }
+
+      // Font personalizzati dalla cartella build/fonts
+      const customFonts: Array<{ file: string; family: string; weight?: string; style?: string }> = [
+        { file: 'arial.ttf',        family: 'Arial' },
+        { file: 'ComixLoud.ttf',    family: 'Comix Loud' },
+        { file: 'TheBlacklist.ttf', family: 'The Blacklist' },
+        { file: 'ComixHeavy.woff2', family: 'Comix Heavy' },
+        { file: 'GoboldItalic.woff2', family: 'Gobold Italic', style: 'italic' },
+        { file: 'GothamRounded.woff2', family: 'Gotham Rounded' },
+        { file: 'LemonMilkBold.woff2', family: 'Lemon Milk Bold', weight: 'bold' },
+        { file: 'Milano.woff2', family: 'Milano' },
+        { file: 'EdwardianScriptITC.woff2', family: 'Edwardian Script ITC' },
+      ];
+      for (const f of customFonts) {
         try {
-          const { existsSync } = await import('fs');
-          if (existsSync(p)) { registerFont(p, { family: 'Impact' }); break; }
-        } catch { /* ignore */ }
+          const p = _join(fontsDir, f.file);
+          if (existsSync(p)) registerFont(p, { family: f.family, ...(f.weight ? { weight: f.weight } : {}), ...(f.style ? { style: f.style } : {}) });
+        } catch { /* ignora font mancante */ }
       }
 
       const canvasW = Number(template.canvasW) || 1024;
