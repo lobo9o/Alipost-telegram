@@ -27,6 +27,12 @@ function drawContained(
   ctx.drawImage(img, x + (box - dw) / 2, y + (box - dh) / 2, dw, dh);
 }
 
+function applyCurrPos(text: string, pos?: 'before' | 'after'): string {
+  if (pos !== 'after') return text;
+  const m = text.match(/^([^0-9]+)([\d].*)/);
+  return m ? `${m[2]}${m[1].trimEnd()}` : text;
+}
+
 function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, canvasW: number, canvasH: number) {
   if (!el.enabled || !text) return;
   const x = (el.x / 100) * canvasW;
@@ -135,8 +141,8 @@ export async function generatePostImage(
   }
 
   // Text elements
-  drawTextEl(ctx, template.prezzo, values.prezzo ?? template.prezzo.text, canvasW, canvasH);
-  drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text, canvasW, canvasH);
+  drawTextEl(ctx, template.prezzo, applyCurrPos(values.prezzo ?? template.prezzo.text, template.prezzo.currencyPos), canvasW, canvasH);
+  drawTextEl(ctx, template.prezzoPrecedente, applyCurrPos(values.prezzoPrecedente ?? template.prezzoPrecedente.text, template.prezzoPrecedente.currencyPos), canvasW, canvasH);
   drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text, canvasW, canvasH);
   drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text, canvasW, canvasH);
 
@@ -252,8 +258,8 @@ export async function generateTerminataImage(
     ctx.putImageData(imageData, 0, 0);
   }
 
-  if (config.showPrezzo) drawTextEl(ctx, template.prezzo, values.prezzo ?? template.prezzo.text, canvasW, canvasH);
-  if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, values.prezzoPrecedente ?? template.prezzoPrecedente.text, canvasW, canvasH);
+  if (config.showPrezzo) drawTextEl(ctx, template.prezzo, applyCurrPos(values.prezzo ?? template.prezzo.text, template.prezzo.currencyPos), canvasW, canvasH);
+  if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, applyCurrPos(values.prezzoPrecedente ?? template.prezzoPrecedente.text, template.prezzoPrecedente.currencyPos), canvasW, canvasH);
   if (config.showSconto) drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text, canvasW, canvasH);
   drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text, canvasW, canvasH);
 

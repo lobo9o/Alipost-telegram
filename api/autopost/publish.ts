@@ -85,6 +85,12 @@ function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function applyCurrPos(text: string, pos?: 'before' | 'after'): string {
+  if (pos !== 'after') return text;
+  const m = text.match(/^([^0-9]+)([\d].*)/);
+  return m ? `${m[2]}${m[1].trimEnd()}` : text;
+}
+
 const COUNTRY_IT: Record<string, string> = {
   CN: 'Cina', FR: 'Francia', DE: 'Germania', IT: 'Italia', US: 'USA',
   GB: 'UK', ES: 'Spagna', JP: 'Giappone', KR: 'Corea del Sud',
@@ -373,8 +379,8 @@ async function generateTemplateImageServer(
         ctx.restore();
       };
 
-      drawTextEl(template.prezzo, priceData.prezzo, 'prezzo');
-      drawTextEl(template.prezzoPrecedente, priceData.prezzoPrecedente, 'prezzoPrecedente');
+      drawTextEl(template.prezzo, applyCurrPos(priceData.prezzo, template.prezzo?.currencyPos), 'prezzo');
+      drawTextEl(template.prezzoPrecedente, applyCurrPos(priceData.prezzoPrecedente, template.prezzoPrecedente?.currencyPos), 'prezzoPrecedente');
       drawTextEl(template.sconto, priceData.sconto, 'sconto');
       drawTextEl(template.testoCustom, template.testoCustom?.text ?? '');
 
@@ -501,8 +507,8 @@ async function generateTemplateImageServer(
         svgEls.push(`<line x1="${lx}" y1="${ly}" x2="${lx + approxWidth}" y2="${ly}" stroke="${strkColor}" stroke-width="${lw}" stroke-linecap="round"/>`);
       }
     }
-    textElToSvg(template.prezzo, priceData.prezzo);
-    textElToSvg(template.prezzoPrecedente, priceData.prezzoPrecedente);
+    textElToSvg(template.prezzo, applyCurrPos(priceData.prezzo, template.prezzo?.currencyPos));
+    textElToSvg(template.prezzoPrecedente, applyCurrPos(priceData.prezzoPrecedente, template.prezzoPrecedente?.currencyPos));
     textElToSvg(template.sconto, priceData.sconto);
     textElToSvg(template.testoCustom, template.testoCustom?.text ?? '');
     if (svgEls.length > 0) composites.push({ input: Buffer.from(`<svg width="${sW}" height="${sH}" xmlns="http://www.w3.org/2000/svg">${svgEls.join('')}</svg>`) });

@@ -528,8 +528,8 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrow
 
       {/* Text elements */}
       {([
-        { el: tpl.prezzo as TextEl, text: '€24,99' },
-        { el: tpl.prezzoPrecedente as TextEl, text: '€49,99' },
+        { el: tpl.prezzo as TextEl, text: (tpl.prezzo as TextEl).currencyPos === 'after' ? '24,99€' : '€24,99' },
+        { el: tpl.prezzoPrecedente as TextEl, text: (tpl.prezzoPrecedente as TextEl).currencyPos === 'after' ? '49,99€' : '€49,99' },
         { el: tpl.sconto as TextEl, text: '-50%' },
         { el: tpl.testoCustom as TextEl, text: tpl.testoCustom.text || 'Testo' },
       ]).map(({ el, text }, i) =>
@@ -738,11 +738,12 @@ const FONTS = [
   'The Blacklist',
 ];
 
-function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024 }: {
+function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, showCurrencyPos = false }: {
   el: TextEl;
   onUpdate: (ch: Partial<TextEl>) => void;
   showTextInput?: boolean;
   canvasH?: number;
+  showCurrencyPos?: boolean;
 }) {
   return (
     <>
@@ -770,6 +771,18 @@ function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024 }: {
             style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'right' })}>Destra ▶</button>
         </div>
       </div>
+
+      {showCurrencyPos && (
+        <div style={{ marginBottom: 12 }}>
+          <div className="lbl">POSIZIONE SIMBOLO €</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className={`btn bsm ${(el.currencyPos ?? 'before') === 'before' ? 'bp' : 'bgh'}`}
+              style={{ flex: 1 }} onClick={() => onUpdate({ currencyPos: 'before' })}>€ Sinistra</button>
+            <button className={`btn bsm ${el.currencyPos === 'after' ? 'bp' : 'bgh'}`}
+              style={{ flex: 1 }} onClick={() => onUpdate({ currencyPos: 'after' })}>Destra €</button>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginBottom: 12 }}>
         <div className="lbl">FONT</div>
@@ -1134,6 +1147,7 @@ function TemplateSection() {
               onUpdate={ch => updateText(activePanel as 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom', ch)}
               showTextInput={activePanel === 'testoCustom'}
               canvasH={tpl.canvasH ?? 1024}
+              showCurrencyPos={activePanel === 'prezzo' || activePanel === 'prezzoPrecedente'}
             />
           )}
           {activePanel === 'terminata' && <TerminataPanel />}
