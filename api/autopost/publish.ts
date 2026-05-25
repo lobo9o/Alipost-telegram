@@ -487,6 +487,7 @@ async function generateTemplateImageServer(
       const y = yTop + Math.round(fs * 0.80);
       const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
       const family = String(el.fontFamily || 'Impact').replace(/"/g, '');
+      console.log(`[tpl] textElToSvg: fontFamily="${family}" text="${String(text).slice(0, 20)}"`);
       const fill = String(el.color || '#ffffff');
       const safe = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const common = `x="${xTop}" y="${y}" font-family="${family}, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}"`;
