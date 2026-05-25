@@ -262,8 +262,12 @@ async function generateTemplateImageServer(
       // Font personalizzati dalla cartella build/fonts
       const customFonts: Array<{ file: string; family: string; weight?: string; style?: string }> = [
         { file: 'arial.ttf',        family: 'Arial' },
+        { file: 'Bangers.ttf',      family: 'Bangers' },
         { file: 'ComixLoud.ttf',    family: 'Comix Loud' },
         { file: 'Lobster.ttf',      family: 'Lobster' },
+        { file: 'Montserrat.ttf',   family: 'Montserrat' },
+        { file: 'OpenSans.ttf',     family: 'Open Sans' },
+        { file: 'OpenSans.ttf',     family: 'Open Sans Bold', weight: 'bold' },
         { file: 'TheBlacklist.ttf', family: 'The Blacklist' },
         { file: 'ComixHeavy.woff2', family: 'Comix Heavy' },
         { file: 'GoboldItalic.woff2', family: 'Gobold Italic', style: 'italic' },
