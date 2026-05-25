@@ -512,7 +512,11 @@ async function generateTemplateImageServer(
     textElToSvg(template.prezzoPrecedente, applyCurrPos(priceData.prezzoPrecedente, template.prezzoPrecedente?.currencyPos));
     textElToSvg(template.sconto, priceData.sconto);
     textElToSvg(template.testoCustom, template.testoCustom?.text ?? '');
-    if (svgEls.length > 0) composites.push({ input: Buffer.from(`<svg width="${sW}" height="${sH}" xmlns="http://www.w3.org/2000/svg">${svgEls.join('')}</svg>`) });
+    if (svgEls.length > 0) {
+      const svgStr = `<svg width="${sW}" height="${sH}" xmlns="http://www.w3.org/2000/svg">${svgEls.join('')}</svg>`;
+      console.log('[tpl] SVG fonts:', svgEls.map(s => { const m = s.match(/font-family="([^"]+)"/); return m?.[1] ?? '?'; }).join(' | '));
+      composites.push({ input: Buffer.from(svgStr) });
+    }
 
     if (isHistoricalLow && template.badge?.enabled && template.badge?.src) {
       try {
@@ -1294,6 +1298,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       if (pubTpl) {
         const pubCfg = parseTemplateCfg(pubTpl);
         if (pubCfg) {
+          console.log(`[autopost] template ${pubTpl.id} prezzo.fontFamily=${pubCfg.prezzo?.fontFamily} prezzoPrecedente.fontFamily=${pubCfg.prezzoPrecedente?.fontFamily} sconto.fontFamily=${pubCfg.sconto?.fontFamily}`);
           const genImg = await generateTemplateImageServer(pubCfg, String(post.image), String(post.platform ?? 'amazon'), {
             prezzo:           `${currSym}${Number(post.discountedPrice).toFixed(2)}`,
             prezzoPrecedente: `${currSym}${Number(post.originalPrice).toFixed(2)}`,
