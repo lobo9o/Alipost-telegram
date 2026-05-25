@@ -263,6 +263,7 @@ async function generateTemplateImageServer(
       const customFonts: Array<{ file: string; family: string; weight?: string; style?: string }> = [
         { file: 'arial.ttf',        family: 'Arial' },
         { file: 'ComixLoud.ttf',    family: 'Comix Loud' },
+        { file: 'Lobster.ttf',      family: 'Lobster' },
         { file: 'TheBlacklist.ttf', family: 'The Blacklist' },
         { file: 'ComixHeavy.woff2', family: 'Comix Heavy' },
         { file: 'GoboldItalic.woff2', family: 'Gobold Italic', style: 'italic' },
