@@ -532,8 +532,17 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrow
         { el: tpl.prezzoPrecedente as TextEl, text: (tpl.prezzoPrecedente as TextEl).currencyPos === 'after' ? '49,99€' : '€49,99' },
         { el: tpl.sconto as TextEl, text: '-50%' },
         { el: tpl.testoCustom as TextEl, text: tpl.testoCustom.text || 'Testo' },
-      ]).map(({ el, text }, i) =>
-        el.enabled ? (
+      ]).map(({ el, text }, i) => {
+        if (!el.enabled) return null;
+        const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
+        const decMatch = scale < 1 ? text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/) : null;
+        const content = decMatch
+          ? (<>
+              <span style={{ verticalAlign: 'bottom' }}>{decMatch[1]}</span>
+              <span style={{ fontSize: `${scale}em`, verticalAlign: 'bottom' }}>{decMatch[2]}{decMatch[3]}</span>
+            </>)
+          : text;
+        return (
           <div key={i} style={{
             position: 'absolute',
             ...(el.textAnchor === 'right'
@@ -548,9 +557,9 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrow
             textDecoration: el.strikethrough ? `line-through ${el.strikethroughColor || el.color}` : 'none',
             WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * fontScale}px ${el.strokeColor}` : undefined,
             whiteSpace: 'nowrap', pointerEvents: 'none',
-          }}>{text}</div>
-        ) : null
-      )}
+          }}>{content}</div>
+        );
+      })}
 
       {/* Badge — sopra tutto, incluso il testo (z-index contenuto dentro isolation:isolate) */}
       {tpl.badge.enabled && tpl.badge.src && (
@@ -781,6 +790,19 @@ function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, show
             <button className={`btn bsm ${el.currencyPos === 'after' ? 'bp' : 'bgh'}`}
               style={{ flex: 1 }} onClick={() => onUpdate({ currencyPos: 'after' })}>Destra €</button>
           </div>
+        </div>
+      )}
+
+      {showCurrencyPos && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>DIMENSIONE DECIMALI</span>
+          <input type="range" min={40} max={100} step={5}
+            value={Math.round((el.decimalFontScale ?? 1) * 100)}
+            style={{ flex: 2, accentColor: 'var(--a1)' }}
+            onChange={e => onUpdate({ decimalFontScale: Number(e.target.value) / 100 })} />
+          <span style={{ fontSize: 11, color: 'var(--t2)', width: 32, textAlign: 'right' }}>
+            {Math.round((el.decimalFontScale ?? 1) * 100)}%
+          </span>
         </div>
       )}
 

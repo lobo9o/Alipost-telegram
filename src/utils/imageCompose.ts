@@ -33,39 +33,72 @@ function applyCurrPos(text: string, pos?: 'before' | 'after'): string {
   return m ? `${m[2]}${m[1].trimEnd()}` : text;
 }
 
+function splitAtDecimal(text: string): { main: string; dec: string } | null {
+  const m = text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/);
+  if (!m) return null;
+  return { main: m[1], dec: m[2] + m[3] };
+}
+
 function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, canvasW: number, canvasH: number) {
   if (!el.enabled || !text) return;
   const x = (el.x / 100) * canvasW;
   const y = (el.y / 100) * canvasH;
-  const fs = el.fontSize * 2; // template px → 1024 canvas
-
+  const fs = el.fontSize * 2;
   const anchor = el.textAnchor ?? 'left';
+  const fontStr = (size: number) => `${el.bold ? 'bold ' : ''}${size}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
+  const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
+  const parts = scale < 1 ? splitAtDecimal(text) : null;
+
   ctx.save();
   ctx.textAlign = 'left';
-  ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
   ctx.textBaseline = 'top';
 
-  const textW = ctx.measureText(text).width;
-  const drawX = anchor === 'right' ? x - textW : anchor === 'center' ? x - textW / 2 : x;
+  if (!parts) {
+    ctx.font = fontStr(fs);
+    const textW = ctx.measureText(text).width;
+    const drawX = anchor === 'right' ? x - textW : anchor === 'center' ? x - textW / 2 : x;
+    if (el.strokeEnabled && el.strokeWidth > 0) {
+      ctx.strokeStyle = el.strokeColor; ctx.lineWidth = el.strokeWidth * 2; ctx.lineJoin = 'round';
+      ctx.strokeText(text, drawX, y);
+    }
+    ctx.fillStyle = el.color;
+    ctx.fillText(text, drawX, y);
+    if (el.strikethrough) {
+      ctx.strokeStyle = el.strikethroughColor || el.color;
+      ctx.lineWidth = Math.max(1, fs * 0.06);
+      ctx.beginPath(); ctx.moveTo(drawX, y + fs * 0.55); ctx.lineTo(drawX + textW, y + fs * 0.55); ctx.stroke();
+    }
+  } else {
+    const fsDec = Math.round(fs * scale);
+    ctx.font = fontStr(fs);
+    const mainW = ctx.measureText(parts.main).width;
+    ctx.font = fontStr(fsDec);
+    const decW = ctx.measureText(parts.dec).width;
+    const totalW = mainW + decW;
+    const drawX = anchor === 'right' ? x - totalW : anchor === 'center' ? x - totalW / 2 : x;
+    const decY = y + (fs - fsDec); // allinea i fondi (textBaseline='top')
 
-  if (el.strokeEnabled && el.strokeWidth > 0) {
-    ctx.strokeStyle = el.strokeColor;
-    ctx.lineWidth = el.strokeWidth * 2;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(text, drawX, y);
-  }
+    ctx.font = fontStr(fs);
+    if (el.strokeEnabled && el.strokeWidth > 0) {
+      ctx.strokeStyle = el.strokeColor; ctx.lineWidth = el.strokeWidth * 2; ctx.lineJoin = 'round';
+      ctx.strokeText(parts.main, drawX, y);
+    }
+    ctx.fillStyle = el.color;
+    ctx.fillText(parts.main, drawX, y);
 
-  ctx.fillStyle = el.color;
-  ctx.fillText(text, drawX, y);
+    ctx.font = fontStr(fsDec);
+    if (el.strokeEnabled && el.strokeWidth > 0) {
+      ctx.strokeStyle = el.strokeColor; ctx.lineWidth = el.strokeWidth * 2; ctx.lineJoin = 'round';
+      ctx.strokeText(parts.dec, drawX + mainW, decY);
+    }
+    ctx.fillStyle = el.color;
+    ctx.fillText(parts.dec, drawX + mainW, decY);
 
-  if (el.strikethrough) {
-    const strikeY = y + fs * 0.55;
-    ctx.strokeStyle = el.strikethroughColor || el.color;
-    ctx.lineWidth = Math.max(1, fs * 0.06);
-    ctx.beginPath();
-    ctx.moveTo(drawX, strikeY);
-    ctx.lineTo(drawX + textW, strikeY);
-    ctx.stroke();
+    if (el.strikethrough) {
+      ctx.strokeStyle = el.strikethroughColor || el.color;
+      ctx.lineWidth = Math.max(1, fs * 0.06);
+      ctx.beginPath(); ctx.moveTo(drawX, y + fs * 0.55); ctx.lineTo(drawX + totalW, y + fs * 0.55); ctx.stroke();
+    }
   }
 
   ctx.restore();

@@ -91,6 +91,12 @@ function applyCurrPos(text: string, pos?: 'before' | 'after'): string {
   return m ? `${m[2]}${m[1].trimEnd()}` : text;
 }
 
+function splitAtDecimal(text: string): { main: string; dec: string } | null {
+  const m = text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/);
+  if (!m) return null;
+  return { main: m[1], dec: m[2] + m[3] };
+}
+
 const COUNTRY_IT: Record<string, string> = {
   CN: 'Cina', FR: 'Francia', DE: 'Germania', IT: 'Italia', US: 'USA',
   GB: 'UK', ES: 'Spagna', JP: 'Giappone', KR: 'Corea del Sud',
@@ -358,23 +364,57 @@ async function generateTemplateImageServer(
         const x = (el.x / 100) * canvasW; const y = (el.y / 100) * canvasH;
         const anchor = el.textAnchor === 'right' ? 'right' : el.textAnchor === 'center' ? 'center' : 'left';
         if (debugName) console.log(`[tpl] ${debugName}: color=${JSON.stringify(el.color)} strikethroughColor=${JSON.stringify(el.strikethroughColor)} strokeColor=${JSON.stringify(el.strokeColor)} strikethrough=${el.strikethrough}`);
+        const fontStr = (size: number) => `${el.bold ? 'bold ' : ''}${size}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
+        const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
+        const parts = scale < 1 ? splitAtDecimal(text) : null;
+
         ctx.save();
-        ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
-        ctx.textBaseline = 'top'; ctx.textAlign = anchor as CanvasTextAlign;
-        if (el.strokeEnabled && el.strokeWidth > 0) {
-          ctx.strokeStyle = el.strokeColor || '#000';
-          ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-          ctx.strokeText(text, x, y);
-        }
-        ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, x, y);
-        if (el.strikethrough) {
+        ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+
+        if (!parts) {
+          ctx.font = fontStr(fs);
           const tw = ctx.measureText(text).width;
           const sx = anchor === 'right' ? x - tw : anchor === 'center' ? x - tw / 2 : x;
-          const strkColor = el.strikethroughColor || el.color || '#fff';
-          if (debugName) console.log(`[tpl] ${debugName} strikethrough: usando colore=${JSON.stringify(strkColor)}`);
-          ctx.strokeStyle = strkColor;
-          ctx.lineWidth = Math.max(1, fs * 0.06);
-          ctx.beginPath(); ctx.moveTo(sx, y + fs * 0.55); ctx.lineTo(sx + tw, y + fs * 0.55); ctx.stroke();
+          if (el.strokeEnabled && el.strokeWidth > 0) {
+            ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
+            ctx.strokeText(text, sx, y);
+          }
+          ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, sx, y);
+          if (el.strikethrough) {
+            const strkColor = el.strikethroughColor || el.color || '#fff';
+            if (debugName) console.log(`[tpl] ${debugName} strikethrough: usando colore=${JSON.stringify(strkColor)}`);
+            ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
+            ctx.beginPath(); ctx.moveTo(sx, y + fs * 0.55); ctx.lineTo(sx + tw, y + fs * 0.55); ctx.stroke();
+          }
+        } else {
+          const fsDec = Math.round(fs * scale);
+          ctx.font = fontStr(fs);
+          const mainW = ctx.measureText(parts.main).width;
+          ctx.font = fontStr(fsDec);
+          const decW = ctx.measureText(parts.dec).width;
+          const totalW = mainW + decW;
+          const sx = anchor === 'right' ? x - totalW : anchor === 'center' ? x - totalW / 2 : x;
+          const decY = y + (fs - fsDec);
+
+          ctx.font = fontStr(fs);
+          if (el.strokeEnabled && el.strokeWidth > 0) {
+            ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
+            ctx.strokeText(parts.main, sx, y);
+          }
+          ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.main, sx, y);
+
+          ctx.font = fontStr(fsDec);
+          if (el.strokeEnabled && el.strokeWidth > 0) {
+            ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
+            ctx.strokeText(parts.dec, sx + mainW, decY);
+          }
+          ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.dec, sx + mainW, decY);
+
+          if (el.strikethrough) {
+            const strkColor = el.strikethroughColor || el.color || '#fff';
+            ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
+            ctx.beginPath(); ctx.moveTo(sx, y + fs * 0.55); ctx.lineTo(sx + totalW, y + fs * 0.55); ctx.stroke();
+          }
         }
         ctx.restore();
       };
@@ -489,20 +529,41 @@ async function generateTemplateImageServer(
       const family = String(el.fontFamily || 'Impact').replace(/"/g, '');
       console.log(`[tpl] textElToSvg: fontFamily="${family}" text="${String(text).slice(0, 20)}"`);
       const fill = String(el.color || '#ffffff');
-      const safe = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const safeStr = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const common = `x="${xTop}" y="${y}" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}"`;
-      if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
-        svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${safe}</text>`);
+
+      const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
+      const parts = scale < 1 ? splitAtDecimal(text) : null;
+
+      if (!parts) {
+        const safe = safeStr(text);
+        if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
+          svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${safe}</text>`);
+        } else {
+          svgEls.push(`<text ${common} fill="${fill}">${safe}</text>`);
+        }
       } else {
-        svgEls.push(`<text ${common} fill="${fill}">${safe}</text>`);
+        const fsDec = Math.round(fs * scale);
+        // dy positivo per abbassare la baseline dei decimali e allineare i fondi con il testo principale
+        const dy = Math.round(0.20 * (fs - fsDec));
+        const safeMain = safeStr(parts.main);
+        const safeDec = safeStr(parts.dec);
+        const inner = `<tspan>${safeMain}</tspan><tspan font-size="${fsDec}" dy="${dy}">${safeDec}</tspan>`;
+        if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
+          svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${inner}</text>`);
+        } else {
+          svgEls.push(`<text ${common} fill="${fill}">${inner}</text>`);
+        }
       }
+
       // Barrato come linea SVG separata con colore esplicito (text-decoration ignora il fill in librsvg)
       if (el.strikethrough) {
         const strkColor = String(el.strikethroughColor || el.color || '#ffffff');
-        // Stima larghezza testo: ~0.55*fs per carattere (approssimazione conservativa)
-        const approxWidth = Math.round(text.length * fs * 0.55);
+        const mainChars = parts ? parts.main.length : text.length;
+        const decChars  = parts ? parts.dec.length  : 0;
+        const fsDec = parts ? Math.round(fs * scale) : fs;
+        const approxWidth = Math.round(mainChars * fs * 0.55 + decChars * fsDec * 0.55);
         const lx = anchor === 'end' ? xTop - approxWidth : anchor === 'middle' ? xTop - approxWidth / 2 : xTop;
-        // Posizione verticale della barra: ~0.35*fs sopra la baseline = yTop + 0.45*fs
         const ly = yTop + Math.round(fs * 0.45);
         const lw = Math.max(1, Math.round(fs * 0.06));
         svgEls.push(`<line x1="${lx}" y1="${ly}" x2="${lx + approxWidth}" y2="${ly}" stroke="${strkColor}" stroke-width="${lw}" stroke-linecap="round"/>`);
