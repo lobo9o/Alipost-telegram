@@ -42,7 +42,7 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, can
   const anchor = el.textAnchor ?? 'left';
   ctx.save();
   ctx.textAlign = 'left';
-  ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}`;
+  ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
   ctx.textBaseline = 'top';
 
   const textW = ctx.measureText(text).width;

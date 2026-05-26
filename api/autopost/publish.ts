@@ -359,7 +359,7 @@ async function generateTemplateImageServer(
         const anchor = el.textAnchor === 'right' ? 'right' : el.textAnchor === 'center' ? 'center' : 'left';
         if (debugName) console.log(`[tpl] ${debugName}: color=${JSON.stringify(el.color)} strikethroughColor=${JSON.stringify(el.strikethroughColor)} strokeColor=${JSON.stringify(el.strokeColor)} strikethrough=${el.strikethrough}`);
         ctx.save();
-        ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, sans-serif`;
+        ctx.font = `${el.bold ? 'bold ' : ''}${fs}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
         ctx.textBaseline = 'top'; ctx.textAlign = anchor as CanvasTextAlign;
         if (el.strokeEnabled && el.strokeWidth > 0) {
           ctx.strokeStyle = el.strokeColor || '#000';
@@ -490,7 +490,7 @@ async function generateTemplateImageServer(
       console.log(`[tpl] textElToSvg: fontFamily="${family}" text="${String(text).slice(0, 20)}"`);
       const fill = String(el.color || '#ffffff');
       const safe = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const common = `x="${xTop}" y="${y}" font-family="${family}, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}"`;
+      const common = `x="${xTop}" y="${y}" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}"`;
       if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
         svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${safe}</text>`);
       } else {
