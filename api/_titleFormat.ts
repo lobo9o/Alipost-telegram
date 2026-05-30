@@ -227,13 +227,11 @@ export function getProductEmoji(title: string, cat?: string): string {
 
 export function shortenTitle(title: string): string {
   if (title.length <= 100) return title;
-  // Cerca l'ultima virgola o punto-virgola entro 100 caratteri, con almeno 35 prima del taglio
+  // Cerca virgola o punto-virgola entro 120 caratteri, con almeno 35 prima del taglio
   for (const sep of [';', ',']) {
-    const idx = title.lastIndexOf(sep, 100);
+    const idx = title.lastIndexOf(sep, 120);
     if (idx >= 35) return title.slice(0, idx).trim();
   }
-  // Nessun punto di taglio utile: taglia a parola intera entro 97 caratteri
-  const cut = title.slice(0, 97);
-  const sp  = cut.lastIndexOf(' ');
-  return (sp > 50 ? cut.slice(0, sp) : cut) + '…';
+  // Nessun punto di taglio naturale → restituisce il titolo intero
+  return title;
 }
