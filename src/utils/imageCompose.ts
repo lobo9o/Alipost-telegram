@@ -27,16 +27,28 @@ function drawContained(
   ctx.drawImage(img, x + (box - dw) / 2, y + (box - dh) / 2, dw, dh);
 }
 
-function applyCurrPos(text: string, pos?: 'before' | 'after'): string {
+export function applyCurrPos(text: string, pos?: 'before' | 'after'): string {
   if (pos !== 'after') return text;
   const m = text.match(/^([^0-9]+)([\d].*)/);
   return m ? `${m[2]}${m[1].trimEnd()}` : text;
 }
 
-function splitAtDecimal(text: string): { main: string; dec: string } | null {
+export function applyDecimalSep(text: string, sep?: '.' | ','): string {
+  if (!sep) return text;
+  return text.replace(/([.,])(\d{1,3})([\D]*)$/, (_, _d, dec, suf) => `${sep}${dec}${suf}`);
+}
+
+export function applySconto(text: string, hidePercent?: boolean, hideMinus?: boolean): string {
+  let t = text;
+  if (hideMinus) t = t.replace(/^-/, '');
+  if (hidePercent) t = t.replace(/%$/, '');
+  return t;
+}
+
+function splitAtDecimal(text: string): { main: string; dec: string; suffix: string } | null {
   const m = text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/);
   if (!m) return null;
-  return { main: m[1], dec: m[2] + m[3] };
+  return { main: m[1], dec: m[2], suffix: m[3] };
 }
 
 function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, canvasW: number, canvasH: number) {
@@ -50,23 +62,28 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, can
   const parts = scale < 1 ? splitAtDecimal(text) : null;
 
   ctx.save();
+  ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
+
+  // Misura la cap height reale per allineare il top visivo a y (uguale a CSS top: Y%)
+  // actualBoundingBoxAscent è cross-platform e non dipende da hhea/winAscent del font
+  ctx.font = fontStr(fs);
+  const capH = ctx.measureText('H').actualBoundingBoxAscent;
+  const baseline = y + capH; // baseline alfabetica allineata al top visivo in y
 
   if (!parts) {
-    ctx.font = fontStr(fs);
     const textW = ctx.measureText(text).width;
     const drawX = anchor === 'right' ? x - textW : anchor === 'center' ? x - textW / 2 : x;
     if (el.strokeEnabled && el.strokeWidth > 0) {
       ctx.strokeStyle = el.strokeColor; ctx.lineWidth = el.strokeWidth * 2; ctx.lineJoin = 'round';
-      ctx.strokeText(text, drawX, y);
+      ctx.strokeText(text, drawX, baseline);
     }
     ctx.fillStyle = el.color;
-    ctx.fillText(text, drawX, y);
+    ctx.fillText(text, drawX, baseline);
     if (el.strikethrough) {
       ctx.strokeStyle = el.strikethroughColor || el.color;
       ctx.lineWidth = Math.max(1, fs * 0.06);
-      ctx.beginPath(); ctx.moveTo(drawX, y + fs * 0.55); ctx.lineTo(drawX + textW, y + fs * 0.55); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(drawX, baseline - capH * 0.5); ctx.lineTo(drawX + textW, baseline - capH * 0.5); ctx.stroke();
     }
   } else {
     const fsDec = Math.round(fs * scale);
@@ -74,30 +91,42 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, can
     const mainW = ctx.measureText(parts.main).width;
     ctx.font = fontStr(fsDec);
     const decW = ctx.measureText(parts.dec).width;
-    const totalW = mainW + decW;
+    ctx.font = fontStr(fs);
+    const sufW = parts.suffix ? ctx.measureText(parts.suffix).width : 0;
+    const totalW = mainW + decW + sufW;
     const drawX = anchor === 'right' ? x - totalW : anchor === 'center' ? x - totalW / 2 : x;
-    const decY = y + (fs - fsDec); // allinea i fondi (textBaseline='top')
 
+    // main e dec hanno la stessa baseline → i fondi sono allineati (cifre non hanno discendenti)
     ctx.font = fontStr(fs);
     if (el.strokeEnabled && el.strokeWidth > 0) {
       ctx.strokeStyle = el.strokeColor; ctx.lineWidth = el.strokeWidth * 2; ctx.lineJoin = 'round';
-      ctx.strokeText(parts.main, drawX, y);
+      ctx.strokeText(parts.main, drawX, baseline);
     }
     ctx.fillStyle = el.color;
-    ctx.fillText(parts.main, drawX, y);
+    ctx.fillText(parts.main, drawX, baseline);
 
     ctx.font = fontStr(fsDec);
     if (el.strokeEnabled && el.strokeWidth > 0) {
       ctx.strokeStyle = el.strokeColor; ctx.lineWidth = el.strokeWidth * 2; ctx.lineJoin = 'round';
-      ctx.strokeText(parts.dec, drawX + mainW, decY);
+      ctx.strokeText(parts.dec, drawX + mainW, baseline);
     }
     ctx.fillStyle = el.color;
-    ctx.fillText(parts.dec, drawX + mainW, decY);
+    ctx.fillText(parts.dec, drawX + mainW, baseline);
+
+    if (parts.suffix) {
+      ctx.font = fontStr(fs);
+      if (el.strokeEnabled && el.strokeWidth > 0) {
+        ctx.strokeStyle = el.strokeColor; ctx.lineWidth = el.strokeWidth * 2; ctx.lineJoin = 'round';
+        ctx.strokeText(parts.suffix, drawX + mainW + decW, baseline);
+      }
+      ctx.fillStyle = el.color;
+      ctx.fillText(parts.suffix, drawX + mainW + decW, baseline);
+    }
 
     if (el.strikethrough) {
       ctx.strokeStyle = el.strikethroughColor || el.color;
       ctx.lineWidth = Math.max(1, fs * 0.06);
-      ctx.beginPath(); ctx.moveTo(drawX, y + fs * 0.55); ctx.lineTo(drawX + totalW, y + fs * 0.55); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(drawX, baseline - capH * 0.5); ctx.lineTo(drawX + totalW, baseline - capH * 0.5); ctx.stroke();
     }
   }
 
@@ -173,10 +202,19 @@ export async function generatePostImage(
     } catch { /* skip */ }
   }
 
+  // Assicura che i font siano caricati nel contesto browser prima di disegnare
+  {
+    const textEls = [template.prezzo, template.prezzoPrecedente, template.sconto, template.testoCustom];
+    await Promise.all(textEls.filter(el => el?.enabled && el?.fontFamily).map(el => {
+      const w = el.bold ? '700' : '400';
+      return document.fonts.load(`${w} ${el.fontSize * 2}px "${el.fontFamily}"`).catch(() => {});
+    }));
+  }
+
   // Text elements
-  drawTextEl(ctx, template.prezzo, applyCurrPos(values.prezzo ?? template.prezzo.text, template.prezzo.currencyPos), canvasW, canvasH);
-  drawTextEl(ctx, template.prezzoPrecedente, applyCurrPos(values.prezzoPrecedente ?? template.prezzoPrecedente.text, template.prezzoPrecedente.currencyPos), canvasW, canvasH);
-  drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text, canvasW, canvasH);
+  drawTextEl(ctx, template.prezzo, applyDecimalSep(applyCurrPos(values.prezzo ?? template.prezzo.text, template.prezzo.currencyPos), template.prezzo.decimalSep), canvasW, canvasH);
+  drawTextEl(ctx, template.prezzoPrecedente, applyDecimalSep(applyCurrPos(values.prezzoPrecedente ?? template.prezzoPrecedente.text, template.prezzoPrecedente.currencyPos), template.prezzoPrecedente.decimalSep), canvasW, canvasH);
+  drawTextEl(ctx, template.sconto, applySconto(values.sconto ?? template.sconto.text, template.sconto.hidePercent, template.sconto.hideMinus), canvasW, canvasH);
   drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text, canvasW, canvasH);
 
   // Badge — ULTIMO livello, sopra tutto incluso il testo
@@ -291,9 +329,18 @@ export async function generateTerminataImage(
     ctx.putImageData(imageData, 0, 0);
   }
 
-  if (config.showPrezzo) drawTextEl(ctx, template.prezzo, applyCurrPos(values.prezzo ?? template.prezzo.text, template.prezzo.currencyPos), canvasW, canvasH);
-  if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, applyCurrPos(values.prezzoPrecedente ?? template.prezzoPrecedente.text, template.prezzoPrecedente.currencyPos), canvasW, canvasH);
-  if (config.showSconto) drawTextEl(ctx, template.sconto, values.sconto ?? template.sconto.text, canvasW, canvasH);
+  // Assicura che i font siano caricati nel contesto browser prima di disegnare
+  {
+    const textEls = [template.prezzo, template.prezzoPrecedente, template.sconto, template.testoCustom];
+    await Promise.all(textEls.filter(el => el?.enabled && el?.fontFamily).map(el => {
+      const w = el.bold ? '700' : '400';
+      return document.fonts.load(`${w} ${el.fontSize * 2}px "${el.fontFamily}"`).catch(() => {});
+    }));
+  }
+
+  if (config.showPrezzo) drawTextEl(ctx, template.prezzo, applyDecimalSep(applyCurrPos(values.prezzo ?? template.prezzo.text, template.prezzo.currencyPos), template.prezzo.decimalSep), canvasW, canvasH);
+  if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, applyDecimalSep(applyCurrPos(values.prezzoPrecedente ?? template.prezzoPrecedente.text, template.prezzoPrecedente.currencyPos), template.prezzoPrecedente.decimalSep), canvasW, canvasH);
+  if (config.showSconto) drawTextEl(ctx, template.sconto, applySconto(values.sconto ?? template.sconto.text, template.sconto.hidePercent, template.sconto.hideMinus), canvasW, canvasH);
   drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text, canvasW, canvasH);
 
   if (config.overlayText) {

@@ -33,7 +33,7 @@ const READONLY_SYSTEM_TAG_ORDER = [
   '{prezzo}', '{oldprezzo}', '{prezzo_scontato}',
   '{sconto}', '{perc}', '{valuta}',
   '{link_affiliato}', '{link}',
-  '{coupon}', '{boxcoupon}', '{custom}',
+  '{coupon}', '{boxcoupon}', '{checkout}', '{custom}',
   '{store}', '{storeup}',
   '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
@@ -55,6 +55,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   '{link}':            'Uguale a {link_affiliato}',
   '{coupon}':          'Codice coupon se presente nel post',
   '{boxcoupon}':       'Mostra testo "Abilita il coupon prima di acquistare" per link con coupon da abilitare nella pagina Amazon',
+  '{checkout}':        'Testo "Sconto automatico al check-out" per prodotti con sconto applicato automaticamente al pagamento (senza box da spuntare)',
   '{custom}':          'Testo personalizzato inserito nel post',
   '{store}':           'Nome del negozio — Amazon oppure AliExpress',
   '{storeup}':         'Nome del negozio in MAIUSCOLO — AMAZON oppure ALIEXPRESS',
@@ -528,9 +529,9 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrow
 
       {/* Text elements */}
       {([
-        { el: tpl.prezzo as TextEl, text: (tpl.prezzo as TextEl).currencyPos === 'after' ? '24,99€' : '€24,99' },
-        { el: tpl.prezzoPrecedente as TextEl, text: (tpl.prezzoPrecedente as TextEl).currencyPos === 'after' ? '49,99€' : '€49,99' },
-        { el: tpl.sconto as TextEl, text: '-50%' },
+        { el: tpl.prezzo as TextEl, text: (() => { const el = tpl.prezzo as TextEl; const sep = el.decimalSep ?? '.'; const base = sep === ',' ? (el.currencyPos === 'after' ? `24${sep}99€` : `€24${sep}99`) : (el.currencyPos === 'after' ? `24${sep}99€` : `€24${sep}99`); return base; })() },
+        { el: tpl.prezzoPrecedente as TextEl, text: (() => { const el = tpl.prezzoPrecedente as TextEl; const sep = el.decimalSep ?? '.'; return el.currencyPos === 'after' ? `49${sep}99€` : `€49${sep}99`; })() },
+        { el: tpl.sconto as TextEl, text: (() => { const el = tpl.sconto as TextEl; let t = '-50%'; if (el.hideMinus) t = t.replace(/^-/, ''); if (el.hidePercent) t = t.replace(/%$/, ''); return t; })() },
         { el: tpl.testoCustom as TextEl, text: tpl.testoCustom.text || 'Testo' },
       ]).map(({ el, text }, i) => {
         if (!el.enabled) return null;
@@ -747,12 +748,13 @@ const FONTS = [
   'The Blacklist',
 ];
 
-function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, showCurrencyPos = false }: {
+function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, showCurrencyPos = false, showSconto = false }: {
   el: TextEl;
   onUpdate: (ch: Partial<TextEl>) => void;
   showTextInput?: boolean;
   canvasH?: number;
   showCurrencyPos?: boolean;
+  showSconto?: boolean;
 }) {
   return (
     <>
@@ -803,6 +805,34 @@ function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, show
           <span style={{ fontSize: 11, color: 'var(--t2)', width: 32, textAlign: 'right' }}>
             {Math.round((el.decimalFontScale ?? 1) * 100)}%
           </span>
+        </div>
+      )}
+
+      {showCurrencyPos && (
+        <div style={{ marginBottom: 12 }}>
+          <div className="lbl">SEPARATORE DECIMALE</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className={`btn bsm ${(el.decimalSep ?? '.') === '.' ? 'bp' : 'bgh'}`}
+              style={{ flex: 1 }} onClick={() => onUpdate({ decimalSep: '.' })}>. Punto</button>
+            <button className={`btn bsm ${el.decimalSep === ',' ? 'bp' : 'bgh'}`}
+              style={{ flex: 1 }} onClick={() => onUpdate({ decimalSep: ',' })}>&#44; Virgola</button>
+          </div>
+        </div>
+      )}
+
+      {showSconto && (
+        <div style={{ marginBottom: 12 }}>
+          <div className="lbl">SIMBOLI SCONTO</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className={`btn bsm ${!el.hideMinus ? 'bp' : 'bgh'}`}
+              style={{ flex: 1 }} onClick={() => onUpdate({ hideMinus: !el.hideMinus })}>
+              {el.hideMinus ? '— Nascosto' : '— Visibile'}
+            </button>
+            <button className={`btn bsm ${!el.hidePercent ? 'bp' : 'bgh'}`}
+              style={{ flex: 1 }} onClick={() => onUpdate({ hidePercent: !el.hidePercent })}>
+              % {el.hidePercent ? 'Nascosto' : 'Visibile'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -1170,6 +1200,7 @@ function TemplateSection() {
               showTextInput={activePanel === 'testoCustom'}
               canvasH={tpl.canvasH ?? 1024}
               showCurrencyPos={activePanel === 'prezzo' || activePanel === 'prezzoPrecedente'}
+              showSconto={activePanel === 'sconto'}
             />
           )}
           {activePanel === 'terminata' && <TerminataPanel />}
@@ -1362,6 +1393,22 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
     setChannels(prev => prev.filter(c => c.id !== id));
   });
 
+  // mode: 'queue' = metti in coda, 'publish' = pubblica subito, 'pause' = ferma controllo
+  const handleSetMode = async (id: string, mode: 'queue' | 'publish' | 'pause') => {
+    const updates = mode === 'pause'
+      ? { active: false, auto_publish: false }
+      : mode === 'publish'
+      ? { active: true, auto_publish: true }
+      : { active: true, auto_publish: false };
+    const prev = channels.find(c => c.id === id);
+    setChannels(ch => ch.map(c => c.id === id ? { ...c, ...updates } : c));
+    try { await tgMonitorApi.updateChannel(id, updates); }
+    catch (e: any) {
+      if (prev) setChannels(ch => ch.map(c => c.id === id ? prev : c));
+      setErr(e.message ?? 'Errore aggiornamento canale');
+    }
+  };
+
   return (
     <div className="pg">
       <PageHeader title="Monitor canali" onBack={() => nav('dash')} />
@@ -1376,7 +1423,7 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
         {/* ── Descrizione ── */}
         {step === 'idle' && !loading && (
           <div style={{ padding: '12px 14px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 16, fontSize: 13, color: 'var(--t2)', lineHeight: 1.6 }}>
-            Connetti il tuo account Telegram per monitorare canali che non gestisci. Ogni link Amazon o AliExpress trovato viene aggiunto automaticamente in coda.
+            Connetti il tuo account Telegram per monitorare canali che non gestisci. Per ogni canale puoi scegliere se mettere i link trovati in coda autopost oppure pubblicarli subito.
           </div>
         )}
 
@@ -1458,13 +1505,42 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
             )}
 
             {channels.map(ch => (
-              <div key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 8 }}>
-                <span style={{ fontSize: 16 }}>📢</span>
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--t1)', wordBreak: 'break-all' }}>{ch.channel}</span>
-                <button className="btn" onClick={() => handleRemove(ch.id)} disabled={loading}
-                  style={{ fontSize: 12, padding: '4px 10px', background: '#2a0a0a', color: '#f87171', border: '1px solid #5c1a1a', borderRadius: 6, flexShrink: 0 }}>
-                  Rimuovi
-                </button>
+              <div key={ch.id} style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+                  <span style={{ fontSize: 16 }}>📢</span>
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--t1)', wordBreak: 'break-all' }}>{ch.channel}</span>
+                  <button className="btn" onClick={() => handleRemove(ch.id)} disabled={loading}
+                    style={{ fontSize: 12, padding: '4px 10px', background: '#2a0a0a', color: '#f87171', border: '1px solid #5c1a1a', borderRadius: 6, flexShrink: 0 }}>
+                    Rimuovi
+                  </button>
+                </div>
+                {(() => {
+                  const mode = !ch.active ? 'pause' : ch.auto_publish ? 'publish' : 'queue';
+                  const btn = (m: 'queue' | 'publish' | 'pause', label: string, activeColor: string) => {
+                    const isActive = mode === m;
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => !isActive && handleSetMode(ch.id, m)}
+                        style={{
+                          flex: 1, padding: '5px 8px', borderRadius: 6, border: 'none',
+                          cursor: isActive ? 'default' : 'pointer', fontSize: 12,
+                          fontWeight: isActive ? 700 : 400,
+                          background: isActive ? activeColor : 'var(--bg3)',
+                          color: isActive ? '#fff' : 'var(--t3)',
+                        }}>
+                        {label}
+                      </button>
+                    );
+                  };
+                  return (
+                    <div style={{ borderTop: '1px solid var(--bdr)', padding: '8px 14px', display: 'flex', gap: 6 }}>
+                      {btn('queue',   '📋 In coda',   'var(--a1)')}
+                      {btn('publish', '⚡ Subito',    '#16a34a')}
+                      {btn('pause',   '⏸ Pausa',     '#6b3d1e')}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
 

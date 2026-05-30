@@ -11,7 +11,7 @@ export const SYSTEM_TAGS = new Set([
   '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
-  '{coupon}', '{boxcoupon}',
+  '{coupon}', '{boxcoupon}', '{checkout}',
 ]);
 
 // Sentinel usato internamente: riga che conteneva solo un blocco {_ _} vuoto → verrà rimossa
@@ -69,9 +69,9 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
     '{titolo}':          post.title,
     '{titoloup}':        post.title.toUpperCase(),
     '{titoloshort}':     titleShort,
-    '{prezzo}':          post.discountedPrice.toFixed(2),
-    '{prezzo_scontato}': post.discountedPrice.toFixed(2),
-    '{oldprezzo}':       post.originalPrice.toFixed(2),
+    '{prezzo}':          post.discountedPrice.toFixed(2).replace('.', ','),
+    '{prezzo_scontato}': post.discountedPrice.toFixed(2).replace('.', ','),
+    '{oldprezzo}':       post.originalPrice.toFixed(2).replace('.', ','),
     '{sconto}':          `${post.discountPercent}`,
     '{perc}':            `-${post.discountPercent}%`,
     '{valuta}':          valuta,
@@ -93,6 +93,7 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
     '{author}':          post.author || '',
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       post.boxcoupon || '',
+    '{checkout}':        post.checkout || '',
 
   };
 }
