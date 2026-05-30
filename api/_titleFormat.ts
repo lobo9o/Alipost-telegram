@@ -226,12 +226,12 @@ export function getProductEmoji(title: string, cat?: string): string {
 }
 
 export function shortenTitle(title: string): string {
-  if (title.length <= 100) return title;
-  // Cerca virgola o punto-virgola entro 120 caratteri, con almeno 35 prima del taglio
+  if (title.length <= 80) return title;
   for (const sep of [';', ',']) {
-    const idx = title.lastIndexOf(sep, 120);
-    if (idx >= 35) return title.slice(0, idx).trim();
+    const idx = title.indexOf(sep, 35);
+    if (idx !== -1 && idx <= 90) return title.slice(0, idx).trim();
   }
-  // Nessun punto di taglio naturale → restituisce il titolo intero
-  return title;
+  const cut = title.slice(0, 80);
+  const sp = cut.lastIndexOf(' ');
+  return sp > 30 ? cut.slice(0, sp).trim() : cut.trim();
 }
