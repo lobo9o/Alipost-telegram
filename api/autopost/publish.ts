@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler } from '../_utils.js';
 import { checkPostPrice } from '../_priceCheck.js';
+import { getProductEmoji } from '../_titleFormat.js';
 import crypto from 'crypto';
 
 // ── AliExpress auto-search helpers ────────────────────────────────────────────
@@ -91,10 +92,22 @@ function applyCurrPos(text: string, pos?: 'before' | 'after'): string {
   return m ? `${m[2]}${m[1].trimEnd()}` : text;
 }
 
-function splitAtDecimal(text: string): { main: string; dec: string } | null {
+function splitAtDecimal(text: string): { main: string; dec: string; suffix: string } | null {
   const m = text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/);
   if (!m) return null;
-  return { main: m[1], dec: m[2] + m[3] };
+  return { main: m[1], dec: m[2], suffix: m[3] };
+}
+
+function applyDecimalSep(text: string, sep?: '.' | ','): string {
+  if (!sep) return text;
+  return text.replace(/([.,])(\d{1,3})([\D]*)$/, (_, _d, dec, suf) => `${sep}${dec}${suf}`);
+}
+
+function applySconto(text: string, hidePercent?: boolean, hideMinus?: boolean): string {
+  let t = text;
+  if (hideMinus) t = t.replace(/^-/, '');
+  if (hidePercent) t = t.replace(/%$/, '');
+  return t;
 }
 
 const COUNTRY_IT: Record<string, string> = {
@@ -369,22 +382,24 @@ async function generateTemplateImageServer(
         const parts = scale < 1 ? splitAtDecimal(text) : null;
 
         ctx.save();
-        ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+        ctx.font = fontStr(fs);
+        const capH = (ctx.measureText('H') as any).actualBoundingBoxAscent ?? fs * 0.72;
+        const baseline = y + capH;
 
         if (!parts) {
-          ctx.font = fontStr(fs);
           const tw = ctx.measureText(text).width;
           const sx = anchor === 'right' ? x - tw : anchor === 'center' ? x - tw / 2 : x;
           if (el.strokeEnabled && el.strokeWidth > 0) {
             ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-            ctx.strokeText(text, sx, y);
+            ctx.strokeText(text, sx, baseline);
           }
-          ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, sx, y);
+          ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, sx, baseline);
           if (el.strikethrough) {
             const strkColor = el.strikethroughColor || el.color || '#fff';
             if (debugName) console.log(`[tpl] ${debugName} strikethrough: usando colore=${JSON.stringify(strkColor)}`);
             ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
-            ctx.beginPath(); ctx.moveTo(sx, y + fs * 0.55); ctx.lineTo(sx + tw, y + fs * 0.55); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(sx, baseline - capH * 0.5); ctx.lineTo(sx + tw, baseline - capH * 0.5); ctx.stroke();
           }
         } else {
           const fsDec = Math.round(fs * scale);
@@ -392,36 +407,46 @@ async function generateTemplateImageServer(
           const mainW = ctx.measureText(parts.main).width;
           ctx.font = fontStr(fsDec);
           const decW = ctx.measureText(parts.dec).width;
-          const totalW = mainW + decW;
+          ctx.font = fontStr(fs);
+          const sufW = parts.suffix ? ctx.measureText(parts.suffix).width : 0;
+          const totalW = mainW + decW + sufW;
           const sx = anchor === 'right' ? x - totalW : anchor === 'center' ? x - totalW / 2 : x;
-          const decY = y + (fs - fsDec);
 
           ctx.font = fontStr(fs);
           if (el.strokeEnabled && el.strokeWidth > 0) {
             ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-            ctx.strokeText(parts.main, sx, y);
+            ctx.strokeText(parts.main, sx, baseline);
           }
-          ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.main, sx, y);
+          ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.main, sx, baseline);
 
           ctx.font = fontStr(fsDec);
           if (el.strokeEnabled && el.strokeWidth > 0) {
             ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-            ctx.strokeText(parts.dec, sx + mainW, decY);
+            ctx.strokeText(parts.dec, sx + mainW, baseline);
           }
-          ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.dec, sx + mainW, decY);
+          ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.dec, sx + mainW, baseline);
+
+          if (parts.suffix) {
+            ctx.font = fontStr(fs);
+            if (el.strokeEnabled && el.strokeWidth > 0) {
+              ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
+              ctx.strokeText(parts.suffix, sx + mainW + decW, baseline);
+            }
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.suffix, sx + mainW + decW, baseline);
+          }
 
           if (el.strikethrough) {
             const strkColor = el.strikethroughColor || el.color || '#fff';
             ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
-            ctx.beginPath(); ctx.moveTo(sx, y + fs * 0.55); ctx.lineTo(sx + totalW, y + fs * 0.55); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(sx, baseline - capH * 0.5); ctx.lineTo(sx + totalW, baseline - capH * 0.5); ctx.stroke();
           }
         }
         ctx.restore();
       };
 
-      drawTextEl(template.prezzo, applyCurrPos(priceData.prezzo, template.prezzo?.currencyPos), 'prezzo');
-      drawTextEl(template.prezzoPrecedente, applyCurrPos(priceData.prezzoPrecedente, template.prezzoPrecedente?.currencyPos), 'prezzoPrecedente');
-      drawTextEl(template.sconto, priceData.sconto, 'sconto');
+      drawTextEl(template.prezzo, applyDecimalSep(applyCurrPos(priceData.prezzo, template.prezzo?.currencyPos), template.prezzo?.decimalSep), 'prezzo');
+      drawTextEl(template.prezzoPrecedente, applyDecimalSep(applyCurrPos(priceData.prezzoPrecedente, template.prezzoPrecedente?.currencyPos), template.prezzoPrecedente?.decimalSep), 'prezzoPrecedente');
+      drawTextEl(template.sconto, applySconto(priceData.sconto, template.sconto?.hidePercent, template.sconto?.hideMinus), 'sconto');
       drawTextEl(template.testoCustom, template.testoCustom?.text ?? '');
 
       if (isHistoricalLow && template.badge?.enabled && template.badge?.src) {
@@ -548,7 +573,10 @@ async function generateTemplateImageServer(
         const dy = Math.round(0.20 * (fs - fsDec));
         const safeMain = safeStr(parts.main);
         const safeDec = safeStr(parts.dec);
-        const inner = `<tspan>${safeMain}</tspan><tspan font-size="${fsDec}" dy="${dy}">${safeDec}</tspan>`;
+        const safeSuf = parts.suffix ? safeStr(parts.suffix) : '';
+        // suffix torna alla dimensione piena con dy negativo per tornare alla baseline originale
+        const suffixSpan = safeSuf ? `<tspan font-size="${fs}" dy="${-dy}">${safeSuf}</tspan>` : '';
+        const inner = `<tspan>${safeMain}</tspan><tspan font-size="${fsDec}" dy="${dy}">${safeDec}</tspan>${suffixSpan}`;
         if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
           svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${inner}</text>`);
         } else {
@@ -561,17 +589,18 @@ async function generateTemplateImageServer(
         const strkColor = String(el.strikethroughColor || el.color || '#ffffff');
         const mainChars = parts ? parts.main.length : text.length;
         const decChars  = parts ? parts.dec.length  : 0;
+        const sufChars  = parts ? parts.suffix.length : 0;
         const fsDec = parts ? Math.round(fs * scale) : fs;
-        const approxWidth = Math.round(mainChars * fs * 0.55 + decChars * fsDec * 0.55);
+        const approxWidth = Math.round(mainChars * fs * 0.50 + decChars * fsDec * 0.50 + sufChars * fs * 0.50);
         const lx = anchor === 'end' ? xTop - approxWidth : anchor === 'middle' ? xTop - approxWidth / 2 : xTop;
         const ly = yTop + Math.round(fs * 0.45);
         const lw = Math.max(1, Math.round(fs * 0.06));
         svgEls.push(`<line x1="${lx}" y1="${ly}" x2="${lx + approxWidth}" y2="${ly}" stroke="${strkColor}" stroke-width="${lw}" stroke-linecap="round"/>`);
       }
     }
-    textElToSvg(template.prezzo, applyCurrPos(priceData.prezzo, template.prezzo?.currencyPos));
-    textElToSvg(template.prezzoPrecedente, applyCurrPos(priceData.prezzoPrecedente, template.prezzoPrecedente?.currencyPos));
-    textElToSvg(template.sconto, priceData.sconto);
+    textElToSvg(template.prezzo, applyDecimalSep(applyCurrPos(priceData.prezzo, template.prezzo?.currencyPos), template.prezzo?.decimalSep));
+    textElToSvg(template.prezzoPrecedente, applyDecimalSep(applyCurrPos(priceData.prezzoPrecedente, template.prezzoPrecedente?.currencyPos), template.prezzoPrecedente?.decimalSep));
+    textElToSvg(template.sconto, applySconto(priceData.sconto, template.sconto?.hidePercent, template.sconto?.hideMinus));
     textElToSvg(template.testoCustom, template.testoCustom?.text ?? '');
     if (svgEls.length > 0) {
       const svgStr = `<svg width="${sW}" height="${sH}" xmlns="http://www.w3.org/2000/svg">${svgEls.join('')}</svg>`;
@@ -702,8 +731,8 @@ function buildMessage(
   const giorni = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
   const pad = (n: number) => n < 10 ? `0${n}` : String(n);
   const valuta = currency ?? (post.platform === 'aliexpress' ? '$' : '€');
-  const discPrice = Number(post.discountedPrice).toFixed(2);
-  const origPrice = Number(post.originalPrice).toFixed(2);
+  const discPrice = Number(post.discountedPrice).toFixed(2).replace('.', ',');
+  const origPrice = Number(post.originalPrice).toFixed(2).replace('.', ',');
   const disc = Number(post.discountPercent);
   const titleShort = (post.title || '').length > 60 ? (post.title || '').slice(0, 57) + '...' : (post.title || '');
 
@@ -738,6 +767,8 @@ function buildMessage(
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       post.boxcoupon || '',
+    '{checkout}':        post.checkout || '',
+    '{emojicat}':        getProductEmoji(post.title || '', post.cat || ''),
   };
 
   const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;
@@ -929,33 +960,43 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     if (!channels.length) { skipped.push(`${userId}: no channels`); continue; }
 
-    // Controlla finestra oraria (fuso Europe/Rome)
-    const currentMin = nowMinutesRome();
-    if (currentMin < timeToMin(oraI) || currentMin >= timeToMin(oraF)) {
-      skipped.push(`${userId}: fuori finestra ${oraI}-${oraF}`); continue;
-    }
-
-    // Controlla intervallo: quanti minuti dall'ultimo post pubblicato?
-    const [lastPub] = await sql`
-      SELECT published_at FROM published_posts
-      WHERE user_id = ${userId}
-      ORDER BY published_at DESC LIMIT 1
+    // Controlla se c'è almeno un item immediate in coda — se sì, salta tutti i controlli di timing
+    const [immediateItem] = await sql`
+      SELECT id FROM autopost_queue
+      WHERE user_id = ${userId} AND status = 'draft' AND COALESCE(immediate, false) = true
+      LIMIT 1
     `;
+    const hasImmediate = !!immediateItem;
 
-    if (lastPub?.published_at) {
-      const minSinceLast = (Date.now() - new Date(lastPub.published_at as string).getTime()) / 60000;
-      if (minSinceLast < interv - 0.5) {
-        skipped.push(`${userId}: troppo presto (${minSinceLast.toFixed(1)}/${interv}min)`); continue;
+    if (!hasImmediate) {
+      // Controlla finestra oraria (fuso Europe/Rome)
+      const currentMin = nowMinutesRome();
+      if (currentMin < timeToMin(oraI) || currentMin >= timeToMin(oraF)) {
+        skipped.push(`${userId}: fuori finestra ${oraI}-${oraF}`); continue;
       }
-    }
 
-    // Allinea l'orario ai multipli dell'intervallo (es. ogni 5 min → 11:50, 11:55, 12:00)
-    // Pubblica solo se siamo entro i primi 60s della "finestra" multipla dell'intervallo
-    if (interv > 1) {
-      const nowRome = nowMinutesRome();
-      const minuteInCycle = (nowRome - timeToMin(oraI) + 1440) % interv;
-      if (minuteInCycle > 0) {
-        skipped.push(`${userId}: attendo finestra (${minuteInCycle}/${interv}min)`); continue;
+      // Controlla intervallo: quanti minuti dall'ultimo post pubblicato?
+      const [lastPub] = await sql`
+        SELECT published_at FROM published_posts
+        WHERE user_id = ${userId}
+        ORDER BY published_at DESC LIMIT 1
+      `;
+
+      if (lastPub?.published_at) {
+        const minSinceLast = (Date.now() - new Date(lastPub.published_at as string).getTime()) / 60000;
+        if (minSinceLast < interv - 0.5) {
+          skipped.push(`${userId}: troppo presto (${minSinceLast.toFixed(1)}/${interv}min)`); continue;
+        }
+      }
+
+      // Allinea l'orario ai multipli dell'intervallo (es. ogni 5 min → 11:50, 11:55, 12:00)
+      // Pubblica solo se siamo entro i primi 60s della "finestra" multipla dell'intervallo
+      if (interv > 1) {
+        const nowRome = nowMinutesRome();
+        const minuteInCycle = (nowRome - timeToMin(oraI) + 1440) % interv;
+        if (minuteInCycle > 0) {
+          skipped.push(`${userId}: attendo finestra (${minuteInCycle}/${interv}min)`); continue;
+        }
       }
     }
 
@@ -974,7 +1015,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const [candidate] = await sql`
         SELECT id, posts, silenzioso FROM autopost_queue
         WHERE user_id = ${userId} AND status = 'draft' ${excludeClause}
-        ORDER BY created_at ASC LIMIT 1
+        ORDER BY COALESCE(immediate, false) DESC, created_at ASC LIMIT 1
       `;
       if (!candidate) break;
 
@@ -1082,8 +1123,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const aliTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1`;
           const aliTemplateId = aliTplRow[0]?.id ?? 'tpl1';
           const aliTemplateCfg = parseTemplateCfg(aliTplRow[0]);
-          const aliLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo IN ('aliexpress', 'normal') ORDER BY tipo = 'aliexpress' DESC, created_at ASC LIMIT 1`;
+          const aliLayoutRows = await sql`SELECT id, keyboard_id FROM layouts WHERE user_id = ${userId} AND tipo IN ('aliexpress', 'normal') ORDER BY tipo = 'aliexpress' DESC, created_at ASC LIMIT 1`;
           const aliLayoutId = aliLayoutRows[0]?.id ?? '';
+          const aliKeyboardId = String(aliLayoutRows[0]?.keyboard_id ?? '');
 
           post = {
             id: crypto.randomUUID(), platform: 'aliexpress',
@@ -1093,7 +1135,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             originalPrice: origPrice, discountedPrice: salePrice,
             discountPercent: discPct,
             customText: '', isHistoricalLow: false,
-            templateId: aliTemplateId, layoutId: aliLayoutId, keyboardId: '', emoji: '🔴',
+            templateId: aliTemplateId, layoutId: aliLayoutId, keyboardId: aliKeyboardId, emoji: '🔴',
             shipFromCountry: String(candidate.product_country || '').toUpperCase() || undefined,
           };
 
@@ -1223,8 +1265,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const mTplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1`;
         const mTemplateId = mTplRow[0]?.id ?? 'tpl1';
         const mTemplateCfg = parseTemplateCfg(mTplRow[0]);
-        const mLayoutRows = await sql`SELECT id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`.catch(() => []);
+        const mLayoutRows = await sql`SELECT id, keyboard_id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`.catch(() => []);
         const mLayoutId = mLayoutRows[0]?.id ?? '';
+        const mKeyboardId = String(mLayoutRows[0]?.keyboard_id ?? '');
         const CSYM_M: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
 
         const multiPosts = multiCandidates.map((cand: any) => ({
@@ -1235,7 +1278,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           originalPrice: Number(cand.original_price), discountedPrice: Number(cand.discounted_price),
           discountPercent: Number(cand.discount_percent),
           customText: '', isHistoricalLow: false,
-          templateId: mTemplateId, layoutId: mLayoutId, keyboardId: '', emoji: '🟡',
+          templateId: mTemplateId, layoutId: mLayoutId, keyboardId: mKeyboardId, emoji: '🟡',
           cat: cand.category || undefined,
         }));
 
@@ -1249,11 +1292,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
       if (amzCandidate) {
         const amzLayouts = await sql`
-          SELECT id FROM layouts WHERE user_id = ${userId}
+          SELECT id, keyboard_id FROM layouts WHERE user_id = ${userId}
             AND tipo IN ('amazon', 'normal', 'historical_low')
           ORDER BY tipo = 'amazon' DESC, created_at ASC LIMIT 1
         `;
         const layoutId = amzLayouts[0]?.id ?? '';
+        const amzKeyboardId = String(amzLayouts[0]?.keyboard_id ?? '');
         const tplRow = await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1`;
         const templateId  = tplRow[0]?.id ?? 'tpl1';
         const templateCfg = parseTemplateCfg(tplRow[0]);
@@ -1298,7 +1342,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           title: amzCandidate.title ?? '', image: amzCandidate.image ?? '',
           originalPrice, discountedPrice, discountPercent,
           customText: '', isHistoricalLow: false,
-          templateId, layoutId, keyboardId: '', emoji: '🟡',
+          templateId, layoutId, keyboardId: amzKeyboardId, emoji: '🟡',
           stelle:     stelleStr     || undefined,
           recensioni: recensioniStr || undefined,
           cat:        amzCandidate.category || undefined,
@@ -1463,11 +1507,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         }
       }
 
-      // Tastiera: usa quella del layout se impostata, altrimenti quella del post
+      // Tastiera: usa quella del layout se impostata, altrimenti quella del post,
+      // altrimenti la prima tastiera dell'utente (fallback per layout senza keyboard_id)
       const effectiveKeyboardId = layoutRow?.keyboard_id || post.keyboardId;
-      const [keyboardRow] = effectiveKeyboardId ? await sql`
+      let [keyboardRow] = effectiveKeyboardId ? await sql`
         SELECT body FROM keyboards WHERE id = ${effectiveKeyboardId} AND user_id = ${userId}
       ` : [null];
+      if (!keyboardRow) {
+        const [firstKb] = await sql`SELECT body FROM keyboards WHERE user_id = ${userId} ORDER BY created_at ASC LIMIT 1`;
+        if (firstKb) keyboardRow = firstKb;
+      }
 
       // Carica tag personalizzati: prima 'legacy' (vecchio default), poi user-specifici (sovrascrivono)
       const tagRows = await sql`
@@ -1526,7 +1575,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
             const title = String(mp.title ?? '');
             const shortTitle = title.length > 55 ? title.slice(0, 55) + '…' : title;
-            return `${i + 1}. ${mp.emoji || '📦'} ${shortTitle}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${Number(mp.discountPercent)}%)`;
+            return `${i + 1}. ${mp.emoji || '📦'} ${shortTitle}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2).replace('.', ',')} (-${Number(mp.discountPercent)}%)`;
           }).join('\n\n');
           messageText = buildMessage(layoutText.replace('{lista_prodotti}', lista), post, affiliateUrl, aliCurrency, customTags);
         } else {

@@ -1,4 +1,5 @@
 import { Tag, CreatedPost } from '../types';
+import { getProductEmoji } from '../lib/titleFormat';
 
 // Tag di sistema — non modificabili/eliminabili dall'utente
 export const SYSTEM_TAGS = new Set([
@@ -12,6 +13,7 @@ export const SYSTEM_TAGS = new Set([
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
   '{coupon}', '{boxcoupon}', '{checkout}',
+  '{emojicat}',
 ]);
 
 // Sentinel usato internamente: riga che conteneva solo un blocco {_ _} vuoto → verrà rimossa
@@ -94,7 +96,7 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       post.boxcoupon || '',
     '{checkout}':        post.checkout || '',
-
+    '{emojicat}':        getProductEmoji(post.title, post.cat || ''),
   };
 }
 

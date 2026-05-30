@@ -38,6 +38,7 @@ const READONLY_SYSTEM_TAG_ORDER = [
   '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
+  '{emojicat}',
 ];
 const READONLY_SYSTEM_TAG_SET = new Set(READONLY_SYSTEM_TAG_ORDER);
 
@@ -69,6 +70,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   '{recensioni}':      'Numero di recensioni del prodotto',
   '{cat}':             'Categoria del prodotto',
   '{author}':          'Autore o fonte del post',
+  '{emojicat}':        'Emoji automatica basata sulla categoria e le parole chiave del titolo — es. 📱 per smartphone, ☕ per caffè, 🧴 per igiene',
 };
 
 // ── Tags ─────────────────────────────────────────────────────
