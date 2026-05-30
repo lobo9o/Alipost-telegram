@@ -112,7 +112,7 @@ export async function checkPostPrice(
   cfg: Record<string, any>,
 ): Promise<PriceCheckResult> {
   const storedPrice = Number(post.discountedPrice);
-  if (!storedPrice) return { valid: true };
+  if (!storedPrice) return { valid: false, reason: 'Prezzo non disponibile (0)' };
 
   try {
     let currentPrice: number | null = null;

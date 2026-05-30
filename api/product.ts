@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withErrorHandler, allowMethods, requireUserId } from './_utils.js';
 import sql from '../lib/db.js';
 import crypto from 'crypto';
+import { getProductEmoji, shortenTitle } from './_titleFormat.js';
 
 // Token endpoints per versione credenziale
 const TOKEN_ENDPOINTS: Record<string, string> = {
@@ -83,6 +84,7 @@ async function creatorsGetItem(
       'itemInfo.byLineInfo',
       'browseNodeInfo.browseNodes',
       'offersV2.listings.dealDetails',
+      'offersV2.listings.type',
     ],
   };
 
@@ -134,8 +136,10 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
   scrapedOrigPrice: number;
   clipCoupon: string;
   clipCouponPct: boolean;
+  hasCheckoutDiscount: boolean;
+  checkoutDiscountAmount: number;
 }> {
-  const empty = { stelle: '', recensioni: '', scrapedPrice: 0, scrapedOrigPrice: 0, clipCoupon: '', clipCouponPct: false };
+  const empty = { stelle: '', recensioni: '', scrapedPrice: 0, scrapedOrigPrice: 0, clipCoupon: '', clipCouponPct: false, hasCheckoutDiscount: false, checkoutDiscountAmount: 0 };
   try {
     const url = `https://${domain}/dp/${asin}`;
     const controller = new AbortController();
@@ -203,24 +207,102 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
       if (cpM) scrapedPrice = parseFloat(cpM[1]) || 0;
     }
 
-    // Clip coupon (checkbox da spuntare nel buybox) — rilevato da couponLabelText
+    // Prezzo di riferimento barrato (basisPrice / Prezzo di listino) — due strategie:
+    // 1. a-text-strike nel blocco basisPrice (layout con strikethrough esplicito)
+    const basisStrikeM = html.match(/basisPrice.{0,100}Prezzo\s+di\s+listino.{0,200}a-text-strike[^>]*>\s*([\d]+[,.][\d]{1,2})/si)
+      ?? html.match(/Prezzo\s+di\s+listino.{0,200}a-text-strike[^>]*>\s*([\d]+[,.][\d]{1,2})/si);
+    if (basisStrikeM) {
+      const basisPrice = parsePriceStr(basisStrikeM[1]);
+      if (basisPrice > scrapedPrice) {
+        console.log(`[product] basisPrice strikethrough trovato: ${basisPrice}`);
+        scrapedOrigPrice = basisPrice;
+      }
+    }
+    // 2. data-a-color="secondary" — il prezzo di riferimento/confronto mostrato in grigio
+    //    (usato sia per "Prezzo di listino" che per "Prezzo più basso ultimi 30gg")
+    if (scrapedOrigPrice <= scrapedPrice) {
+      const secondaryM = html.match(/data-a-color="secondary"[^>]*>.*?class="a-offscreen">([\d,]+€)/si);
+      if (secondaryM) {
+        const secPrice = parsePriceStr(secondaryM[1]);
+        if (secPrice > scrapedPrice) {
+          console.log(`[product] prezzo secondario (riferimento): ${secPrice}`);
+          scrapedOrigPrice = secPrice;
+        }
+      }
+    }
+
+    // Prezzo alternativo dal buybox: apex-pricetopay-value size="l" con ≥2 opzioni
+    // (es. prezzo con coupon S&S vs senza, prezzo con promozione vs senza)
+    // Quando esistono due opzioni, la più alta è il prezzo "senza sconto extra" da mostrare nel post.
+    // Gira SEMPRE, non solo se snsSection — la pagina può non avere keyword S&S ma avere due opzioni prezzo.
+    const apexLPrices = [...html.matchAll(/apex-pricetopay-value[^>]*data-a-size="l"[^>]*><span class="a-offscreen">([\d,]+€)/gi)]
+      .map(m => parsePriceStr(m[1])).filter(p => p > 0);
+    if (apexLPrices.length >= 2) {
+      const maxApex = Math.max(...apexLPrices);
+      if (maxApex > scrapedPrice) {
+        console.log(`[product] apex max opzione prezzo: ${maxApex} (era ${scrapedPrice}) | opzioni: ${apexLPrices.join(',')}`);
+        scrapedPrice = maxApex;
+      }
+    }
+
+    // Legacy S&S: sns-base-price / snsSavings (mantenuto per compatibilità layout vecchi)
+    const snsSection = html.includes('subscribeAndSave_feature_div') || html.includes('sns-base-price') || html.includes('snsSavings') || html.includes('subscribe_save');
+    if (snsSection) {
+      const snsBaseM = html.match(/id="sns-base-price[^"]*"[^>]*>[^€]*€\s*([\d]+[,.][\d]{2})/i)
+        ?? html.match(/class="[^"]*snsSavings[^"]*"[^€]*€\s*([\d]+[,.][\d]{2})/i);
+      if (snsBaseM) {
+        const basePrice = parsePriceStr(snsBaseM[1]);
+        if (basePrice > scrapedPrice) {
+          console.log(`[product] S&S legacy: prezzo base ${basePrice} (era ${scrapedPrice})`);
+          scrapedPrice = basePrice;
+        }
+      } else {
+        const snsPriceM = html.match(/Prezzo[^€<]{0,30}€\s*([\d]+[,.][\d]{2})/);
+        if (snsPriceM) {
+          const basePrice = parsePriceStr(snsPriceM[1]);
+          if (basePrice > scrapedPrice && scrapedPrice > 0) {
+            console.log(`[product] S&S legacy prezzo da testo: ${basePrice} (era ${scrapedPrice})`);
+            scrapedPrice = basePrice;
+          }
+        }
+      }
+    }
+
+    // Clip coupon (checkbox da spuntare nel buybox) — rilevato da couponLabelText.
+    // Scansiona TUTTE le occorrenze e controlla il testo del coupon stesso:
+    // se il testo contiene parole S&S ("abbonati", "prima consegna", ecc.) → salta.
     let clipCoupon = '';
     let clipCouponPct = false;
-    const couponLabelM = html.match(/couponLabelText[^>]*>\s*Applica\s+coupon\s+([\d,\.]+)\s*%/i);
-    if (couponLabelM) {
-      clipCoupon = couponLabelM[1].replace(',', '.') + '%';
-      clipCouponPct = true;
-    } else {
-      const couponLabelAmtM = html.match(/couponLabelText[^>]*>\s*Applica\s+coupon\s+(?:€|EUR\s*)?([\d,\.]+)/i);
-      if (couponLabelAmtM) {
-        clipCoupon = couponLabelAmtM[1].replace(',', '.') + '€';
-        clipCouponPct = false;
+    const SNS_COUPON_RE = /abbonati|prima\s+consegna|consegne\s+ripetute|solo\s+all.{0,5}opzione/i;
+    const couponLabelRe = /couponLabelText[^>]*>([^<]+)/gi;
+    let cm: RegExpExecArray | null;
+    while ((cm = couponLabelRe.exec(html)) !== null) {
+      const text = cm[1].trim();
+      if (!text) continue;
+      if (SNS_COUPON_RE.test(text)) {
+        console.log('[product] coupon ignorato (S&S):', text.slice(0, 100));
+        continue;
       }
+      const pctM = text.match(/Applica\s+coupon\s+([\d,\.]+)\s*%/i);
+      if (pctM) { clipCoupon = pctM[1].replace(',', '.') + '%'; clipCouponPct = true; break; }
+      const amtM = text.match(/Applica\s+coupon\s+(?:€|EUR\s*)?([\d,\.]+)/i);
+      if (amtM) { clipCoupon = amtM[1].replace(',', '.') + '€'; break; }
     }
     if (clipCoupon) console.log('[product] clip coupon da scraping:', clipCoupon, 'pct:', clipCouponPct);
 
+    // Checkout discount (sconto automatico al check-out, senza spuntare box)
+    // Cerca "Risparmia X,XX € al check-out" nell'HTML
+    let hasCheckoutDiscount = false;
+    let checkoutDiscountAmount = 0;
+    const checkoutM = html.match(/Risparmia\s+([\d]+[,.][\d]{1,2})\s*(?:&nbsp;)?\s*(?:€|&euro;)?\s*al\s+check-out/i);
+    if (checkoutM) {
+      hasCheckoutDiscount = true;
+      checkoutDiscountAmount = parsePriceStr(checkoutM[1]);
+      console.log('[product] checkout discount rilevato per', asin, '| importo:', checkoutDiscountAmount);
+    }
+
     console.log('[product] scrape page', asin, '| stelle:', stelle, '| rec:', recensioni, '| price:', scrapedPrice, '| origPrice:', scrapedOrigPrice);
-    return { stelle, recensioni, scrapedPrice, scrapedOrigPrice, clipCoupon, clipCouponPct };
+    return { stelle, recensioni, scrapedPrice, scrapedOrigPrice, clipCoupon, clipCouponPct, hasCheckoutDiscount, checkoutDiscountAmount };
   } catch {
     return empty;
   }
@@ -629,7 +711,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const imageUrl   = pick(pick(pick(pick(item, 'images', 'Images'), 'primary', 'Primary'), 'large', 'Large'), 'url', 'URL');
     const offersV2        = pick(item, 'offersV2', 'OffersV2') as any;
     const allListings     = (pick(offersV2, 'listings', 'Listings') as any[]) ?? [];
-    const listings        = allListings[0];
+    // Escludi listing Subscribe & Save (prezzo artificialmente basso, non acquistabile senza abbonamento)
+    const listingType = (l: any) => String(pick(l, 'type', 'Type') ?? '').toLowerCase();
+    const isSnS = (l: any) => listingType(l).includes('subscribe');
+    const regularListings = allListings.filter(l => !isSnS(l));
+    const listings        = regularListings[0] ?? allListings[0];
+    if (regularListings.length < allListings.length) {
+      console.log(`[product] ${resolvedAsin}: esclusi ${allListings.length - regularListings.length} listing S&S (types: ${allListings.map(listingType).join(',')})`);
+    } else {
+      console.log(`[product] ${resolvedAsin}: listing types: ${allListings.map(listingType).join(',')}`);
+    }
     const priceObj        = pick(listings, 'price', 'Price') as any;
     const discountedPrice = (pick(pick(priceObj, 'money', 'Money'), 'amount', 'Amount') as number) ?? 0;
     const savingBasisAmt  = (pick(pick(pick(priceObj, 'savingBasis', 'SavingBasis'), 'money', 'Money'), 'amount', 'Amount') as number) ?? 0;
@@ -643,11 +734,31 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // customerReviews non è supportato dall'API Creators — scraping pagina prodotto
     // Se il prezzo dall'API è 0, lo scraping prova a recuperarlo dalla pagina HTML
     // Rileva anche clip coupon (checkbox) dalla classe couponLabelText nella pagina
-    const { stelle, recensioni, scrapedPrice, scrapedOrigPrice, clipCoupon, clipCouponPct } = await scrapeAmazonPage(resolvedAsin, marketplaceDomain);
+    const { stelle, recensioni, scrapedPrice, scrapedOrigPrice, clipCoupon, clipCouponPct, hasCheckoutDiscount, checkoutDiscountAmount } = await scrapeAmazonPage(resolvedAsin, marketplaceDomain);
 
     let finalDiscountedPrice = discountedPrice;
     let finalOriginalPrice   = originalPrice;
     let priceWarning: string | undefined;
+
+    // Se lo scraping ha rilevato S&S e il prezzo scraped è > prezzo API,
+    // l'API sta restituendo il prezzo abbonamento — usiamo il prezzo reale dalla pagina
+    if (discountedPrice > 0 && scrapedPrice > discountedPrice * 1.03) {
+      console.log(`[product] ${resolvedAsin}: prezzo API (${discountedPrice}) < scraping (${scrapedPrice}) — probabile S&S, uso prezzo pagina`);
+      finalDiscountedPrice = scrapedPrice;
+      finalOriginalPrice   = scrapedOrigPrice > scrapedPrice ? scrapedOrigPrice : scrapedPrice;
+    }
+    // Se lo scraping ha trovato un prezzo barrato (basisPrice) significativamente maggiore
+    // del prezzo API, l'API non include il savingBasis — usiamo i prezzi della pagina
+    if (scrapedOrigPrice > discountedPrice * 1.05 && scrapedOrigPrice > finalOriginalPrice) {
+      console.log(`[product] ${resolvedAsin}: scrapedOrigPrice (${scrapedOrigPrice}) > discountedPrice (${discountedPrice}) — uso prezzi pagina`);
+      finalOriginalPrice   = scrapedOrigPrice;
+      if (scrapedPrice > 0 && scrapedPrice !== discountedPrice * 1) {
+        // Usa il prezzo singolo acquisto solo se diverso dal prezzo API
+        if (Math.abs(scrapedPrice - discountedPrice) > 0.5) {
+          finalDiscountedPrice = scrapedPrice;
+        }
+      }
+    }
 
     if (discountedPrice === 0) {
       console.warn('[product] prezzo zero da API per ASIN', resolvedAsin, '| listings count:', allListings.length);
@@ -705,6 +816,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
+    // Applica sconto checkout (automatico al pagamento): sottrai l'importo se l'API non lo ha già incluso
+    if (hasCheckoutDiscount && checkoutDiscountAmount > 0) {
+      const expectedAfterDiscount = Math.round((finalDiscountedPrice - checkoutDiscountAmount) * 100) / 100;
+      if (expectedAfterDiscount > 0 && expectedAfterDiscount < finalDiscountedPrice) {
+        console.log('[product] applico checkout discount:', checkoutDiscountAmount, '| prezzo:', finalDiscountedPrice, '→', expectedAfterDiscount);
+        finalDiscountedPrice = expectedAfterDiscount;
+      }
+    }
+
     const finalDiscountPercent = savingsPct > 0 && !couponBox
       ? Math.round(savingsPct)
       : finalOriginalPrice > finalDiscountedPrice
@@ -724,9 +844,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           VALUES (${resolvedAsin}, 'amazon', ${finalDiscountedPrice})`.catch(() => {});
     }
 
+    const amazonTitle = titleObj ?? '';
     res.json({
       asin: resolvedAsin,
-      title: titleObj ?? '',
+      title: shortenTitle(amazonTitle),
       image: imageUrl ?? '',
       originalPrice: finalOriginalPrice,
       discountedPrice: finalDiscountedPrice,
@@ -738,8 +859,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       cat: cat || undefined,
       coupon: coupon || undefined,
       couponBox: couponBox || undefined,
+      checkout: hasCheckoutDiscount ? 'Sconto automatico al check-out' : undefined,
       priceWarning,
       isHistoricalLow: isHistoricalLowAmazon || undefined,
+      emoji: getProductEmoji(amazonTitle, cat || undefined),
     });
 
   } else if (platform === 'aliexpress') {
@@ -812,9 +935,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           VALUES (${productId}, 'aliexpress', ${salePrice})`.catch(() => {});
     }
 
+    const aliTitle = detail.title ?? '';
     res.json({
       productId,
-      title: detail.title,
+      title: shortenTitle(aliTitle),
       image: detail.image,
       originalPrice: origPrice || salePrice,
       discountedPrice: salePrice,
@@ -823,6 +947,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       priceWarning: salePrice === 0 ? 'Prezzo non trovato. Inseriscilo manualmente.' : undefined,
       isHistoricalLow: isHistoricalLowAli || undefined,
       shipFromCountry: shipFromCountry || undefined,
+      emoji: getProductEmoji(aliTitle),
     });
 
   } else {

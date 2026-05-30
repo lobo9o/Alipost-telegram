@@ -6,7 +6,8 @@ import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, DealProduct } from '../lib/api';
-import { generatePostImage, generateMultiPostImage, generateTerminataImage } from '../utils/imageCompose';
+import { generatePostImage, generateMultiPostImage, generateTerminataImage, applyCurrPos, applyDecimalSep, applySconto } from '../utils/imageCompose';
+import { getProductEmoji, shortenTitle } from '../lib/titleFormat';
 function CustomTextEditor({ initialValue, onSave, rows = 2 }: { initialValue: string; onSave: (v: string) => void; rows?: number }) {
   const [val, setVal] = useState(initialValue);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -101,12 +102,19 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
 
       {/* Text elements with actual values */}
       {([
-        { el: template.prezzo,          text: `€${post.discountedPrice.toFixed(2)}` },
-        { el: template.prezzoPrecedente, text: `€${post.originalPrice.toFixed(2)}` },
-        { el: template.sconto,          text: `-${post.discountPercent}%` },
+        { el: template.prezzo,          text: applyDecimalSep(applyCurrPos(`€${post.discountedPrice.toFixed(2)}`, template.prezzo.currencyPos), template.prezzo.decimalSep) },
+        { el: template.prezzoPrecedente, text: applyDecimalSep(applyCurrPos(`€${post.originalPrice.toFixed(2)}`, template.prezzoPrecedente.currencyPos), template.prezzoPrecedente.decimalSep) },
+        { el: template.sconto,          text: applySconto(`-${post.discountPercent}%`, template.sconto.hidePercent, template.sconto.hideMinus) },
         { el: template.testoCustom,     text: post.customText },
-      ] as const).map(({ el, text }, i) =>
-        el.enabled && text ? (
+      ] as const).map(({ el, text }, i) => {
+        if (!el.enabled || !text) return null;
+        const displayFs = el.fontSize * fontScale;
+        const decScale = (el as any).decimalFontScale != null && (el as any).decimalFontScale < 1 ? (el as any).decimalFontScale : 1;
+        const decMatch = decScale < 1 ? text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/) : null;
+        const renderedText = decMatch
+          ? <>{decMatch[1]}<span style={{ fontSize: `${displayFs * decScale}px`, verticalAlign: 'bottom' }}>{decMatch[2]}</span>{decMatch[3]}</>
+          : text;
+        return (
           <div key={i} style={{
             position: 'absolute',
             ...(el.textAnchor === 'right'
@@ -114,16 +122,16 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
               : el.textAnchor === 'center'
                 ? { left: `${el.x}%`, top: `${el.y}%`, transform: 'translateX(-50%)' }
                 : { left: `${el.x}%`, top: `${el.y}%` }),
-            fontSize: `${el.fontSize * fontScale}px`,
+            fontSize: `${displayFs}px`,
             lineHeight: 1,
             fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
             color: el.color,
             textDecoration: (el as any).strikethrough ? `line-through ${(el as any).strikethroughColor || el.color}` : 'none',
             whiteSpace: 'nowrap', pointerEvents: 'none',
             WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * fontScale}px ${el.strokeColor}` : undefined,
-          }}>{text}</div>
-        ) : null
-      )}
+          }}>{renderedText}</div>
+        );
+      })}
 
       {/* Badge — sopra tutto, incluso il testo, solo se minimo storico */}
       {template.badge.enabled && post.isHistoricalLow && template.badge.src && (
@@ -713,12 +721,12 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       let post: CreatedPost = {
         id: genId(), platform: 'aliexpress',
         sourceUrl,
-        productId: p.productId, title: p.title, image: p.image,
+        productId: p.productId, title: shortenTitle(p.title), image: p.image,
         originalPrice: p.originalPrice, discountedPrice: p.discountedPrice,
         discountPercent: p.discountPercent,
         customText: '', isHistoricalLow: false,
         templateId: tpl?.id || 'tpl1',
-        layoutId: defaultAliLayout, keyboardId: '', emoji: '🔴',
+        layoutId: defaultAliLayout, keyboardId: '', emoji: getProductEmoji(p.title, p.category),
         shipFromCountry,
       };
       // Genera immagine template (come NewPost) così il cron la usa direttamente
@@ -861,12 +869,12 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
       let post: CreatedPost = {
         id: genId(), platform: 'amazon',
         sourceUrl: p.affiliateUrl || p.url,
-        productId: p.productId, title: p.title, image: p.image,
+        productId: p.productId, title: shortenTitle(p.title), image: p.image,
         originalPrice: p.originalPrice, discountedPrice: p.discountedPrice,
         discountPercent: p.discountPercent,
         customText: '', isHistoricalLow: false,
         templateId: tpl?.id || 'tpl1',
-        layoutId: defaultAmazonLayout, keyboardId: '', emoji: '🟡',
+        layoutId: defaultAmazonLayout, keyboardId: '', emoji: getProductEmoji(p.title, p.category),
       };
       if (tpl && post.image) {
         const gi = await generatePostImage(tpl, post.image, false, 'amazon', {
@@ -1545,10 +1553,10 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
           const boxcouponText = p.couponBox
             ? (tags.find(t => t.name === '{boxcoupon}')?.value || 'Abilita il coupon prima di acquistare')
             : '';
-          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon, boxcoupon: boxcouponText || undefined };
+          return { id: newId, platform: 'amazon' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.asin, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultNormalLay, keyboardId: defaultKb, emoji: p.emoji || '📦', stelle: p.stelle, recensioni: p.recensioni, author: p.author, cat: p.cat, coupon: p.coupon, boxcoupon: boxcouponText || undefined, checkout: p.checkout };
         } else {
           const p = await productApi.fetchAliExpress({ url: l.url });
-          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultAliLay, keyboardId: defaultKb, emoji: '📦', shipFromCountry: p.shipFromCountry };
+          return { id: newId, platform: 'aliexpress' as const, sourceUrl: p.affiliateUrl || l.url, productId: p.productId, title: p.title, image: p.image, originalPrice: p.originalPrice, discountedPrice: p.discountedPrice, discountPercent: p.discountPercent, customText: '', isHistoricalLow: false, templateId: defaultNormalTpl, layoutId: defaultAliLay, keyboardId: defaultKb, emoji: p.emoji || '📦', shipFromCountry: p.shipFromCountry };
         }
       };
 
@@ -2027,6 +2035,31 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const [mergeSelected, setMergeSelected] = useState<Set<string>>(new Set());
   const [mergingId, setMergingId] = useState(false);
   const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const [dedupNotice, setDedupNotice] = useState<string | null>(null);
+  const dedupDone = useRef(false);
+
+  // Dedup: rimuove articoli duplicati (stesso productId) al caricamento della coda
+  React.useEffect(() => {
+    if (dedupDone.current || queue.length === 0) return;
+    dedupDone.current = true;
+    const seen = new Map<string, string>();
+    const toRemove: string[] = [];
+    for (const item of queue) {
+      const posts = item.posts as any[];
+      const pids = posts.map((p: any) => p.productId).filter(Boolean);
+      if (pids.some((pid: string) => seen.has(pid))) {
+        toRemove.push(item.id);
+      } else {
+        pids.forEach((pid: string) => seen.set(pid, item.id));
+      }
+    }
+    if (toRemove.length > 0) {
+      toRemove.forEach(id => autopostApi.delete(id).catch(() => {}));
+      setQueue(q => q.filter(x => !toRemove.includes(x.id)));
+      setDedupNotice(`${toRemove.length} articol${toRemove.length === 1 ? 'o duplicato rimosso' : 'i duplicati rimossi'} dalla coda`);
+    }
+  }, [queue]);
 
   const safeIdx = Math.min(currentIdx, Math.max(0, queue.length - 1));
 
@@ -2139,6 +2172,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             cat: (freshData as any).cat ?? post.cat,
             author: (freshData as any).author ?? post.author,
             coupon: (freshData as any).coupon ?? post.coupon,
+            checkout: (freshData as any).checkout ?? post.checkout,
           } as CreatedPost;
         } catch { return post; }
       }));
@@ -2438,6 +2472,14 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     return a;
   });
 
+  const moveToEdge = (id: string, edge: 'first' | 'last') => setQueue(q => {
+    const a = [...q]; const i = a.findIndex(x => x.id === id);
+    if (i < 0) return a;
+    const [item] = a.splice(i, 1);
+    if (edge === 'first') a.unshift(item); else a.push(item);
+    return a;
+  });
+
   const clearAll = async () => {
     try { await autopostApi.deleteAll(); } catch (e) {
       window.alert('Errore: ' + (e instanceof Error ? e.message : String(e)));
@@ -2445,10 +2487,15 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     setQueue([]);
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
   const handleTouchEnd = (e: React.TouchEvent) => {
     const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
     if (Math.abs(dx) < 40) return;
+    if (Math.abs(dy) > Math.abs(dx)) return; // ignora scroll verticale
     if (dx < 0 && safeIdx < queue.length - 1) { setCurrentIdx(i => i + 1); setExpandedId(null); }
     if (dx > 0 && safeIdx > 0) { setCurrentIdx(i => i - 1); setExpandedId(null); }
   };
@@ -2549,7 +2596,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       )}
 
       {/* Contatore + navigazione frecce */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 4px', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 4px', gap: 6 }}>
+        <button className="hbk" disabled={safeIdx === 0} style={{ opacity: safeIdx === 0 ? 0.25 : 1 }}
+          onClick={() => { setCurrentIdx(0); setExpandedId(null); }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
+            <path d="M19 12H5M5 12l5-5M5 12l5 5" /><line x1="5" y1="5" x2="5" y2="19" strokeWidth="2.5"/>
+          </svg>
+        </button>
         <button className="hbk" disabled={safeIdx === 0} style={{ opacity: safeIdx === 0 ? 0.25 : 1 }}
           onClick={() => { setCurrentIdx(i => i - 1); setExpandedId(null); }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
@@ -2572,6 +2625,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
             <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
         </button>
+        <button className="hbk" disabled={safeIdx === queue.length - 1} style={{ opacity: safeIdx === queue.length - 1 ? 0.25 : 1 }}
+          onClick={() => { setCurrentIdx(queue.length - 1); setExpandedId(null); }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width={16} height={16}>
+            <path d="M5 12h14M14 7l5 5-5 5" /><line x1="19" y1="5" x2="19" y2="19" strokeWidth="2.5"/>
+          </svg>
+        </button>
       </div>
 
       {/* Dot indicator */}
@@ -2587,6 +2646,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       )}
 
       {publishErr && <ErrorBanner>{publishErr}</ErrorBanner>}
+
+      {dedupNotice && (
+        <div style={{ margin: '0 0 8px', padding: '8px 12px', background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.35)', borderRadius: 8, fontSize: 12, color: 'var(--t1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠️ {dedupNotice}</span>
+          <button onClick={() => setDedupNotice(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)', fontSize: 14 }}>✕</button>
+        </div>
+      )}
 
       {/* Pannello Combina — modalità selezione multipla */}
       {mergeMode && (
@@ -2681,11 +2747,17 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                 {/* Riga secondaria: posizione + notifica + modifica + refresh + elimina */}
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <button style={{ ...btnBase, opacity: safeIdx === 0 ? 0.3 : 1 }}
+                    onClick={() => { moveToEdge(item.id, 'first'); setCurrentIdx(0); }}
+                    disabled={safeIdx === 0} title="Porta in cima alla coda">⇈</button>
+                  <button style={{ ...btnBase, opacity: safeIdx === 0 ? 0.3 : 1 }}
                     onClick={() => { move(item.id, 'up'); setCurrentIdx(i => Math.max(0, i - 1)); }}
                     disabled={safeIdx === 0}>↑ Su</button>
                   <button style={{ ...btnBase, opacity: safeIdx === queue.length - 1 ? 0.3 : 1 }}
                     onClick={() => { move(item.id, 'down'); setCurrentIdx(i => Math.min(queue.length - 1, i + 1)); }}
                     disabled={safeIdx === queue.length - 1}>↓ Giù</button>
+                  <button style={{ ...btnBase, opacity: safeIdx === queue.length - 1 ? 0.3 : 1 }}
+                    onClick={() => { moveToEdge(item.id, 'last'); setCurrentIdx(queue.length - 1); }}
+                    disabled={safeIdx === queue.length - 1} title="Porta in fondo alla coda">⇊</button>
                   <button style={{ ...btnBase, background: notifBg, color: notifColor, border: notifBorder }} onClick={toggleSil}>
                     {notifLabel}
                   </button>

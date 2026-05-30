@@ -113,8 +113,10 @@ export interface AmazonProductResult {
   cat?: string;
   coupon?: string;
   couponBox?: boolean;
+  checkout?: string;
   priceWarning?: string;
   isHistoricalLow?: boolean;
+  emoji?: string;
 }
 export interface AliExpressProductResult {
   productId: string;
@@ -126,6 +128,7 @@ export interface AliExpressProductResult {
   affiliateUrl: string;
   isHistoricalLow?: boolean;
   shipFromCountry?: string;
+  emoji?: string;
 }
 
 export const productApi = {
@@ -247,7 +250,7 @@ export const emojiIdsApi = {
 };
 
 // ── Telegram Monitor ─────────────────────────────────────────────────────────
-export interface TgMonitorChannel { id: string; channel: string; active: boolean; }
+export interface TgMonitorChannel { id: string; channel: string; active: boolean; auto_publish: boolean; }
 export const tgMonitorApi = {
   status: () => req<{ status: string; phone: string | null }>('GET', '/api/tg-monitor/auth'),
   sendCode: (phone: string) => req<{ codeSent: boolean }>('POST', '/api/tg-monitor/auth', { action: 'sendCode', phone }),
@@ -257,5 +260,6 @@ export const tgMonitorApi = {
   listChannels: () => req<TgMonitorChannel[]>('GET', '/api/tg-monitor/channels'),
   addChannel: (channel: string) => req<{ ok: boolean; id: string }>('POST', '/api/tg-monitor/channels', { channel }),
   removeChannel: (id: string) => req<{ ok: boolean }>('DELETE', `/api/tg-monitor/channels/${id}`),
+  updateChannel: (id: string, data: Partial<Pick<TgMonitorChannel, 'auto_publish' | 'active'>>) => req<{ ok: boolean }>('PATCH', `/api/tg-monitor/channels/${id}`, data),
 };
 
