@@ -113,21 +113,27 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(monopattino|scooter.{0,10}elettrico)\b/i, emoji: '🛴' },
 
   // ── Scarpe sport (prima di abbigliamento generico) ─────────────────────────
-  { re: /\b(scarpe.{0,15}(running|trail|tennis|calcio|basket|sport|palestra)|sneaker|nike|adidas|new balance|asics)\b/i, emoji: '👟' },
+  { re: /\b(scarpe.{0,20}(running|trail|tennis|calcio|basket|sport|palestra|ginnastica|fitness)|sneakers?)\b/i, emoji: '👟' },
+  { re: /\b(nike|adidas|new balance|asics|converse|vans|puma).{0,30}(scarpe|sneakers?|running|trail|basket|tennis|sport)\b/i, emoji: '👟' },
 
   // ── Abbigliamento ─────────────────────────────────────────────────────────
   { re: /\b(giacca|giubbotto|cappotto|parka|piumino).{0,20}(uomo|donna|taglia|invernale)\b/i, emoji: '🧥' },
-  { re: /\b(scarpe|stivali|mocassini|decollete|sandali|ballerine|tacchi)\b/i, emoji: '👠' },
+  { re: /\b(scarpe.{0,25}(donna|tacco|col\s+tacco)|tacchi|decollete|ballerine|stiletto)\b/i, emoji: '👠' },
+  { re: /\b(scarpe.{0,25}uomo|mocassini)\b/i, emoji: '👞' },
+  { re: /\b(stivali)\b/i, emoji: '👢' },
+  { re: /\b(scarpe|sandali)\b/i, emoji: '👟' },
   { re: /\b(borsa|borsetta|clutch|pochette|shopper)\b/i, emoji: '👜' },
   { re: /\b(zaino.{0,10}(scuola|lavoro|viaggio|urban))\b/i, emoji: '🎒' },
   { re: /\b(portafoglio|portafogli)\b/i, emoji: '👛' },
   { re: /\b(cappello|berretto|cappellino|beanie)\b/i, emoji: '🧢' },
   { re: /\b(occhiali.{0,10}(sole|vista|lettura))\b/i, emoji: '🕶️' },
-  { re: /\b(maglietta|t-shirt|felpa|maglione|pullover)\b/i, emoji: '👕' },
+  { re: /\b(maglia|maglione|pullover|cardigan)\b/i, emoji: '🧶' },
+  { re: /\b(maglietta|t-shirt|felpa)\b/i, emoji: '👕' },
   { re: /\b(pantaloni|jeans|shorts|bermuda|leggings)\b/i, emoji: '👖' },
   { re: /\b(costume.{0,10}bagno|bikini|trikini)\b/i, emoji: '👙' },
   { re: /\b(cintura|cinture)\b/i, emoji: '👔' },
   { re: /\b(gioiello|gioielli|collana|bracciale|anello|orecchini|ciondolo)\b/i, emoji: '💍' },
+  { re: /\b(nike|adidas|new balance|asics|converse|vans|puma)\b/i, emoji: '👟' },
 
   // ── Alimentari ────────────────────────────────────────────────────────────
   { re: /\b(caffè|caffe|espresso.{0,10}(capsule|cialde)|nescafe|lavazza|illy|borbone)\b/i, emoji: '☕' },
