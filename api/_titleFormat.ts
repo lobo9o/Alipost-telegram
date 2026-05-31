@@ -28,8 +28,9 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(videogioc|gaming mouse|gaming keyboard|gaming headset|scheda video|gpu)\b/i, emoji: '🎮' },
 
   // ── Smartwatch & Orologi ───────────────────────────────────────────────────
-  { re: /\b(apple watch|galaxy watch|fitbit|garmin.{0,10}watch|smartwatch|fitness watch)\b/i, emoji: '⌚' },
+  { re: /\b(apple watch|galaxy watch|fitbit|garmin.{0,10}watch|smart.?watch|fitness watch)\b/i, emoji: '⌚' },
   { re: /\b(orologio|cronografo|orologi).{0,20}(uomo|donna|acciaio|automatico|quarzo)\b/i, emoji: '⌚' },
+  { re: /\bsmart\b/i, emoji: '📱' },
 
   // ── Stampanti & Accessori ──────────────────────────────────────────────────
   { re: /\b(stampante|printer|scanner|plotter)\b/i, emoji: '🖨️' },
