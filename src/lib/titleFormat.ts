@@ -10,7 +10,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(macbook|laptop|notebook|ultrabook|chromebook)\b/i, emoji: '💻' },
   { re: /\b(pc|computer|desktop|tower).{0,10}(portatil|fisso|gaming|win)/i, emoji: '🖥️' },
   { re: /\b(monitor)\b|\b(display)\b.{0,15}(pollici|inch|4k|2k|qhd|fhd|ips|va|oled)/i, emoji: '🖥️' },
-  { re: /\b(micro.?sd|scheda.{0,8}(memoria|sd)|memory.?card|pendrive|pen.?drive|chiavetta.{0,8}usb|usb.{0,5}(stick|flash|drive))\b/i, emoji: '💾' },
+  { re: /\b(micro.?sd|scheda.{0,8}(memoria|sd)|memory.?card|pendrive|pen.?drive|chiavetta.{0,8}usb|usb.{0,5}(stick|flash|drive)|hard.?disk|hdd|ssd|disco.{0,10}(rigido|esterno)|nvme)\b/i, emoji: '💾' },
   { re: /\b(mouse|trackpad|trackball)\b/i, emoji: '🖱️' },
   { re: /\b(tastiera|keyboard)\b/i, emoji: '⌨️' },
 
@@ -19,7 +19,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(speaker|altoparlante|cassa.{0,8}bluetooth|soundbar|subwoofer)\b/i, emoji: '🔊' },
 
   // ── TV & Video ─────────────────────────────────────────────────────────────
-  { re: /\b(smart tv|televisore|oled tv|qled|neo qled|mini.?led tv)\b/i, emoji: '📺' },
+  { re: /\b(smart tv|fire.?tv|fire stick|televisore|oled tv|qled|neo qled|mini.?led tv)\b/i, emoji: '📺' },
   { re: /\b(proiettore|projector|beamer)\b/i, emoji: '📽️' },
 
   // ── Foto & Video ───────────────────────────────────────────────────────────
@@ -33,7 +33,6 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   // ── Smartwatch & Orologi ───────────────────────────────────────────────────
   { re: /\b(apple watch|galaxy watch|fitbit|garmin.{0,10}watch|smart.?watch|fitness watch)\b/i, emoji: '⌚' },
   { re: /\b(orologio|cronografo|orologi).{0,20}(uomo|donna|acciaio|automatico|quarzo)\b/i, emoji: '⌚' },
-  { re: /\bsmart\b/i, emoji: '📱' },
 
   // ── Stampanti & Accessori ──────────────────────────────────────────────────
   { re: /\b(stampante|printer|scanner|plotter)\b/i, emoji: '🖨️' },
@@ -60,6 +59,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(macchina.{0,10}caffè|nespresso|dolce gusto|caffettiera|moka|macchina espresso)\b/i, emoji: '☕' },
   { re: /\b(frullatore|mixer|robot.{0,10}cucina|kenwood|kitchenaid|impastatrice)\b/i, emoji: '🥣' },
   { re: /\b(bollitore|kettle)\b/i, emoji: '☕' },
+  { re: /\b(montalatte|milk.?frother|schiumalatte)\b/i, emoji: '☕' },
 
   // ── Aria & Riscaldamento ───────────────────────────────────────────────────
   { re: /\b(aria.{0,10}condizionata|condizionatore|climatizzatore)\b/i, emoji: '❄️' },
@@ -78,14 +78,18 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(copridivano|copridivani|fodera.{0,10}(divano|sofa))\b/i, emoji: '🛋️' },
   { re: /\b(sedia|poltrona|divano|pouf)\b/i, emoji: '🪑' },
   { re: /\b(tavolo|scrivania|libreria|scaffale|armadio|comodino)\b/i, emoji: '🪑' },
-  { re: /\b(tenda|veneziana|rullo.{0,10}oscurante)\b/i, emoji: '🪟' },
+  { re: /\b(tenda|tende|veneziana|rullo.{0,10}oscurante)\b/i, emoji: '🪟' },
 
   // ── Igiene femminile ───────────────────────────────────────────────────────
   { re: /\b(assorbente|igiene.{0,10}femminile|ciclo.{0,10}mestruale|mestrual|coppetta)\b/i, emoji: '🌸' },
   { re: /\b(pannolino|pampers|huggies)\b/i, emoji: '👶' },
 
+  // ── Capelli & Styling ─────────────────────────────────────────────────────
+  { re: /\b(piastra.{0,15}capelli|ferro.{0,10}(capelli|conico|arricciacapelli)|arricciacapelli|arricciatore|asciugacapelli|hair.?dryer|phon)\b/i, emoji: '💇' },
+
   // ── Rasoi & Depilazione ────────────────────────────────────────────────────
-  { re: /\b(rasoio|epilatore|depilatore|regolabarba|braun.{0,10}(serie|silk)|philips.{0,10}(oneblade|aquatouch))\b/i, emoji: '🪒' },
+  { re: /\b(rasoio|regolabarba|braun.{0,10}serie|philips.{0,10}(oneblade|aquatouch))\b/i, emoji: '🪒' },
+  { re: /\b(epilatore|depilatore|braun.{0,10}silk)\b/i, emoji: '💄' },
 
   // ── Igiene orale ──────────────────────────────────────────────────────────
   { re: /\b(spazzolino|dentifricio|oral.?b|irrigatore.{0,10}dentale|igiene.{0,10}dentale|collutorio)\b/i, emoji: '🪥' },
@@ -127,8 +131,9 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(scarpe.{0,25}uomo|mocassini)\b/i, emoji: '👞' },
   { re: /\b(stivali)\b/i, emoji: '👢' },
   { re: /\b(scarpe|sandali)\b/i, emoji: '👟' },
-  { re: /\b(borsa|borsetta|clutch|pochette|shopper)\b/i, emoji: '👜' },
-  { re: /\b(zaino.{0,10}(scuola|lavoro|viaggio|urban))\b/i, emoji: '🎒' },
+  { re: /\b(zaino|zaini|eastpak|backpack)\b/i, emoji: '🎒' },
+  { re: /\b(valigia|valigie|trolley|bagaglio)\b/i, emoji: '🧳' },
+  { re: /\b(borsa|borsetta|clutch|pochette|shopper|\bbag\b)\b/i, emoji: '👜' },
   { re: /\b(portafoglio|portafogli)\b/i, emoji: '👛' },
   { re: /\b(cappello|berretto|cappellino|beanie)\b/i, emoji: '🧢' },
   { re: /\b(occhiali.{0,10}(sole|vista|lettura))\b/i, emoji: '🕶️' },
@@ -148,7 +153,8 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(olio.{0,10}oliva|olio.{0,10}evo|extravergine)\b/i, emoji: '🫒' },
   { re: /\b(vino|prosecco|spumante|champagne)\b/i, emoji: '🍷' },
   { re: /\b(birra|craft beer)\b/i, emoji: '🍺' },
-  { re: /\b(integratore|vitamina|omega.?3|proteina|protein|whey|creatina|collagene|multivitaminico|bcaa|aminoacid)\b/i, emoji: '💊' },
+  { re: /\b(integratore|vitamina|omega.?3|proteina|protein|whey|creatina|collagene|multivitaminico|bcaa|aminoacid|fermenti.{0,10}lattici|enterogermina|probiotici|lactobacill)\b/i, emoji: '💊' },
+  { re: /\b(gasatore|sodastream|sifone.{0,10}(acqua|soda))\b/i, emoji: '🫧' },
   { re: /\b(acqua.{0,10}(minerale|frizzante)|bevanda|succo|tè|te |infuso|tisana)\b/i, emoji: '🥤' },
   { re: /\b(snack|patatine|pop.?corn|frutta secca|noci|mandorle)\b/i, emoji: '🍿' },
   { re: /\b(gelato|ghiacciolo|sorbetto)\b/i, emoji: '🍦' },
@@ -161,17 +167,18 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(giocattolo|gioco.{0,10}(tavolo|da tavolo|societario)|puzzle|costruzioni)\b/i, emoji: '🎲' },
 
   // ── Libri ─────────────────────────────────────────────────────────────────
-  { re: /\b(libro|romanzo|saggio|manuale|enciclopedia|fumetto|graphic novel)\b/i, emoji: '📚' },
+  { re: /\b(libro|romanzo|saggio|enciclopedia|fumetto|graphic novel)\b/i, emoji: '📚' },
 
   // ── Musica & Strumenti ────────────────────────────────────────────────────
   { re: /\b(chitarra|pianoforte|tastiera.{0,10}musicale|violino|batteria.{0,10}(elettronica|acustica))\b/i, emoji: '🎸' },
 
   // ── Salute & Medicale ─────────────────────────────────────────────────────
   { re: /\b(termometro|misuratore.{0,10}pressione|saturimetro|sfigmomanometro|glucometro)\b/i, emoji: '🩺' },
+  { re: /\b(bilancia|pesapersone|pesa.{0,10}(digital|elettronic|cucina)|bilancino)\b/i, emoji: '⚖️' },
   { re: /\b(maschera.{0,10}facciale|mascherina|ffp2|ffp3)\b/i, emoji: '😷' },
 
   // ── Animali ───────────────────────────────────────────────────────────────
-  { re: /\b(cibo.{0,10}(cane|gatto)|croccantini|pedigree|whiskas|royal canin|hill.?s)\b/i, emoji: '🐾' },
+  { re: /\b(cibo.{0,10}(cane|gatto)|crocchette|croccantini|pedigree|whiskas|royal canin|hill.?s)\b/i, emoji: '🐾' },
   { re: /\b(cuccia|lettiera|guinzaglio|collare.{0,10}(cane|gatto)|gioco.{0,10}(cane|gatto))\b/i, emoji: '🐾' },
   { re: /\b(pesci|acquario|tartaruga|uccelli.{0,10}(gabbia|cibo))\b/i, emoji: '🐾' },
 
@@ -197,23 +204,34 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(detersivo|ammorbidente|candeggina|anticalcare|sgrassatore)\b/i, emoji: '🧽' },
   { re: /\b(sacchi.{0,10}(spazzatura|immondizia)|sacchetti.{0,10}(rifiuti|pattumiera))\b/i, emoji: '🗑️' },
   { re: /\b(carta.{0,10}igienica|fazzoletti|scottex|veline|carta.{0,8}casa)\b/i, emoji: '🧻' },
+
+  // ── Smart (fallback generico — deve stare DOPO tutte le altre regole) ────────
+  { re: /\bsmart\b/i, emoji: '📱' },
 ];
 
 // Regole sulla categoria Amazon/AliExpress (fallback se nessuna keyword matcha)
 const CAT_RULES: Array<{ re: RegExp; emoji: string }> = [
-  { re: /elettronica|high.tech|informatica/i, emoji: '💻' },
-  { re: /telefoni|smartphone|cellulari/i, emoji: '📱' },
-  { re: /tv|televisori|home.?video/i, emoji: '📺' },
+  { re: /informatica|computer|periferiche|networking|componenti.?pc/i, emoji: '💻' },
+  { re: /elettronica|high.tech/i, emoji: '💻' },
+  { re: /telefon|smartphone|cellulari/i, emoji: '📱' },
+  { re: /tv|televisori|home.?video|streaming/i, emoji: '📺' },
   { re: /fotografia|videocamere/i, emoji: '📷' },
   { re: /videogiochi|gaming/i, emoji: '🎮' },
   { re: /audio|hi-fi|altoparlanti/i, emoji: '🔊' },
   { re: /grandi.?elettrodomestici/i, emoji: '🧺' },
   { re: /piccoli.?elettrodomestici/i, emoji: '🍳' },
-  { re: /casa|cucina|giardino|bricolage|fai.da.te/i, emoji: '🏠' },
-  { re: /abbigliamento|moda|scarpe|borse/i, emoji: '👕' },
-  { re: /gioielli|orologi/i, emoji: '💍' },
-  { re: /alimentar|gastronomia|cibo|bevande|grocery/i, emoji: '🛒' },
-  { re: /salute|bellezza|cura.persona|igiene|beauty/i, emoji: '🧴' },
+  { re: /cucina|kitchen/i, emoji: '🍳' },
+  { re: /giardino|giardinaggio|garden|patio|lawn/i, emoji: '🌱' },
+  { re: /bricolage|fai.da.te|ferramenta|tools/i, emoji: '🔧' },
+  { re: /arredamento|furniture|casa/i, emoji: '🏠' },
+  { re: /abbigliamento|moda|fashion/i, emoji: '👕' },
+  { re: /scarpe|calzature|footwear/i, emoji: '👟' },
+  { re: /borse|luggage|valigie|travel.bags/i, emoji: '🧳' },
+  { re: /gioielli|orologi|jewelry/i, emoji: '💍' },
+  { re: /alimentar|gastronomia|cibo|grocery|food/i, emoji: '🛒' },
+  { re: /bevande|drinks/i, emoji: '🥤' },
+  { re: /salute|health|farmaci|integratori/i, emoji: '💊' },
+  { re: /bellezza|cura.persona|igiene|beauty|cosmetici|capelli/i, emoji: '🧴' },
   { re: /sport|outdoor|fitness|palestra/i, emoji: '🏃' },
   { re: /bambini|giocattoli|neonati|kids|toys/i, emoji: '🧸' },
   { re: /libri|ebook|books/i, emoji: '📚' },
@@ -221,7 +239,6 @@ const CAT_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /animali|pet|animals/i, emoji: '🐾' },
   { re: /ufficio|cancelleria|lavoro|office/i, emoji: '💼' },
   { re: /musica|strumenti/i, emoji: '🎵' },
-  { re: /garden|patio|lawn/i, emoji: '🌱' },
 ];
 
 export function getProductEmoji(title: string, cat?: string): string {
