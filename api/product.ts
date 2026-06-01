@@ -566,7 +566,7 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
     target_language: language,
     tracking_id: trackingId,
     country: country.toUpperCase(),   // restituisce target_sale_price con IVA locale inclusa
-    fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id,product_country,sku_id',
+    fields: 'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,target_sale_price_currency,discount,shop_id,product_country,sku_id,first_level_category_name,second_level_category_name',
   }) as any;
 
   const resp = data?.aliexpress_affiliate_productdetail_get_response?.resp_result;
@@ -575,6 +575,7 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
   }
   const product = resp?.result?.products?.product?.[0];
   if (!product) throw new Error('Prodotto non trovato su AliExpress (ID: ' + productId + ')');
+  const cat = String(product.second_level_category_name || product.first_level_category_name || '');
   return {
     title: String(product.product_title ?? ''),
     image: String(product.product_main_image_url ?? ''),
@@ -583,6 +584,7 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
     discountRate: parseInt(String(product.discount ?? '0').replace('%', '')) || 0,
     shipFromCountry: String(product.product_country || '').toUpperCase() || null,
     skuId: String(product.sku_id || ''),
+    cat,
   };
 }
 
@@ -936,6 +938,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
 
     const aliTitle = detail.title ?? '';
+    const aliCat = detail.cat ?? '';
     res.json({
       productId,
       title: shortenTitle(aliTitle),
@@ -947,7 +950,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       priceWarning: salePrice === 0 ? 'Prezzo non trovato. Inseriscilo manualmente.' : undefined,
       isHistoricalLow: isHistoricalLowAli || undefined,
       shipFromCountry: shipFromCountry || undefined,
-      emoji: getProductEmoji(aliTitle),
+      cat: aliCat || undefined,
+      emoji: getProductEmoji(aliTitle, aliCat || undefined),
     });
 
   } else {
