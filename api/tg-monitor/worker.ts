@@ -523,19 +523,15 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     const finalCoupon   = product.coupon   || textCoupon;
     const finalBoxcoupon = product.coupon ? (product.couponBox ?? false) : false;
 
-    // Prezzo: se c'è un codice coupon dal testo e il prezzo nel testo è inferiore al prezzo API,
-    // il testo riporta il prezzo finale dopo coupon che le API non rilevano
+    // Prezzi: il testo del post ha sempre la priorità sull'API.
+    // I prezzi originali di AliExpress sono spesso gonfiati artificialmente.
     let finalOriginalPrice   = product.originalPrice ?? 0;
     let finalDiscountedPrice = product.discountedPrice ?? 0;
-    if (textPrice > 0 && textPrice < finalDiscountedPrice * 0.95) {
-      console.log(`[tg-monitor] ${userId} — prezzo testo (${textPrice}) < API (${finalDiscountedPrice})${textCoupon ? ` con coupon "${textCoupon}"` : ''}: uso prezzo testo`);
-      if (finalOriginalPrice <= finalDiscountedPrice) finalOriginalPrice = finalDiscountedPrice;
+    if (textPrice > 0) {
+      console.log(`[tg-monitor] ${userId} — prezzi da testo: scontato=${textPrice} precedente=${textOriginalPrice || '(non trovato)'} | API: scontato=${finalDiscountedPrice} precedente=${finalOriginalPrice}`);
       finalDiscountedPrice = textPrice;
-    }
-
-    // Prezzo precedente dal testo: usato se API non ce l'ha (orig ≤ disc) OPPURE se il testo ha un valore più alto dell'API
-    if (textOriginalPrice > 0 && textOriginalPrice > finalDiscountedPrice &&
-        (finalOriginalPrice <= finalDiscountedPrice || textOriginalPrice > finalOriginalPrice)) {
+      if (textOriginalPrice > textPrice) finalOriginalPrice = textOriginalPrice;
+    } else if (textOriginalPrice > 0 && textOriginalPrice > finalDiscountedPrice) {
       console.log(`[tg-monitor] ${userId} — prezzo precedente da testo: ${textOriginalPrice} (API aveva orig=${finalOriginalPrice})`);
       finalOriginalPrice = textOriginalPrice;
     }
