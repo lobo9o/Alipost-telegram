@@ -238,7 +238,7 @@ const CAT_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /bevande|drinks/i, emoji: '🥤' },
   { re: /salute|health|farmaci|integratori/i, emoji: '💊' },
   { re: /bellezza|cura.persona|igiene|beauty|cosmetici|capelli/i, emoji: '🧴' },
-  { re: /sport|outdoor|fitness|palestra|entertainment/i, emoji: '🏃' },
+  { re: /sport|outdoor|fitness|palestra|entertainment|ciclismo|cycling/i, emoji: '🏃' },
   { re: /bambini|giocattoli|neonati|kids|toys|hobbies|mother/i, emoji: '🧸' },
   { re: /libri|ebook|books/i, emoji: '📚' },
   { re: /auto|moto|veicoli|automotive|automobiles|motorcycles/i, emoji: '🚗' },
