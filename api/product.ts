@@ -576,6 +576,7 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
   const product = resp?.result?.products?.product?.[0];
   if (!product) throw new Error('Prodotto non trovato su AliExpress (ID: ' + productId + ')');
   const cat = String(product.second_level_category_name || product.first_level_category_name || '');
+  console.log('[ali] categoria:', cat || '(vuota)', '| keys:', Object.keys(product).join(', '));
   return {
     title: String(product.product_title ?? ''),
     image: String(product.product_main_image_url ?? ''),
