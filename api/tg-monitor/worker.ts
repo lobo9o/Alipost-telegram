@@ -6,10 +6,11 @@ import { NewMessage } from 'telegram/events/index.js';
 const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|amzn\.eu|aliexpress\.com|s\.click\.aliexpress\.com|a\.aliexpress\.com)[^\s<>"')]+/gi;
 
 function extractCouponFromText(text: string): { couponCode: string; textPrice: number; textOriginalPrice: number; textCountry: string } {
-  // Coupon: "Coupon: ZSCADDR6" / "✂️ Coupon➡️ H45Z8AJZ" / "codice: X" / "promo: X" / "✂ ABCD1234"
+  // Coupon: "Coupon: ZSCADDR6" / "Coupon Sconto: SSIT12" / "✂️ Coupon➡️ H45Z8AJZ" / "codice: X" / "✂ ABCD1234"
+  // Permette una parola descrittiva opzionale (es. "Sconto") tra la keyword e il separatore+codice
   const couponM =
-    text.match(/(?:coupon|codice|code|promo)[^A-Za-z0-9\n]{0,15}([A-Za-z0-9]{4,20})/i) ??
-    text.match(/[✂🎟][^\w\n]{0,10}([A-Za-z0-9]{4,20})/u);
+    text.match(/(?:coupon|codice|code|promo)(?:\s+(?:sconto|discount|promo|codice|code)\b)?\W{0,10}([A-Za-z0-9]{4,20})/i) ??
+    text.match(/[✂🎟]\s*(?:coupon|codice|code|promo)?(?:\s+(?:sconto|discount)\b)?\W{0,10}([A-Za-z0-9]{4,20})/iu);
   const couponCode = couponM ? couponM[1].toUpperCase() : '';
 
   // Prezzi con € o $ sia dopo (12,99€) sia prima (€12.99 / $12.99)
