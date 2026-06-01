@@ -533,8 +533,9 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
       finalDiscountedPrice = textPrice;
     }
 
-    // Se l'API non ha trovato il prezzo precedente (orig = disc), prova a prenderlo dal testo
-    if (finalOriginalPrice <= finalDiscountedPrice && textOriginalPrice > finalDiscountedPrice) {
+    // Prezzo precedente dal testo: usato se API non ce l'ha (orig ≤ disc) OPPURE se il testo ha un valore più alto dell'API
+    if (textOriginalPrice > 0 && textOriginalPrice > finalDiscountedPrice &&
+        (finalOriginalPrice <= finalDiscountedPrice || textOriginalPrice > finalOriginalPrice)) {
       console.log(`[tg-monitor] ${userId} — prezzo precedente da testo: ${textOriginalPrice} (API aveva orig=${finalOriginalPrice})`);
       finalOriginalPrice = textOriginalPrice;
     }
