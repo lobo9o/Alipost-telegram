@@ -156,7 +156,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(olio.{0,10}oliva|olio.{0,10}evo|extravergine)\b/i, emoji: '🫒' },
   { re: /\b(vino|prosecco|spumante|champagne)\b/i, emoji: '🍷' },
   { re: /\b(birra|craft beer)\b/i, emoji: '🍺' },
-  { re: /\b(integratore|vitamina|omega.?3|proteina|protein|whey|creatina|collagene|multivitaminico|bcaa|aminoacid|fermenti.{0,10}lattici|enterogermina|probiotici|lactobacill)\b/i, emoji: '💊' },
+  { re: /\b(integratore|vitamina|omega.?3|proteina|protein|whey|creatina|collagene|multivitaminico|bcaa|aminoacid|fermenti.{0,10}lattici|enterogermina|probiotici|lactobacill|magnesio|zinco|potassio|selenio|coenzima|melatonina?|curcuma|ashwagandha?|berberina|spirulina?|triptofano|5.?htp|acido.{0,10}folico|bisglicinato)\b/i, emoji: '💊' },
   { re: /\b(gasatore|sodastream|sifone.{0,10}(acqua|soda))\b/i, emoji: '🫧' },
   { re: /\b(acqua.{0,10}(minerale|frizzante)|bevanda|succo|tè|te |infuso|tisana)\b/i, emoji: '🥤' },
   { re: /\b(snack|patatine|pop.?corn|frutta secca|noci|mandorle)\b/i, emoji: '🍿' },
