@@ -1042,8 +1042,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         }
       }
 
-      // Verifica prezzo prima di bloccare l'item (solo per post singoli)
-      if (!isMulti) {
+      // Verifica prezzo prima di bloccare l'item (solo per post singoli, non aliexpress)
+      if (!isMulti && candidatePost.platform !== 'aliexpress') {
         const priceCheck = await checkPostPrice(candidatePost, cfg);
         if (!priceCheck.valid) {
           console.log(`[autopost] prezzo scaduto userId=${userId} postId=${candidatePost.id}: ${priceCheck.reason}`);
@@ -1750,6 +1750,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         // Aggiorna subito per evitare doppio check in run sovrapposti
         await sql`UPDATE published_posts SET last_checked_at = now() WHERE id = ${pub.id}`.catch(() => {});
 
+        if (pub.platform === 'aliexpress') continue;
         const check = await checkPostPrice(pub as any, cfg).catch(() => ({ valid: true as const, currentPrice: undefined as number | undefined }));
 
         // Registra il prezzo corrente nello storico anche se valido
