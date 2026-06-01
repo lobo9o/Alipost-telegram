@@ -101,7 +101,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(crema|siero|contorno.{0,10}(occhi|viso)|idratante|struccante|skincare|toner.{0,10}(viso|pelle)|moisturizer)\b/i, emoji: '🧴' },
 
   // ── Shampoo & Doccia ──────────────────────────────────────────────────────
-  { re: /\b(shampoo|balsamo|doccia.?schiuma|bagnoschiuma|sapone|deodorante.{0,10}(spray|roll|stick))\b/i, emoji: '🧴' },
+  { re: /\b(shampoo|balsamo|doccia.?schiuma|bagnoschiuma|bagnodoccia|bagno.?doccia|sapone|deodorante.{0,10}(spray|roll|stick)|borotalco|talco.{0,10}(corpo|baby|bambin))\b/i, emoji: '🧴' },
 
   // ── Make-up ────────────────────────────────────────────────────────────────
   { re: /\b(rossetto|mascara|fondotinta|correttore|blush|cipria|palette|ombretto|kajal|eyeliner)\b/i, emoji: '💄' },
