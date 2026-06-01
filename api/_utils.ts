@@ -138,6 +138,16 @@ async function runMigration() {
   }
   // Tastiera associata per layout
   await sql`ALTER TABLE layouts ADD COLUMN IF NOT EXISTS keyboard_id TEXT`;
+  // Campi extra post (coupon, paese, stelle, recensioni, cat, author, checkout, keyboard)
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS coupon TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS boxcoupon BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS ship_from_country TEXT DEFAULT NULL`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS stelle TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS recensioni TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS cat TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS author TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS checkout TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS keyboard_id TEXT NOT NULL DEFAULT ''`;
   // Rating e recensioni per deals_cache
   await sql`ALTER TABLE deals_cache ADD COLUMN IF NOT EXISTS rating NUMERIC(2,1) DEFAULT 0`;
   await sql`ALTER TABLE deals_cache ADD COLUMN IF NOT EXISTS review_count INTEGER DEFAULT 0`;
@@ -169,6 +179,8 @@ async function runMigration() {
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     UNIQUE(user_id, channel)
   )`;
+  await sql`ALTER TABLE tg_monitor_channels ADD COLUMN IF NOT EXISTS auto_publish BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
+  await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS immediate BOOLEAN DEFAULT false`.catch(() => {});
 
   // Seed tag di sistema {boxcoupon} per tutti gli utenti esistenti
   await sql`

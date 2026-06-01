@@ -1009,7 +1009,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const excludeClause = triedIds.length
-        ? sql`AND id NOT IN (${sql(triedIds)})`
+        ? sql`AND NOT (id = ANY(${triedIds}))`
         : sql``;
 
       const [candidate] = await sql`

@@ -102,6 +102,15 @@ async function fetchAmazonPrices(
 function esc(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+function codeToFlag(code?: string): string {
+  if (!code || code.length !== 2) return '';
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
+}
+function codeToCountryName(code?: string): string {
+  if (!code) return '';
+  const names: Record<string, string> = { CN: 'Cina', IT: 'Italia', DE: 'Germania', FR: 'Francia', ES: 'Spagna', PL: 'Polonia', US: 'USA', GB: 'UK', JP: 'Giappone' };
+  return names[code.toUpperCase()] ?? code.toUpperCase();
+}
 
 function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string): string {
   const now = new Date();
@@ -129,7 +138,9 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{custom}':          esc(post.customText || ''),
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
-    '{countryflag}':     post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹',
+    '{countryflag}':     post.shipFromCountry ? codeToFlag(post.shipFromCountry) : (post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹'),
+    '{country}':         post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? 'Cina' : 'Italia'),
+    '{countryup}':       (post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? 'Cina' : 'Italia')).toUpperCase(),
     '{giorno}':          giorni[now.getDay()],
     '{ora}':             `${pad(now.getHours())}:${pad(now.getMinutes())}`,
     '{data}':            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,
@@ -407,20 +418,27 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     INSERT INTO posts (
       id, user_id, platform, source_url, product_id, title, image,
       original_price, discounted_price, discount_percent,
-      custom_text, is_historical_low, template_id, layout_id, emoji
+      custom_text, is_historical_low, template_id, layout_id, emoji,
+      coupon, boxcoupon, ship_from_country, stelle, recensioni,
+      cat, author, checkout, keyboard_id
     ) VALUES (
       ${p.id}, ${userId}, ${p.platform}, ${p.sourceUrl ?? ''}, ${p.productId ?? ''},
       ${p.title ?? ''}, ${p.image ?? ''},
       ${p.originalPrice ?? 0}, ${p.discountedPrice ?? 0}, ${p.discountPercent ?? 0},
       ${p.customText ?? ''}, ${p.isHistoricalLow ?? false},
-      ${p.templateId ?? ''}, ${p.layoutId ?? ''}, ${p.emoji ?? ''}
+      ${p.templateId ?? ''}, ${p.layoutId ?? ''}, ${p.emoji ?? ''},
+      ${p.coupon ?? ''}, ${p.boxcoupon ?? false}, ${p.shipFromCountry ?? null},
+      ${p.stelle ?? ''}, ${p.recensioni ?? ''}, ${p.cat ?? ''},
+      ${p.author ?? ''}, ${p.checkout ?? ''}, ${p.keyboardId ?? ''}
     )
     RETURNING
       id, platform, source_url AS "sourceUrl", product_id AS "productId",
       title, image, original_price::float AS "originalPrice",
       discounted_price::float AS "discountedPrice", discount_percent AS "discountPercent",
       custom_text AS "customText", is_historical_low AS "isHistoricalLow",
-      template_id AS "templateId", layout_id AS "layoutId", emoji
+      template_id AS "templateId", layout_id AS "layoutId", emoji,
+      coupon, boxcoupon, ship_from_country AS "shipFromCountry",
+      stelle, recensioni, cat, author, checkout, keyboard_id AS "keyboardId"
   `;
   res.status(201).json(row);
 });
