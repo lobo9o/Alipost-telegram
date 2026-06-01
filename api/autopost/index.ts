@@ -2,10 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { checkAndMarkHistoricalLow } from '../_historicalLow.js';
+import { checkPostPrice } from '../_priceCheck.js';
 
-// Aggiunge la colonna silenzioso se non esiste ancora (migrazione automatica)
-async function ensureSilenziosoColumn() {
+async function ensureColumns() {
   await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS silenzioso boolean`.catch(() => {});
+  await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS immediate boolean DEFAULT false`.catch(() => {});
 }
 
 let migrationDone = false;
@@ -16,7 +17,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!userId) return;
 
   if (!migrationDone) {
-    await ensureSilenziosoColumn();
+    await ensureColumns();
     migrationDone = true;
   }
 
@@ -31,7 +32,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (req.method === 'GET') {
     const rows = await sql`
       SELECT id, posts, status, scheduled, silenzioso, created_at AS "createdAt"
-      FROM autopost_queue WHERE user_id = ${userId} AND (auto IS NULL OR auto = false) ORDER BY created_at ASC
+      FROM autopost_queue WHERE user_id = ${userId} AND (auto IS NULL OR auto = false) AND (immediate IS NULL OR immediate = false) ORDER BY created_at ASC
     `;
     // Handle legacy rows where posts was stored as JSON string instead of JSONB array
     // Strip generatedImage from GET response — kept client-side only (too heavy for polling)
@@ -53,15 +54,28 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const { id, posts = [], status = 'draft', scheduled = null, silenzioso = null } = req.body ?? {};
+  const { id, posts = [], status = 'draft', scheduled = null, silenzioso = null, immediate = false } = req.body ?? {};
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
+  const postsForDb = posts as any[];
+
+  // Verifica prezzo prima di accodare (solo post Amazon singoli — AliExpress non controllato)
+  const firstPost = postsForDb[0];
+  if (postsForDb.length === 1 && firstPost?.platform !== 'aliexpress' && firstPost?.productId) {
+    const [cfgRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`.catch(() => [null]);
+    const cfg = typeof cfgRow?.data === 'string' ? JSON.parse(cfgRow.data) : (cfgRow?.data ?? {});
+    const priceCheck = await checkPostPrice(firstPost, cfg).catch(() => ({ valid: true as const }));
+    if (!priceCheck.valid) {
+      res.status(422).json({ error: `Offerta scaduta: ${priceCheck.reason}` });
+      return;
+    }
+  }
+
   // Salviamo generatedImage nel DB — serve al cron per pubblicare con overlay
   // Viene strippato solo dalla risposta GET per non appesantire il polling
-  const postsForDb = posts as any[];
   await checkAndMarkHistoricalLow(userId, postsForDb);
   const [row] = await sql`
-    INSERT INTO autopost_queue (id, user_id, posts, status, scheduled, silenzioso)
-    VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled}, ${silenzioso})
+    INSERT INTO autopost_queue (id, user_id, posts, status, scheduled, silenzioso, immediate)
+    VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled}, ${silenzioso}, ${immediate})
     RETURNING id, posts, status, scheduled, silenzioso, created_at AS "createdAt"
   `;
   res.status(201).json(row);
