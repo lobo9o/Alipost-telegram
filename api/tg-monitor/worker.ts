@@ -5,22 +5,32 @@ import { NewMessage } from 'telegram/events/index.js';
 
 const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|amzn\.eu|aliexpress\.com|s\.click\.aliexpress\.com|a\.aliexpress\.com)[^\s<>"')]+/gi;
 
-function extractCouponFromText(text: string): { couponCode: string; textPrice: number; textOriginalPrice: number } {
-  // Codice coupon: "🎟 Coupon: ZSCADDR6" / "✂️ Coupon➡️ H45Z8AJZ" / "Coupon: PROMO20"
-  const codeM = text.match(/coupon[^A-Za-z0-9\n]{0,15}([A-Za-z0-9]{4,20})/i);
-  const couponCode = codeM ? codeM[1].toUpperCase() : '';
+function extractCouponFromText(text: string): { couponCode: string; textPrice: number; textOriginalPrice: number; textCountry: string } {
+  // Coupon: "Coupon: ZSCADDR6" / "✂️ Coupon➡️ H45Z8AJZ" / "codice: X" / "promo: X" / "✂ ABCD1234"
+  const couponM =
+    text.match(/(?:coupon|codice|code|promo)[^A-Za-z0-9\n]{0,15}([A-Za-z0-9]{4,20})/i) ??
+    text.match(/[✂🎟][^\w\n]{0,10}([A-Za-z0-9]{4,20})/u);
+  const couponCode = couponM ? couponM[1].toUpperCase() : '';
 
-  // Estrae tutti i prezzi con € e 2 decimali dal testo
-  const prices = [...text.matchAll(/([\d]+[,.][\d]{2})\s*€/g)]
-    .map(m => parseFloat(m[1].replace(',', '.')) || 0)
-    .filter(p => p > 0.5 && p < 10000);
+  // Prezzi con € o $ sia dopo (12,99€) sia prima (€12.99 / $12.99)
+  const priceAfter = [...text.matchAll(/([\d]+[,.][\d]{2})\s*[€$]/g)].map(m => parseFloat(m[1].replace(',', '.')) || 0);
+  const priceBefore = [...text.matchAll(/[€$]\s*([\d]+[,.][\d]{2})/g)].map(m => parseFloat(m[1].replace(',', '.')) || 0);
+  const prices = [...priceAfter, ...priceBefore].filter(p => p > 0.5 && p < 10000);
 
-  // Minimo = prezzo finale/scontato, massimo = prezzo precedente (se ci sono 2+ prezzi distinti)
   const textPrice = prices.length ? Math.min(...prices) : 0;
   const maxPrice  = prices.length >= 2 ? Math.max(...prices) : 0;
   const textOriginalPrice = maxPrice > textPrice ? maxPrice : 0;
 
-  return { couponCode, textPrice, textOriginalPrice };
+  // Flag emoji → country code (es. 🇨🇳 → "CN")
+  const flagM = text.match(/[\u{1F1E6}-\u{1F1FF}]{2}/u);
+  let textCountry = '';
+  if (flagM) {
+    const cp0 = (flagM[0].codePointAt(0) ?? 0x1F1E6) - 0x1F1E6;
+    const cp1 = (flagM[0].codePointAt(2) ?? 0x1F1E6) - 0x1F1E6;
+    textCountry = String.fromCharCode(65 + cp0, 65 + cp1);
+  }
+
+  return { couponCode, textPrice, textOriginalPrice, textCountry };
 }
 
 const activeClients = new Map<string, TelegramClient>();
@@ -335,7 +345,7 @@ async function startUser(userId: string) {
     if (!activeClients.has(userId)) return;
     for (const info of channelEntities) {
       try {
-        const msgs = await client.getMessages(info.entity, { limit: 10, minId: info.lastMsgId }) as any[];
+        const msgs = await client.getMessages(info.entity, { limit: 50, minId: info.lastMsgId }) as any[];
         if (!msgs.length) continue;
         console.log(`[tg-monitor] ${userId} — poll ${info.core}: ${msgs.length} nuovi messaggi`);
         for (const msg of [...msgs].reverse()) {
@@ -500,8 +510,8 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   console.log(`[tg-monitor] ${userId} — ${isMulti ? 'post multiplo' : 'post singolo'} con ${products.length}/${urls.length} prodotti`);
 
   // Estrai coupon e prezzo dal testo del messaggio originale
-  const { couponCode: textCoupon, textPrice, textOriginalPrice } = extractCouponFromText(messageText);
-  if (textCoupon || textOriginalPrice) console.log(`[tg-monitor] ${userId} — da testo: coupon="${textCoupon || '-'}" prezzoFinale=${textPrice || '-'} prezzoPrecedente=${textOriginalPrice || '-'}`);
+  const { couponCode: textCoupon, textPrice, textOriginalPrice, textCountry } = extractCouponFromText(messageText);
+  if (textCoupon || textOriginalPrice || textCountry) console.log(`[tg-monitor] ${userId} — da testo: coupon="${textCoupon || '-'}" prezzoFinale=${textPrice || '-'} prezzoPrecedente=${textOriginalPrice || '-'} paese="${textCountry || '-'}"`);
 
   // Costruisce e salva ogni post
   const savedPosts: any[] = [];
@@ -517,8 +527,8 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     // il testo riporta il prezzo finale dopo coupon che le API non rilevano
     let finalOriginalPrice   = product.originalPrice ?? 0;
     let finalDiscountedPrice = product.discountedPrice ?? 0;
-    if (textCoupon && textPrice > 0 && textPrice < finalDiscountedPrice * 0.99) {
-      console.log(`[tg-monitor] ${userId} — prezzo testo (${textPrice}) < API (${finalDiscountedPrice}) con coupon "${textCoupon}": uso prezzo testo`);
+    if (textPrice > 0 && textPrice < finalDiscountedPrice * 0.95) {
+      console.log(`[tg-monitor] ${userId} — prezzo testo (${textPrice}) < API (${finalDiscountedPrice})${textCoupon ? ` con coupon "${textCoupon}"` : ''}: uso prezzo testo`);
       if (finalOriginalPrice <= finalDiscountedPrice) finalOriginalPrice = finalDiscountedPrice;
       finalDiscountedPrice = textPrice;
     }
@@ -554,7 +564,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
       layoutId,
       keyboardId,
       emoji:           product.emoji ?? '',
-      shipFromCountry: product.shipFromCountry ?? null,
+      shipFromCountry: product.shipFromCountry ?? (textCountry || null),
       stelle:          product.stelle ?? '',
       recensioni:      product.recensioni ?? '',
       cat:             product.cat ?? '',
