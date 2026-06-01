@@ -204,7 +204,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(distruggi.?documenti|timbro|cucitrice|perforatrice)\b/i, emoji: '📎' },
 
   // ── Insettifughi ──────────────────────────────────────────────────────────
-  { re: /\b(antizanzare|zanzariera|insetticida|repellente.{0,15}(insett|zanzar|mosca)|raid.{0,15}(spray|liquido|elettric|antizanzar)|zanzar(e|a).{0,10}(elettric|liquido|repellente))\b/i, emoji: '🦟' },
+  { re: /\b(antizanzare|zanzariera|elettroemanatore|vape|insetticida|repellente.{0,15}(insett|zanzar|mosca)|raid.{0,15}(spray|liquido|elettric|antizanzar)|zanzar(e|a).{0,10}(elettric|liquido|repellente))\b/i, emoji: '🦟' },
 
   // ── Pulizia casa ──────────────────────────────────────────────────────────
   { re: /\b(detersivo|ammorbidente|candeggina|anticalcare|sgrassatore)\b/i, emoji: '🧽' },
