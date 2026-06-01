@@ -147,7 +147,7 @@ export async function checkPostPrice(
     }
 
     if (currentPrice === null) {
-      // API non ha restituito prezzo → scrape pagina per verificare disponibilità
+      // API non ha restituito prezzo → scrape pagina per verificare disponibilità e prezzo
       if (post.platform === 'amazon' && post.productId) {
         const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
         const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
@@ -166,10 +166,26 @@ export async function checkPostPrice(
             if (unavailable || !hasPrice) {
               return { valid: false, reason: 'Prodotto non più disponibile (scrape)' };
             }
+            // Estrai prezzo corrente dalla pagina e confronta con quello salvato
+            const parsePx = (s: string) => parseFloat(s.replace(/[^\d,.]/g, '').replace(',', '.')) || 0;
+            let scraped = 0;
+            const offscreen = [...html.matchAll(/class="a-offscreen">([^<]+)</g)];
+            if (offscreen[0]) scraped = parsePx(offscreen[0][1]);
+            if (!scraped) {
+              const ldM = html.match(/"@type"\s*:\s*"Offer"[^}]*?"price"\s*:\s*"?([\d]+(?:[.,][\d]+)?)"?/);
+              if (ldM) scraped = parsePx(ldM[1]);
+            }
+            if (!scraped) {
+              const cpM = html.match(/"priceAmount"\s*:\s*([\d]+(?:\.\d+)?)/);
+              if (cpM) scraped = parseFloat(cpM[1]) || 0;
+            }
+            if (scraped > 0) {
+              currentPrice = scraped;
+            }
           }
         } catch { /* ignora — fallisce silenziosamente */ }
       }
-      return { valid: true }; // impossibile verificare → considera valido
+      if (currentPrice === null) return { valid: true }; // impossibile verificare → considera valido
     }
 
     const increase = (currentPrice - storedPrice) / storedPrice;
