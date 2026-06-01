@@ -28,7 +28,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
 
   // ── Gaming ─────────────────────────────────────────────────────────────────
   { re: /\b(playstation|xbox|nintendo switch|ps5|ps4|gamepad|joystick|controller.{0,10}(gioc|game))\b/i, emoji: '🎮' },
-  { re: /\b(videogioc|gaming mouse|gaming keyboard|gaming headset|scheda video|gpu)\b/i, emoji: '🎮' },
+  { re: /\b(videogioc|gaming mouse|gaming keyboard|gaming headset|scheda.{0,8}(video|grafica)|gpu|geforce|radeon|rtx.{0,3}\d|gtx.{0,3}\d|rx.{0,3}\d{3,4})\b/i, emoji: '🎮' },
 
   // ── Smartwatch & Orologi ───────────────────────────────────────────────────
   { re: /\b(apple watch|galaxy watch|fitbit|garmin.{0,10}watch|smart.?watch|fitness watch)\b/i, emoji: '⌚' },
