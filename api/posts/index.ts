@@ -398,7 +398,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           message_id = EXCLUDED.message_id,
           custom_text = EXCLUDED.custom_text,
           is_multi = EXCLUDED.is_multi,
-          multi_items = EXCLUDED.multi_items
+          multi_items = EXCLUDED.multi_items,
+          terminata = false
       `;
       res.status(201).json({ ok: true });
       return;

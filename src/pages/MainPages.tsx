@@ -2433,7 +2433,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           platform: post.platform, image: post.image,
           sourceUrl: post.sourceUrl, productId: post.productId,
           customText: post.customText, layoutId: post.layoutId,
-          isHistoricalLow: false, isMulti: true, multiItems,
+          isHistoricalLow: false, isMulti: true, multiItems, terminata: false,
           chatId: pubResult.chatId ?? '', messageId: pubResult.messageId ?? 0,
           publishedAt: now, ts: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         };
@@ -3079,7 +3079,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 // PUBLISHED PAGE
 // ============================================================
 
-function MultiThumbnailGrid({ items }: { items: { image?: string; emoji?: string; title?: string }[] }) {
+function MultiThumbnailGrid({
+  items, terminataText, terminataColor,
+}: {
+  items: { image?: string; emoji?: string; title?: string; terminata?: boolean }[];
+  terminataText?: string;
+  terminataColor?: string;
+}) {
   if (items.length === 0) return null;
   const cols = items.length <= 3 ? items.length : items.length <= 4 ? 2 : 3;
   const cellSize = 120;
@@ -3087,16 +3093,23 @@ function MultiThumbnailGrid({ items }: { items: { image?: string; emoji?: string
     <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 10px 0' }}>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`, gap: 3, background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden' }}>
         {items.map((item, i) => (
-          <div key={i} style={{ width: cellSize, height: cellSize, background: '#f5f5f5', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div key={i} style={{ width: cellSize, height: cellSize, position: 'relative', background: '#f5f5f5', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {item.image
               ? <img
                   src={item.image.startsWith('http') ? `/api/posts?img=${encodeURIComponent(item.image)}` : item.image}
                   alt={item.title ?? ''}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', filter: item.terminata ? 'grayscale(1)' : 'none' }}
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
-              : <span style={{ fontSize: 32 }}>{item.emoji || '📦'}</span>
+              : <span style={{ fontSize: 32, filter: item.terminata ? 'grayscale(1)' : 'none' }}>{item.emoji || '📦'}</span>
             }
+            {item.terminata && terminataText && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, pointerEvents: 'none' }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: terminataColor || '#ff0000', textShadow: '0 0 3px #000, 0 0 6px #000', textAlign: 'center', lineHeight: 1.2 }}>
+                  {terminataText}
+                </span>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -3154,6 +3167,18 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     setEditErr('');
   };
 
+  const startEditItem = (p: typeof published[0], idx: number) => {
+    const item = p.multiItems?.[idx];
+    if (!item) return;
+    setEditFields({
+      title: item.title, originalPrice: String(item.originalPrice),
+      discountedPrice: item.price, discountPercent: item.discountPercent,
+      customText: item.customText || '', coupon: item.coupon || '',
+    });
+    setEditingKey(`${p.id}:item:${idx}`);
+    setEditErr('');
+  };
+
   const handlePriceChange = (field: 'originalPrice' | 'discountedPrice', val: string) => {
     const orig = field === 'originalPrice' ? parseFloat(val) || 0 : parseFloat(editFields.originalPrice) || 0;
     const disc = field === 'discountedPrice' ? parseFloat(val) || 0 : parseFloat(editFields.discountedPrice) || 0;
@@ -3165,6 +3190,27 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     if (!p.chatId || !p.messageId) { setEditErr('message_id Telegram non disponibile.'); return; }
     setSaving(true); setEditErr('');
     try {
+      // ── Modifica singolo articolo di un multi-post ──
+      const itemMatch = editingKey?.match(new RegExp(`^${p.id}:item:(\\d+)$`));
+      if (itemMatch && p.multiItems) {
+        const idx = parseInt(itemMatch[1]);
+        const origItem = p.multiItems[idx];
+        if (!origItem) { setEditErr('Articolo non trovato'); return; }
+        const origP = parseFloat(editFields.originalPrice) || 0;
+        const discP = parseFloat(editFields.discountedPrice) || 0;
+        const pct = origP > 0 ? Math.max(0, Math.round((1 - discP / origP) * 100)) : editFields.discountPercent;
+        const cur = origItem.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const layout = layouts.find(l => l.id === origItem.layoutId) ?? layouts.find(l => l.tipo === 'multi');
+        const updPost = { id: origItem.id, platform: origItem.platform as Platform, sourceUrl: origItem.sourceUrl, productId: origItem.productId, title: editFields.title, image: origItem.image, emoji: origItem.emoji, originalPrice: origP, discountedPrice: discP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, isHistoricalLow: origItem.isHistoricalLow, templateId: 'tpl1', layoutId: origItem.layoutId, keyboardId: 'kb1' } as CreatedPost;
+        const newText = layout ? resolvePostTags(layout.contenuto, updPost, tags, cur) : '';
+        const newItems = p.multiItems.map((it, i) => i === idx ? { ...it, title: editFields.title, price: discP.toFixed(2), originalPrice: origP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, resolvedText: newText } : it);
+        const newCaption = newItems.map(it => it.resolvedText ?? '').filter(Boolean).join('\n');
+        setPublished(prev => prev.map(x => x.id !== p.id ? x : { ...x, multiItems: newItems }));
+        setEditingKey(null);
+        await publishedApi.editTelegram(p.id, { action: 'editPublished', chatId: p.chatId, messageId: p.messageId, newCaption, updatedFields: { multiItems: newItems } } as any);
+        return;
+      }
+
       const isMultiEdit = editingKey === `${p.id}:multi`;
       let newCaption: string | undefined;
 
@@ -3467,8 +3513,12 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* ── Post multiplo ── */}
             {p.isMulti && (
               <>
-                {/* 1. Griglia immagini in cima (come nel post Telegram, più piccola) */}
-                <MultiThumbnailGrid items={p.multiItems ?? []} />
+                {/* 1. Griglia immagini: celle terminate diventano grigie con testo overlay */}
+                <MultiThumbnailGrid
+                  items={p.multiItems ?? []}
+                  terminataText={settings.terminata.overlayText}
+                  terminataColor={settings.terminata.overlayTextColor}
+                />
 
                 <div style={{ padding: '10px 12px 12px' }}>
                   {/* Header */}
@@ -3480,31 +3530,30 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                     {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
                   </div>
 
-                  {/* 2. Testo Telegram */}
-                  {pPreviewText && editingKey !== `${p.id}:multi` && (
+                  {/* 2. Testo Telegram (nascosto se in editing) */}
+                  {pPreviewText && !editingKey?.startsWith(p.id) && (
                     <div style={{ marginBottom: 10 }}>
                       <TelegramPreview text={pPreviewText} buttons={pKbBtns} />
                     </div>
                   )}
 
-                  {/* 3. Editor oppure lista prodotti con thumbnail + pulsanti */}
-                  {editingKey === `${p.id}:multi` ? renderMultiEditForm(p) : (
-                    <>
-                      {/* Lista prodotti: thumbnail + titolo/prezzo + ❌ termina */}
-                      {(p.multiItems ?? []).map((item, idx) => (
-                        <div key={item.id || idx} style={{
-                          display: 'flex', alignItems: 'center', gap: 8,
-                          padding: '6px 0', borderBottom: idx < (p.multiItems?.length ?? 0) - 1 ? '1px solid var(--bd)' : 'none',
-                          opacity: item.terminata ? 0.55 : 1,
-                        }}>
-                          {/* Thumbnail piccola */}
+                  {/* 3. Editor tutti i prodotti */}
+                  {editingKey === `${p.id}:multi` && renderMultiEditForm(p)}
+
+                  {/* 4. Lista prodotti con thumbnail, ✏️ per-item e ❌ termina */}
+                  {editingKey !== `${p.id}:multi` && (p.multiItems ?? []).map((item, idx) => (
+                    <div key={item.id || idx} style={{ borderBottom: idx < (p.multiItems?.length ?? 0) - 1 ? '1px solid var(--bd)' : 'none' }}>
+                      {editingKey === `${p.id}:item:${idx}` ? (
+                        /* Form inline per questo articolo */
+                        <div style={{ padding: '8px 0' }}>{renderEditForm(p, true)}</div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', opacity: item.terminata ? 0.6 : 1 }}>
+                          {/* Thumbnail */}
                           <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             {item.image
-                              ? <img
-                                  src={item.image.startsWith('http') ? `/api/posts?img=${encodeURIComponent(item.image)}` : item.image}
-                                  alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                />
+                              ? <img src={item.image.startsWith('http') ? `/api/posts?img=${encodeURIComponent(item.image)}` : item.image}
+                                  alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: item.terminata ? 'grayscale(1)' : 'none' }}
+                                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               : <span style={{ fontSize: 18 }}>{item.emoji || '📦'}</span>
                             }
                           </div>
@@ -3514,17 +3563,20 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                               €{item.price} <span style={{ color: 'var(--t3)' }}>-{item.discountPercent}%</span>
                             </div>
                           </div>
+                          {/* ✏️ per-item e ❌ termina */}
+                          {!item.terminata && <button className="btn bsm bgh" style={{ flexShrink: 0, fontSize: 11 }} onClick={() => startEditItem(p, idx)}>✏️</button>}
                           {item.terminata
-                            ? <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700 }}>❌</span>
+                            ? <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700, flexShrink: 0 }}>❌</span>
                             : <button className="btn bsm bgh" style={{ color: '#ef4444', flexShrink: 0 }} onClick={() => markTerminataItem(p, idx)}>❌</button>
                           }
                         </div>
-                      ))}
-                      {/* 4. Pulsanti */}
-                      <div style={{ display: 'flex', gap: 5, marginTop: 10 }}>
-                        <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEditMulti(p)}>✏️ Modifica</button>
-                      </div>
-                    </>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* 5. Nessun dato disponibile per vecchi multi-post */}
+                  {!(p.multiItems?.length) && (
+                    <div style={{ fontSize: 11, color: 'var(--t3)', padding: '6px 0' }}>Dati prodotti non disponibili (post precedente)</div>
                   )}
                 </div>
               </>
