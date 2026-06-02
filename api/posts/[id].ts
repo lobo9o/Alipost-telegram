@@ -449,7 +449,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const channels: string[] = envChannelOverride
     ? [envChannelOverride]
     : Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
-  console.log('[publish] channels from settings:', channels);
+  console.log('[publish] channels from settings:', channels, '| bodyChannel:', bodyChannel);
   if (!channels.length) {
     res.status(400).json({ error: 'Nessun canale Telegram configurato. Vai in Impostazioni → Canali Telegram.' });
     return;
@@ -457,7 +457,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // Se env override attivo, ignora la scelta dal body (sicurezza dev)
   const channel = envChannelOverride
     ? channels[0]
-    : (bodyChannel && channels.includes(bodyChannel) ? bodyChannel : channels[0]);
+    : (bodyChannel ? String(bodyChannel) : channels[0]);
+  console.log('[publish] channel selected:', channel);
 
   // Build affiliate URL
   let affiliateUrl: string = post.sourceUrl ?? '';
