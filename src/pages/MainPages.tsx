@@ -3368,42 +3368,24 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
 
         return (
           <div key={p.id} className="card" style={{ margin: '0 16px 12px', padding: 0, overflow: 'hidden' }}>
-            {/* Anteprima immagine template */}
-            {p.isMulti ? (
-              <div style={{ margin: '0', borderRadius: '0', overflow: 'hidden', background: 'var(--bg3)' }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 8 }}>
-                  {(p.multiItems ?? []).slice(0, 6).map((it, i) => (
-                    it.image && it.image.startsWith('http')
-                      ? <img key={i} src={`/api/posts?img=${encodeURIComponent(it.image)}`}
-                          alt="" style={{ width: 'calc(33% - 4px)', aspectRatio: '1', objectFit: 'contain', background: '#fff', borderRadius: 6 }} />
-                      : <div key={i} style={{ width: 'calc(33% - 4px)', aspectRatio: '1', background: 'var(--bg2)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>{it.emoji}</div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <TemplateImagePreview post={pAsPost} template={mainTemplate} />
-            )}
 
-            <div style={{ padding: '10px 12px 12px' }}>
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <SourceBadge platform={p.platform} />
-                <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
-                {p.isMulti && <span style={{ fontSize: 10, color: 'var(--a1)', fontWeight: 700 }}>🗂️ MULTI</span>}
-                {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
-                {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
-              </div>
-
-              {/* Anteprima testo Telegram */}
-              {pPreviewText && editingKey !== p.id && !(p.isMulti && editingKey?.startsWith(p.id + ':')) && (
-                <div style={{ marginBottom: 10 }}>
-                  <TelegramPreview text={pPreviewText} buttons={pKbBtns} />
-                </div>
-              )}
-
-              {/* Post singolo: form modifica / bottoni */}
-              {!p.isMulti && (
-                <>
+            {/* ── Post singolo ── */}
+            {!p.isMulti && (
+              <>
+                <TemplateImagePreview post={pAsPost} template={mainTemplate} />
+                <div style={{ padding: '10px 12px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <SourceBadge platform={p.platform} />
+                    <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+                    {p.isHistoricalLow && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700 }}>🏆 MIN</span>}
+                    {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
+                    {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
+                  </div>
+                  {pPreviewText && editingKey !== p.id && (
+                    <div style={{ marginBottom: 10 }}>
+                      <TelegramPreview text={pPreviewText} buttons={pKbBtns} />
+                    </div>
+                  )}
                   {editingKey === p.id ? renderEditForm(p, false) : (
                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                       <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEditSingle(p)}>✏️ Modifica</button>
@@ -3411,28 +3393,54 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                       <button className="btn bsm bbl" disabled={p.terminata} onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
                     </div>
                   )}
-                </>
-              )}
+                </div>
+              </>
+            )}
 
-              {/* Post multiplo: sotto-card per ogni prodotto */}
-              {p.isMulti && (
-                <>
-                  {(p.multiItems ?? []).map((item, idx) => {
-                    const itemKey = `${p.id}:${idx}`;
-                    const isEditingThis = editingKey === itemKey;
-                    return (
-                      <div key={item.id || idx} style={{
-                        background: 'var(--bg3)', borderRadius: 8, padding: '8px 10px',
-                        marginBottom: 8, opacity: item.terminata ? 0.6 : 1,
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                          <span style={{ fontSize: 13 }}>{item.emoji}</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{item.title}</span>
-                          {item.terminata && <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700 }}>❌</span>}
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, marginBottom: isEditingThis ? 8 : 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 800, color: item.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: item.terminata ? 'line-through' : 'none' }}>€{item.price}</span>
-                          <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{item.discountPercent}%</span>
+            {/* ── Post multiplo ── */}
+            {p.isMulti && (
+              <>
+                {/* Header comune (ora, ID messaggio) */}
+                <div style={{ padding: '8px 12px 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <SourceBadge platform={p.platform} />
+                  <span style={{ fontSize: 10, color: 'var(--a1)', fontWeight: 700 }}>🗂️ MULTI</span>
+                  <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+                  {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
+                  {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
+                </div>
+
+                {/* Testo Telegram del post multiplo */}
+                {pPreviewText && !editingKey?.startsWith(p.id + ':') && (
+                  <div style={{ padding: '0 12px 8px' }}>
+                    <TelegramPreview text={pPreviewText} buttons={pKbBtns} />
+                  </div>
+                )}
+
+                {/* Ogni prodotto come card singola con TemplateImagePreview */}
+                {(p.multiItems ?? []).map((item, idx) => {
+                  const itemKey = `${p.id}:${idx}`;
+                  const isEditingThis = editingKey === itemKey;
+                  const itemAsPost: CreatedPost = {
+                    id: item.id, platform: item.platform as Platform,
+                    sourceUrl: item.sourceUrl, productId: item.productId,
+                    title: item.title, image: item.image, emoji: item.emoji,
+                    originalPrice: item.originalPrice,
+                    discountedPrice: parseFloat(item.price),
+                    discountPercent: item.discountPercent,
+                    customText: item.customText,
+                    isHistoricalLow: item.isHistoricalLow,
+                    templateId: 'tpl1', layoutId: item.layoutId, keyboardId: 'kb1',
+                  };
+                  return (
+                    <div key={item.id || idx} style={{
+                      borderTop: '1px solid var(--bd)',
+                      opacity: item.terminata ? 0.65 : 1,
+                    }}>
+                      <TemplateImagePreview post={itemAsPost} template={mainTemplate} />
+                      <div style={{ padding: '6px 12px 10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{item.emoji} {item.title}</span>
+                          {item.terminata && <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 6px', borderRadius: 8 }}>❌ TERMINATA</span>}
                         </div>
                         {isEditingThis ? renderEditForm(p, true) : (
                           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
@@ -3441,11 +3449,12 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                           </div>
                         )}
                       </div>
-                    );
-                  })}
-                </>
-              )}
-            </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
           </div>
         );
       })}
