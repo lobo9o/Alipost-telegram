@@ -63,7 +63,7 @@ export const INITIAL_TEMPLATES: Template[] = [makeDefaultTemplate('tpl1')];
 
 export const INITIAL_SETTINGS: AppSettings = {
   oraI: '08:00', oraF: '22:00', interv: 60, attivo: false,
-  channels: [], notifThreshold: undefined,
+  channels: [], channelTemplates: {}, notifThreshold: undefined,
   amazon: { enabled: false, affiliateTag: '', credentialId: '', credentialSecret: '', version: '2.2', marketplace: 'IT' },
   aliexpress: { enabled: false, appKey: '', appSecret: '', trackingId: '', targetCountry: 'IT' },
   dealSearch: {

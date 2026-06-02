@@ -2345,6 +2345,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     const item = queue.find(x => x.id === id);
     if (!item) { setPublishErr('Elemento coda non trovato'); return; }
     const channelOverride = itemChannels[id] || undefined;
+    const effectiveChannel = channelOverride ?? settings.channels.filter(Boolean)[0] ?? '';
+    const channelTemplateId = effectiveChannel ? (settings.channelTemplates?.[effectiveChannel] ?? '') : '';
     const rawPost = item.posts[0];
     if (!rawPost || typeof rawPost !== 'object' || Array.isArray(rawPost)) {
       setPublishErr('Post non valido'); return;
@@ -2446,11 +2448,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       }
 
       // ── Post singolo ───────────────────────────────────────────────────────
-      if (template) {
+      const channelTemplate = channelTemplateId ? templates.find(t => t.id === channelTemplateId) : null;
+      const effectiveTemplate = channelTemplate ?? template;
+      if (effectiveTemplate) {
         try {
-          // Usa l'immagine pre-generata se disponibile (pronta in background da quando il post era visibile)
-          generatedImage = pregenImages.current[id] ?? await generatePostImage(
-            template, post.image, post.isHistoricalLow, post.platform, {
+          // Se c'è un template specifico del canale, ignora la pre-generata (diverso template)
+          generatedImage = (!channelTemplate ? pregenImages.current[id] : undefined) ?? await generatePostImage(
+            effectiveTemplate, post.image, post.isHistoricalLow, post.platform, {
               prezzo: `€${Number(post.discountedPrice).toFixed(2)}`,
               prezzoPrecedente: `€${Number(post.originalPrice).toFixed(2)}`,
               sconto: `-${post.discountPercent}%`,

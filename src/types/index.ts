@@ -110,6 +110,7 @@ export interface ImgEl {
 
 export interface Template {
   id: string;
+  name?: string;
   canvasW: number;
   canvasH: number;
   bgColor: string;
@@ -287,6 +288,7 @@ export interface AppSettings {
   interv: number;
   attivo: boolean;
   channels: string[];
+  channelTemplates?: Record<string, string>;
   notifThreshold?: number; // sconto minimo % per pubblicare con notifica; undefined=sempre silenzioso
   amazon: AmazonSettings;
   aliexpress: AliExpressSettings;

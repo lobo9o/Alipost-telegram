@@ -1391,6 +1391,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
+    // ── Determina il canale in anticipo — serve per il lookup del template ──────
+    const earlyChannel = channelOverride
+      ? channels[0]
+      : (queueItem?.dest_channel as string | null | undefined) || channels[0];
+    const channelTemplates = (cfg.channelTemplates ?? {}) as Record<string, string>;
+    const channelTemplateId = channelTemplates[earlyChannel] ?? '';
+
     // ── Genera immagine dal template al momento della pubblicazione ───────────
     // Si applica ai post singoli senza generatedImage (es. da tg-monitor, o auto-ricerca
     // senza template configurato al momento della creazione).
@@ -1402,16 +1409,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
         : (CSYM[String(cfg.amazon?.currency ?? 'EUR').toUpperCase()] ?? '€');
 
-      const [pubTpl] = await sql`
-        SELECT id, config FROM templates WHERE user_id = ${userId}
-          AND tipo NOT IN ('historical_low')
-        ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
-      `.catch(() => [null]);
+      // Se il canale ha un template assegnato, carica quello; altrimenti usa il migliore disponibile
+      const [pubTpl] = channelTemplateId
+        ? await sql`SELECT id, config FROM templates WHERE id = ${channelTemplateId} AND user_id = ${userId} LIMIT 1`.catch(() => [null])
+        : await sql`
+            SELECT id, config FROM templates WHERE user_id = ${userId}
+              AND tipo NOT IN ('historical_low')
+            ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
+          `.catch(() => [null]);
 
       if (pubTpl) {
         const pubCfg = parseTemplateCfg(pubTpl);
         if (pubCfg) {
-          console.log(`[autopost] template ${pubTpl.id} prezzo.fontFamily=${pubCfg.prezzo?.fontFamily} prezzoPrecedente.fontFamily=${pubCfg.prezzoPrecedente?.fontFamily} sconto.fontFamily=${pubCfg.sconto?.fontFamily}`);
+          console.log(`[autopost] template ${pubTpl.id}${channelTemplateId ? ' (specifico canale)' : ''} prezzo.fontFamily=${pubCfg.prezzo?.fontFamily}`);
           const genImg = await generateTemplateImageServer(pubCfg, String(post.image), String(post.platform ?? 'amazon'), {
             prezzo:           `${currSym}${Number(post.discountedPrice).toFixed(2)}`,
             prezzoPrecedente: `${currSym}${Number(post.originalPrice).toFixed(2)}`,

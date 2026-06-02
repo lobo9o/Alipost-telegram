@@ -29,6 +29,7 @@ function mergeSettings(fetched: unknown): AppSettings {
     interv: typeof r.interv === 'number' ? r.interv : INITIAL_SETTINGS.interv,
     attivo: typeof r.attivo === 'boolean' ? r.attivo : INITIAL_SETTINGS.attivo,
     channels: Array.isArray(r.channels) ? r.channels as string[] : INITIAL_SETTINGS.channels,
+    channelTemplates: (r.channelTemplates && typeof r.channelTemplates === 'object' && !Array.isArray(r.channelTemplates)) ? r.channelTemplates as Record<string, string> : {},
     notifThreshold: typeof r.notifThreshold === 'number' ? r.notifThreshold : undefined,
     amazon: {
       enabled: typeof am.enabled === 'boolean' ? am.enabled : INITIAL_SETTINGS.amazon.enabled,

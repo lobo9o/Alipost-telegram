@@ -941,18 +941,18 @@ function getElEnabled(id: ComponentKey, tpl: Template): boolean {
 
 function TemplateSection() {
   const { templates, setTemplates, templateFromDB } = useApp();
+  const [selectedTplId, setSelectedTplId] = useState('');
   const [activePanel, setActivePanel] = useState<ComponentKey | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [previewPlatform, setPreviewPlatform] = useState<'amazon' | 'aliexpress'>('amazon');
   const [arrowStep, setArrowStep] = useState(1);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Ref che tiene sempre l'ultimo template aggiornato per il salvataggio keepalive
   const latestTplRef = useRef<Template | null>(null);
 
-  const tpl = templates[0] ?? makeDefaultTemplate('tpl1');
+  const tpl = (selectedTplId ? templates.find(t => t.id === selectedTplId) : null) ?? templates[0] ?? makeDefaultTemplate('tpl1');
 
   // Aggiorna il ref ogni render così visibilitychange vede sempre l'ultimo stato
-  latestTplRef.current = templates[0] ?? null;
+  latestTplRef.current = tpl;
 
   const saveTpl = (t: Template) => {
     if (!templateFromDB.current) return;
@@ -965,7 +965,6 @@ function TemplateSection() {
     }, 800);
   };
 
-  // Salvataggio keepalive quando l'utente chiude la mini-app (visibilitychange)
   useEffect(() => {
     const handleHide = () => {
       if (!document.hidden) return;
@@ -982,38 +981,63 @@ function TemplateSection() {
   }, []);  // eslint-disable-line
 
   const updateTpl = (changes: Partial<Template>) => {
+    const id = tpl.id;
     setTemplates(ts => {
-      const updated = { ...(ts[0] ?? makeDefaultTemplate('tpl1')), ...changes };
+      const idx = ts.findIndex(t => t.id === id);
+      if (idx < 0) return ts;
+      const updated = { ...ts[idx], ...changes };
       saveTpl(updated);
-      return [updated];
+      const n = [...ts]; n[idx] = updated; return n;
     });
   };
 
   const updateImg = (key: 'overlay' | 'badge' | 'storeAmazon' | 'storeAliexpress', changes: Partial<ImgEl>) => {  // eslint-disable-line
+    const id = tpl.id;
     setTemplates(ts => {
-      const base = ts[0] ?? makeDefaultTemplate('tpl1');
-      const updated = { ...base, [key]: { ...(base[key] as ImgEl), ...changes } };
+      const idx = ts.findIndex(t => t.id === id);
+      if (idx < 0) return ts;
+      const updated = { ...ts[idx], [key]: { ...(ts[idx][key] as ImgEl), ...changes } };
       saveTpl(updated);
-      return [updated];
+      const n = [...ts]; n[idx] = updated; return n;
     });
   };
 
   const updateText = (key: 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom', changes: Partial<TextEl>) => {
+    const id = tpl.id;
     setTemplates(ts => {
-      const base = ts[0] ?? makeDefaultTemplate('tpl1');
-      const updated = { ...base, [key]: { ...(base[key] as TextEl), ...changes } };
+      const idx = ts.findIndex(t => t.id === id);
+      if (idx < 0) return ts;
+      const updated = { ...ts[idx], [key]: { ...(ts[idx][key] as TextEl), ...changes } };
       saveTpl(updated);
-      return [updated];
+      const n = [...ts]; n[idx] = updated; return n;
     });
   };
 
   const updateProduct = (changes: Partial<{ x: number; y: number; size: number }>) => {
+    const id = tpl.id;
     setTemplates(ts => {
-      const base = ts[0] ?? makeDefaultTemplate('tpl1');
-      const updated = { ...base, product: { ...base.product, ...changes } };
+      const idx = ts.findIndex(t => t.id === id);
+      if (idx < 0) return ts;
+      const updated = { ...ts[idx], product: { ...ts[idx].product, ...changes } };
       saveTpl(updated);
-      return [updated];
+      const n = [...ts]; n[idx] = updated; return n;
     });
+  };
+
+  const createTpl = () => {
+    const newId = `tpl_${Date.now()}`;
+    const newTpl: Template = { ...tpl, id: newId, name: `${tpl.name ? tpl.name + ' (copia)' : 'Nuovo Template'}` };
+    setTemplates(ts => [...ts, newTpl]);
+    setSelectedTplId(newId);
+    templatesApi.create(newTpl).catch(() => {});
+  };
+
+  const deleteTpl = (id: string) => {
+    if (templates.length <= 1) return;
+    const remaining = templates.filter(t => t.id !== id);
+    setTemplates(remaining);
+    if (selectedTplId === id || tpl.id === id) setSelectedTplId(remaining[0]?.id ?? '');
+    templatesApi.delete(id).catch(() => {});
   };
 
   const handleFile = async (key: 'overlay' | 'badge', file: File | null) => {
@@ -1097,6 +1121,30 @@ function TemplateSection() {
 
   return (
     <>
+      {/* Selettore template */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px 6px', overflowX: 'auto', borderBottom: '1px solid var(--bd)' }}>
+        {templates.map(t => (
+          <div key={t.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0, gap: 1 }}>
+            <button
+              className={`btn bsm ${tpl.id === t.id ? 'bp' : 'bgh'}`}
+              style={{ borderRadius: tpl.id === t.id && templates.length > 1 ? '8px 0 0 8px' : 8, padding: '4px 10px', fontSize: 12 }}
+              onClick={() => setSelectedTplId(t.id)}
+            >{t.name || 'Template'}</button>
+            {templates.length > 1 && (
+              <button onClick={() => deleteTpl(t.id)}
+                style={{ height: 28, padding: '0 6px', fontSize: 12, background: tpl.id === t.id ? 'var(--a1)' : 'var(--bg3)', color: tpl.id === t.id ? 'rgba(255,255,255,0.7)' : 'var(--t3)', border: '1px solid var(--bd)', borderLeft: 'none', borderRadius: '0 8px 8px 0', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            )}
+          </div>
+        ))}
+        <button className="btn bgh bsm" style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px', borderRadius: 8 }} onClick={createTpl}>+ Nuovo</button>
+      </div>
+      {/* Nome template attivo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px 2px' }}>
+        <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>Nome:</span>
+        <input className="inp" style={{ fontSize: 12 }} value={tpl.name ?? ''} placeholder="Nome template"
+          onChange={e => updateTpl({ name: e.target.value })} />
+      </div>
+
       {/* Bottoni + toggle ON/OFF + ℹ️ SOPRA l'anteprima */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, padding: '10px 16px 8px' }}>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1 }}>
@@ -1642,7 +1690,7 @@ function SettingsMenuItem({ icon, label, sub, onClick }: { icon: string; label: 
 }
 
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { settings, setSettings } = useApp();
+  const { settings, setSettings, templates } = useApp();
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState('');
@@ -1847,11 +1895,41 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           </div>
         )}
         {s.channels.map((ch, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
-            <input className="inp" value={ch} placeholder="@username oppure -1001234567890"
-              onChange={e => { const v = e.target.value; setS(prev => ({ ...prev, channels: prev.channels.map((c, j) => j === i ? v : c) })); }} />
-            <button className="btn bre bic" onClick={() => setS(prev => ({ ...prev, channels: prev.channels.filter((_, j) => j !== i) }))}>×</button>
+          <div key={i} style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
+              <input className="inp" value={ch} placeholder="@username oppure -1001234567890"
+                onChange={e => {
+                  const v = e.target.value; const oldCh = s.channels[i];
+                  setS(prev => {
+                    const ct = { ...(prev.channelTemplates ?? {}) };
+                    if (oldCh && oldCh in ct) { ct[v] = ct[oldCh]; delete ct[oldCh]; }
+                    return { ...prev, channels: prev.channels.map((c, j) => j === i ? v : c), channelTemplates: ct };
+                  });
+                }} />
+              <button className="btn bre bic" onClick={() => setS(prev => {
+                const ct = { ...(prev.channelTemplates ?? {}) }; delete ct[ch];
+                return { ...prev, channels: prev.channels.filter((_, j) => j !== i), channelTemplates: ct };
+              })}>×</button>
+            </div>
+            {ch && templates.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 28 }}>
+                <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>🖼️ Template:</span>
+                <select className="sel" style={{ flex: 1, fontSize: 12 }}
+                  value={s.channelTemplates?.[ch] ?? ''}
+                  onChange={e => {
+                    const tplId = e.target.value;
+                    setS(prev => {
+                      const ct = { ...(prev.channelTemplates ?? {}) };
+                      if (tplId) ct[ch] = tplId; else delete ct[ch];
+                      return { ...prev, channelTemplates: ct };
+                    });
+                  }}>
+                  <option value="">— Default (template del post) —</option>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name || `Template (${t.id.slice(-6)})`}</option>)}
+                </select>
+              </div>
+            )}
           </div>
         ))}
         <button className="btn bp bsm" style={{ marginTop: 4, width: '100%' }}
