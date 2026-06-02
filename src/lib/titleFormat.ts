@@ -58,6 +58,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(friggitrice.{0,10}aria|air fryer)\b/i, emoji: '🍟' },
   { re: /\b(macchina.{0,15}pizza|forno.{0,10}pizza|pizza.{0,10}(forno|piastra|elettric))\b/i, emoji: '🍕' },
   { re: /\b(forno|microonde|fornello|piano.{0,8}cottura|piastra.{0,8}cottura)\b/i, emoji: '🍳' },
+  { re: /\b(padell[ae]|pentol[ae]|casseruol[ae]|wok|tegam[ei]|antiaderente|teglia|set.{0,10}(padell|pentol|pento))\b/i, emoji: '🍳' },
   { re: /\b(macchina.{0,10}caffè|nespresso|dolce gusto|caffettiera|moka|macchina espresso)\b/i, emoji: '☕' },
   { re: /\b(frullatore|mixer|robot.{0,10}cucina|kenwood|kitchenaid|impastatrice)\b/i, emoji: '🥣' },
   { re: /\b(bollitore|kettle)\b/i, emoji: '☕' },
