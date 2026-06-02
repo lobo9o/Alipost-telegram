@@ -275,7 +275,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const customTags: Record<string, string> = {};
       for (const tr of tagRows) customTags[tr.name as string] = tr.value as string;
       const builtCaption = buildMessage(patchLayout || defaultLayout, postData ?? {}, affiliateUrl, undefined, customTags);
-      caption = `${builtCaption}\n\n${telegramText ?? ''}`.trim();
+      caption = `${telegramText ?? ''}\n\n${builtCaption}`.trim();
     } else {
       // Backward compat: vecchio formato con newCaption
       caption = terminata ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim() : (newCaption ?? '');
