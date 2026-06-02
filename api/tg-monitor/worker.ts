@@ -156,8 +156,8 @@ async function startUser(userId: string) {
   `;
   if (!session) return;
 
-  const channelRows = await sql<{ channel: string; auto_publish: boolean }[]>`
-    SELECT channel, COALESCE(auto_publish, false) AS auto_publish FROM tg_monitor_channels WHERE user_id = ${userId} AND active = true
+  const channelRows = await sql<{ channel: string; auto_publish: boolean; dest_channel: string | null }[]>`
+    SELECT channel, COALESCE(auto_publish, false) AS auto_publish, dest_channel FROM tg_monitor_channels WHERE user_id = ${userId} AND active = true
   `;
   if (!channelRows.length) return;
 
@@ -202,12 +202,17 @@ async function startUser(userId: string) {
   // Risolve ogni canale nel suo ID numerico
   const monitoredIds = new Set<string>();
   const unresolvedChannels: string[] = []; // canali username non risolti all'avvio
-  const channelEntities: Array<{ entity: any; core: string; lastMsgId: number; autoPublish: boolean }> = [];
+  const channelEntities: Array<{ entity: any; core: string; lastMsgId: number; autoPublish: boolean; destChannel: string | null }> = [];
   // Mappa core → auto_publish per lookup rapido nel handler
   const channelAutoPublish = new Map<string, boolean>();
-  for (const { channel, auto_publish } of channelRows) channelAutoPublish.set(channel, auto_publish);
-  // Mappa core numerico → auto_publish per fallback quando la risoluzione entità fallisce
+  const channelDestMap = new Map<string, string | null>();
+  for (const { channel, auto_publish, dest_channel } of channelRows) {
+    channelAutoPublish.set(channel, auto_publish);
+    channelDestMap.set(channel, dest_channel ?? null);
+  }
+  // Mappa core numerico → auto_publish/dest per fallback quando la risoluzione entità fallisce
   const coreAutoPublish = new Map<string, boolean>();
+  const coreDestMap = new Map<string, string | null>();
   const processedMsgIds = new Set<string>(); // dedup push+polling
 
   console.log(`[tg-monitor] ${userId} — canali da risolvere: ${channelRows.map(r => r.channel).join(', ')}`);
@@ -220,6 +225,7 @@ async function startUser(userId: string) {
       const s = channel.replace(/^-/, '');
       const rawCore = s.startsWith('100') && s.length >= 12 ? s.slice(3) : s;
       coreAutoPublish.set(rawCore, channelAutoPublish.get(channel) ?? false);
+      coreDestMap.set(rawCore, channelDestMap.get(channel) ?? null);
     }
 
     let resolved = false;
@@ -239,9 +245,11 @@ async function startUser(userId: string) {
         const entityCore = (() => { const s = String(entity.id).replace(/^-/, ''); return s.startsWith('100') && s.length >= 12 ? s.slice(3) : s; })();
         const initLastId = (initMsgs as any[])[0]?.id ?? 0;
         const ap = channelAutoPublish.get(channel) ?? false;
-        channelEntities.push({ entity, core: entityCore, lastMsgId: initLastId, autoPublish: ap });
+        const dc = channelDestMap.get(channel) ?? null;
+        channelEntities.push({ entity, core: entityCore, lastMsgId: initLastId, autoPublish: ap, destChannel: dc });
         coreAutoPublish.set(entityCore, ap); // aggiorna con il core corretto
-        console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId} autoPublish=${ap} (tentativo ${attempt})`);
+        coreDestMap.set(entityCore, dc);
+        console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId} autoPublish=${ap} destChannel=${dc ?? 'default'} (tentativo ${attempt})`);
         resolved = true;
       } catch (e: any) {
         console.warn(`[tg-monitor] ${userId} — tentativo ${attempt}/3 fallito per "${channel}": ${e.message}`);
@@ -335,7 +343,8 @@ async function startUser(userId: string) {
       // Fallback a coreAutoPublish se l'entità non era risolvibile all'avvio
       const chEntity = channelEntities.find(c => c.core === core);
       const autoPublish = chEntity?.autoPublish ?? coreAutoPublish.get(core) ?? false;
-      processMessage(userId, uniqueUrls, autoPublish, text).catch(e => console.error('[tg-monitor] errore processMessage:', e));
+      const destChannel = chEntity?.destChannel ?? coreDestMap.get(core) ?? null;
+      processMessage(userId, uniqueUrls, autoPublish, text, destChannel).catch(e => console.error('[tg-monitor] errore processMessage:', e));
     } catch (e) {
       console.error('[tg-monitor] errore handler:', e);
     }
@@ -366,7 +375,7 @@ async function startUser(userId: string) {
           const uniqueUrls: string[] = [];
           const seen = new Set<string>();
           for (const url of urls) { const clean = url.replace(/[.,;!?)]+$/, ''); if (!seen.has(clean)) { seen.add(clean); uniqueUrls.push(clean); } }
-          processMessage(userId, uniqueUrls, info.autoPublish, text).catch(e => console.error('[tg-monitor] errore processMessage (poll):', e));
+          processMessage(userId, uniqueUrls, info.autoPublish, text, info.destChannel).catch(e => console.error('[tg-monitor] errore processMessage (poll):', e));
         }
       } catch (e: any) {
         console.warn(`[tg-monitor] ${userId} — poll error ${info.core}: ${e.message}`);
@@ -462,7 +471,7 @@ async function fetchProduct(userId: string, url: string, headers: Record<string,
   return { ...product, _platform: platform };
 }
 
-async function processMessage(userId: string, urls: string[], autoPublish = false, messageText = '') {
+async function processMessage(userId: string, urls: string[], autoPublish = false, messageText = '', destChannel: string | null = null) {
   // Se autopost è disabilitato nelle impostazioni globali, non salvare nulla
   const [settingsRow] = await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${userId}`;
   const cfgRaw = settingsRow?.data ?? {};
@@ -592,6 +601,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
       status: 'draft',
       scheduled: null,
       immediate: autoPublish,
+      destChannel: destChannel ?? undefined,
     }),
   });
   if (!queueRes.ok) {

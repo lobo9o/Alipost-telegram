@@ -1363,6 +1363,7 @@ const Chevron = ({ open }: { open: boolean }) => (
 type AuthStep = 'idle' | 'code' | 'twofa' | 'active';
 
 export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
+  const { settings } = useApp();
   const [step, setStep] = useState<AuthStep>('idle');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -1570,11 +1571,31 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                     );
                   };
                   return (
-                    <div style={{ borderTop: '1px solid var(--bdr)', padding: '8px 14px', display: 'flex', gap: 6 }}>
-                      {btn('queue',   '📋 In coda',   'var(--a1)')}
-                      {btn('publish', '⚡ Subito',    '#16a34a')}
-                      {btn('pause',   '⏸ Pausa',     '#6b3d1e')}
-                    </div>
+                    <>
+                      <div style={{ borderTop: '1px solid var(--bdr)', padding: '8px 14px', display: 'flex', gap: 6 }}>
+                        {btn('queue',   '📋 In coda',   'var(--a1)')}
+                        {btn('publish', '⚡ Subito',    '#16a34a')}
+                        {btn('pause',   '⏸ Pausa',     '#6b3d1e')}
+                      </div>
+                      {settings.channels.filter(Boolean).length > 1 && (
+                        <div style={{ borderTop: '1px solid var(--bdr)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>📤 Pubblica su</span>
+                          <select className="sel" style={{ flex: 1, fontSize: 12 }}
+                            value={ch.dest_channel ?? ''}
+                            onChange={async e => {
+                              const val = e.target.value || null;
+                              setChannels(prev => prev.map(c => c.id === ch.id ? { ...c, dest_channel: val } : c));
+                              try { await tgMonitorApi.updateChannel(ch.id, { dest_channel: val }); }
+                              catch { setChannels(prev => prev.map(c => c.id === ch.id ? { ...c, dest_channel: ch.dest_channel } : c)); }
+                            }}>
+                            <option value="">— Default (primo canale) —</option>
+                            {settings.channels.filter(Boolean).map((c: string) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </>
                   );
                 })()}
               </div>

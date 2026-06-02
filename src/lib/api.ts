@@ -250,7 +250,7 @@ export const emojiIdsApi = {
 };
 
 // ── Telegram Monitor ─────────────────────────────────────────────────────────
-export interface TgMonitorChannel { id: string; channel: string; active: boolean; auto_publish: boolean; }
+export interface TgMonitorChannel { id: string; channel: string; active: boolean; auto_publish: boolean; dest_channel?: string | null; }
 export const tgMonitorApi = {
   status: () => req<{ status: string; phone: string | null }>('GET', '/api/tg-monitor/auth'),
   sendCode: (phone: string) => req<{ codeSent: boolean }>('POST', '/api/tg-monitor/auth', { action: 'sendCode', phone }),
@@ -260,6 +260,6 @@ export const tgMonitorApi = {
   listChannels: () => req<TgMonitorChannel[]>('GET', '/api/tg-monitor/channels'),
   addChannel: (channel: string) => req<{ ok: boolean; id: string }>('POST', '/api/tg-monitor/channels', { channel }),
   removeChannel: (id: string) => req<{ ok: boolean }>('DELETE', `/api/tg-monitor/channels/${id}`),
-  updateChannel: (id: string, data: Partial<Pick<TgMonitorChannel, 'auto_publish' | 'active'>>) => req<{ ok: boolean }>('PATCH', `/api/tg-monitor/channels/${id}`, data),
+  updateChannel: (id: string, data: Partial<Pick<TgMonitorChannel, 'auto_publish' | 'active'>> & { dest_channel?: string | null }) => req<{ ok: boolean }>('PATCH', `/api/tg-monitor/channels/${id}`, data),
 };
 

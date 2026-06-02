@@ -7,6 +7,7 @@ import { checkPostPrice } from '../_priceCheck.js';
 async function ensureColumns() {
   await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS silenzioso boolean`.catch(() => {});
   await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS immediate boolean DEFAULT false`.catch(() => {});
+  await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS dest_channel TEXT`.catch(() => {});
 }
 
 let migrationDone = false;
@@ -54,7 +55,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  const { id, posts = [], status = 'draft', scheduled = null, silenzioso = null, immediate = false } = req.body ?? {};
+  const { id, posts = [], status = 'draft', scheduled = null, silenzioso = null, immediate = false, destChannel = null } = req.body ?? {};
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
   const postsForDb = posts as any[];
 
@@ -74,8 +75,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // Viene strippato solo dalla risposta GET per non appesantire il polling
   await checkAndMarkHistoricalLow(userId, postsForDb);
   const [row] = await sql`
-    INSERT INTO autopost_queue (id, user_id, posts, status, scheduled, silenzioso, immediate)
-    VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled}, ${silenzioso}, ${immediate})
+    INSERT INTO autopost_queue (id, user_id, posts, status, scheduled, silenzioso, immediate, dest_channel)
+    VALUES (${id}, ${userId}, ${sql.json(postsForDb)}, ${status}, ${scheduled}, ${silenzioso}, ${immediate}, ${destChannel})
     RETURNING id, posts, status, scheduled, silenzioso, created_at AS "createdAt"
   `;
   res.status(201).json(row);
