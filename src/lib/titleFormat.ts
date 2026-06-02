@@ -272,27 +272,27 @@ export function shortenTitle(title: string): string {
   // Rimuovi parentesi ridondanti nella seconda metà del titolo (es. "(Espandibile)", "(Nero)")
   let t = title.replace(/(?<=.{30})\s*\([^)\n]{2,25}\)/g, '').replace(/\s+/g, ' ').trim();
 
-  if (t.length <= 60) return t;
+  if (t.length <= 90) return t;
 
   // Separatori forti (Amazon li usa per dividere nome prodotto da dettagli)
   for (const sep of [' | ', ' – ', ' — ']) {
     const idx = t.indexOf(sep, 18);
-    if (idx !== -1 && idx <= 65) return t.slice(0, idx).trim();
+    if (idx !== -1 && idx <= 95) return t.slice(0, idx).trim();
   }
 
   // Virgola/punto e virgola (seguiti da spazio, minimo 32 chars per non tagliare troppo presto)
   for (const sep of [', ', '; ']) {
     const idx = t.indexOf(sep, 32);
-    if (idx !== -1 && idx <= 62) return t.slice(0, idx).trim();
+    if (idx !== -1 && idx <= 92) return t.slice(0, idx).trim();
   }
 
   // Trattino con spazi
   const di = t.indexOf(' - ', 22);
-  if (di !== -1 && di <= 62) return t.slice(0, di).trim();
+  if (di !== -1 && di <= 92) return t.slice(0, di).trim();
 
-  // Ultima parola intera prima di 58 caratteri
+  // Ultima parola intera prima di 88 caratteri
   // Se finisce con parola corta (preposizione: con/di/da/a/e/o), arretra di un'altra parola
-  const cut = t.slice(0, 58);
+  const cut = t.slice(0, 88);
   const sp = cut.lastIndexOf(' ');
   let result = (sp > 20 ? cut.slice(0, sp) : cut).trim();
   if (/\s(con|di|da|a|e|o|il|la|le|gli|i|del|della|dei|delle|per|su|in)\s*$/i.test(' ' + result)) {
