@@ -3117,14 +3117,16 @@ function MultiThumbnailGrid({
   );
 }
 
-type EditFields = { title: string; originalPrice: string; discountedPrice: string; discountPercent: number; customText: string; coupon: string };
+type EditFields = { title: string; originalPrice: string; discountedPrice: string; discountPercent: number; customText: string; coupon: string; isHistoricalLow: boolean; tagOverrides: Record<string, string> };
 type MultiEditMap = Record<number, EditFields>;
 
 export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
   const { published, setPublished, setQueue, layouts, keyboards, tags, settings, templates } = useApp();
   // editingKey: "postId" per singolo, "postId:multi" per multi-post
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editFields, setEditFields] = useState<EditFields>({ title: '', originalPrice: '', discountedPrice: '', discountPercent: 0, customText: '', coupon: '' });
+  const [editFields, setEditFields] = useState<EditFields>({ title: '', originalPrice: '', discountedPrice: '', discountPercent: 0, customText: '', coupon: '', isHistoricalLow: false, tagOverrides: {} });
+  const [activeTagPill, setActiveTagPill] = useState<string | null>(null);
+  const [tagPillVal, setTagPillVal] = useState('');
   const [multiEditMap, setMultiEditMap] = useState<MultiEditMap>({});
   const [editErr, setEditErr] = useState('');
   const [saving, setSaving] = useState(false);
@@ -3149,7 +3151,10 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
       title: p.title, originalPrice: String(p.originalPrice),
       discountedPrice: p.price, discountPercent: p.discountPercent,
       customText: p.customText || '', coupon: '',
+      isHistoricalLow: p.isHistoricalLow ?? false,
+      tagOverrides: p.tagOverrides ?? {},
     });
+    setActiveTagPill(null);
     setEditErr('');
   };
 
@@ -3160,6 +3165,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
         title: item.title, originalPrice: String(item.originalPrice),
         discountedPrice: item.price, discountPercent: item.discountPercent,
         customText: item.customText || '', coupon: item.coupon || '',
+        isHistoricalLow: item.isHistoricalLow ?? false, tagOverrides: {},
       };
     });
     setMultiEditMap(map);
@@ -3174,7 +3180,10 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
       title: item.title, originalPrice: String(item.originalPrice),
       discountedPrice: item.price, discountPercent: item.discountPercent,
       customText: item.customText || '', coupon: item.coupon || '',
+      isHistoricalLow: item.isHistoricalLow ?? false,
+      tagOverrides: {},
     });
+    setActiveTagPill(null);
     setEditingKey(`${p.id}:item:${idx}`);
     setEditErr('');
   };
@@ -3201,9 +3210,9 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
         const pct = origP > 0 ? Math.max(0, Math.round((1 - discP / origP) * 100)) : editFields.discountPercent;
         const cur = origItem.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
         const layout = layouts.find(l => l.id === origItem.layoutId) ?? layouts.find(l => l.tipo === 'multi');
-        const updPost = { id: origItem.id, platform: origItem.platform as Platform, sourceUrl: origItem.sourceUrl, productId: origItem.productId, title: editFields.title, image: origItem.image, emoji: origItem.emoji, originalPrice: origP, discountedPrice: discP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, isHistoricalLow: origItem.isHistoricalLow, templateId: 'tpl1', layoutId: origItem.layoutId, keyboardId: 'kb1' } as CreatedPost;
+        const updPost = { id: origItem.id, platform: origItem.platform as Platform, sourceUrl: origItem.sourceUrl, productId: origItem.productId, title: editFields.title, image: origItem.image, emoji: origItem.emoji, originalPrice: origP, discountedPrice: discP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, isHistoricalLow: editFields.isHistoricalLow, tagOverrides: editFields.tagOverrides, templateId: 'tpl1', layoutId: origItem.layoutId, keyboardId: 'kb1' } as CreatedPost;
         const newText = layout ? resolvePostTags(layout.contenuto, updPost, tags, cur) : '';
-        const newItems = p.multiItems.map((it, i) => i === idx ? { ...it, title: editFields.title, price: discP.toFixed(2), originalPrice: origP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, resolvedText: newText } : it);
+        const newItems = p.multiItems.map((it, i) => i === idx ? { ...it, title: editFields.title, price: discP.toFixed(2), originalPrice: origP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, isHistoricalLow: editFields.isHistoricalLow, resolvedText: newText } : it);
         const newCaption = newItems.map(it => it.resolvedText ?? '').filter(Boolean).join('\n');
         setPublished(prev => prev.map(x => x.id !== p.id ? x : { ...x, multiItems: newItems }));
         setEditingKey(null);
@@ -3249,17 +3258,20 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
           title: editFields.title, image: p.image, emoji: p.emoji,
           originalPrice: origPrice, discountedPrice: discPrice,
           discountPercent: editFields.discountPercent, customText: editFields.customText,
-          isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
+          isHistoricalLow: editFields.isHistoricalLow, tagOverrides: editFields.tagOverrides,
+          templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
         } as CreatedPost;
         newCaption = layout ? resolvePostTags(layout.contenuto, updatedPost, tags, cur) : editFields.customText;
         setPublished(prev => prev.map(x => x.id !== p.id ? x : {
           ...x, title: editFields.title, originalPrice: origPrice,
           price: discPrice.toFixed(2), discountPercent: editFields.discountPercent,
           customText: editFields.customText,
+          isHistoricalLow: editFields.isHistoricalLow,
+          tagOverrides: editFields.tagOverrides,
         }));
         await publishedApi.editTelegram(p.id, {
           action: 'editPublished', chatId: p.chatId, messageId: p.messageId, newCaption,
-          updatedFields: { title: editFields.title, originalPrice: origPrice, discountedPrice: discPrice, discountPercent: editFields.discountPercent, customText: editFields.customText },
+          updatedFields: { title: editFields.title, originalPrice: origPrice, discountedPrice: discPrice, discountPercent: editFields.discountPercent, customText: editFields.customText, isHistoricalLow: editFields.isHistoricalLow },
         } as any);
       }
       setEditingKey(null);
@@ -3367,39 +3379,118 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     }
   };
 
-  const renderEditForm = (p: typeof published[0], isMultiItem: boolean) => (
-    <>
-      <div style={{ marginBottom: 8 }}>
-        <div className="lbl">TITOLO</div>
-        <input className="inp" value={editFields.title} onChange={e => setEditFields(prev => ({ ...prev, title: e.target.value }))} />
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-        <div style={{ flex: 1 }}>
-          <div className="lbl">PREZZO ORIG.</div>
-          <input className="inp" type="number" step="0.01" value={editFields.originalPrice}
-            onChange={e => handlePriceChange('originalPrice', e.target.value)} />
+  const renderEditForm = (p: typeof published[0], isMultiItem: boolean) => {
+    // Determina il layout da cui estrarre i tag
+    let layoutForTags: typeof layouts[0] | undefined;
+    if (isMultiItem) {
+      const idxM = editingKey?.match(new RegExp(`^${p.id}:item:(\\d+)$`));
+      if (idxM) {
+        const it = p.multiItems?.[parseInt(idxM[1])];
+        layoutForTags = layouts.find(l => l.id === it?.layoutId);
+      }
+    } else {
+      layoutForTags = layouts.find(l => l.id === p.layoutId);
+    }
+
+    const tagPills: { tag: string; label: string }[] = [];
+    if (layoutForTags) {
+      const seen = new Set<string>();
+      for (const tag of extractLayoutTags(layoutForTags.contenuto)) {
+        if (AUTO_COMPUTED_TAGS.has(tag) || COUNTRY_TAGS.has(tag)) continue;
+        if (seen.has(tag)) continue;
+        seen.add(tag);
+        const sys = EDITABLE_SYSTEM_TAG_MAP[tag];
+        tagPills.push({ tag, label: sys ? sys.label : tag.replace(/[{}]/g, '') });
+      }
+    }
+
+    const saveTagPill = (tag: string, val: string) => {
+      setEditFields(prev => ({ ...prev, tagOverrides: { ...prev.tagOverrides, [tag]: val } }));
+      setActiveTagPill(null);
+    };
+
+    return (
+      <>
+        <div style={{ marginBottom: 8 }}>
+          <div className="lbl">TITOLO</div>
+          <input className="inp" value={editFields.title} onChange={e => setEditFields(prev => ({ ...prev, title: e.target.value }))} />
         </div>
-        <div style={{ flex: 1 }}>
-          <div className="lbl">PREZZO SCONTATO</div>
-          <input className="inp" type="number" step="0.01" value={editFields.discountedPrice}
-            onChange={e => handlePriceChange('discountedPrice', e.target.value)} />
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+          <div style={{ flex: 1 }}>
+            <div className="lbl">PREZZO ORIG.</div>
+            <input className="inp" type="number" step="0.01" value={editFields.originalPrice}
+              onChange={e => handlePriceChange('originalPrice', e.target.value)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="lbl">PREZZO SCONTATO</div>
+            <input className="inp" type="number" step="0.01" value={editFields.discountedPrice}
+              onChange={e => handlePriceChange('discountedPrice', e.target.value)} />
+          </div>
         </div>
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--am2)', fontWeight: 700, marginBottom: 8, textAlign: 'right' }}>
-        -{editFields.discountPercent}%
-      </div>
-      <div className="lbl">TESTO PERSONALIZZATO</div>
-      <textarea className="txta" rows={2} value={editFields.customText}
-        onChange={e => setEditFields(prev => ({ ...prev, customText: e.target.value }))}
-        style={{ marginBottom: 6 }} />
-      {editErr && <ErrorBanner>{editErr}</ErrorBanner>}
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn bs bsm" style={{ flex: 1 }} onClick={() => setEditingKey(null)}>Annulla</button>
-        <button className="btn bp bsm" style={{ flex: 2 }} disabled={saving}
-          onClick={() => saveEdit(p)}>{saving ? '...' : '💾 Salva su Telegram'}</button>
-      </div>
-    </>
-  );
+        <div style={{ fontSize: 12, color: 'var(--am2)', fontWeight: 700, marginBottom: 8, textAlign: 'right' }}>
+          -{editFields.discountPercent}%
+        </div>
+        <div className="lbl">TESTO PERSONALIZZATO</div>
+        <textarea className="txta" rows={2} value={editFields.customText}
+          onChange={e => setEditFields(prev => ({ ...prev, customText: e.target.value }))}
+          style={{ marginBottom: 8 }} />
+        {/* Toggle minimo storico */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: tagPills.length ? 8 : 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1 }}>🏆 Minimo storico</span>
+          <button
+            className={`btn bsm ${editFields.isHistoricalLow ? 'bgr' : 'bs'}`}
+            style={{ minWidth: 52, fontWeight: 700 }}
+            onClick={() => setEditFields(prev => ({ ...prev, isHistoricalLow: !prev.isHistoricalLow }))}>
+            {editFields.isHistoricalLow ? '✓ ON' : 'OFF'}
+          </button>
+        </div>
+        {/* Tag pills */}
+        {tagPills.length > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            <div className="lbl">TAG NEL LAYOUT</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: activeTagPill ? 6 : 0 }}>
+              {tagPills.map(tp => {
+                const val = editFields.tagOverrides[tp.tag] ?? '';
+                const active = activeTagPill === tp.tag;
+                return (
+                  <button key={tp.tag}
+                    onClick={() => { setActiveTagPill(active ? null : tp.tag); setTagPillVal(editFields.tagOverrides[tp.tag] ?? ''); }}
+                    style={{
+                      padding: '5px 11px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      border: `1px solid ${active ? 'var(--a1)' : val ? 'var(--am2)' : 'var(--bg4)'}`,
+                      background: active ? 'var(--bg4)' : val ? '#1a1200' : 'var(--bg3)',
+                      color: active ? 'var(--a1)' : val ? 'var(--am2)' : 'var(--t3)',
+                    }}>
+                    {tp.label}{val ? `: ${val.length > 14 ? val.slice(0, 14) + '…' : val}` : ''}
+                  </button>
+                );
+              })}
+            </div>
+            {activeTagPill && tagPills.find(tp => tp.tag === activeTagPill) && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                <input className="inp" style={{ flex: 1 }} autoFocus value={tagPillVal}
+                  placeholder={`Valore per {${activeTagPill.replace(/[{}]/g, '')}}...`}
+                  onChange={e => setTagPillVal(e.target.value)}
+                  onBlur={() => saveTagPill(activeTagPill, tagPillVal)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') saveTagPill(activeTagPill, tagPillVal);
+                    if (e.key === 'Escape') setActiveTagPill(null);
+                  }} />
+                <button className="btn bgr bsm" style={{ padding: '6px 12px', flexShrink: 0 }}
+                  onMouseDown={e => { e.preventDefault(); saveTagPill(activeTagPill, tagPillVal); }}>✓</button>
+              </div>
+            )}
+          </div>
+        )}
+        {editErr && <ErrorBanner>{editErr}</ErrorBanner>}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn bs bsm" style={{ flex: 1 }} onClick={() => { setEditingKey(null); setActiveTagPill(null); }}>Annulla</button>
+          <button className="btn bp bsm" style={{ flex: 2 }} disabled={saving}
+            onClick={() => saveEdit(p)}>{saving ? '...' : '💾 Salva su Telegram'}</button>
+        </div>
+      </>
+    );
+  };
 
   const renderMultiEditForm = (p: typeof published[0]) => (
     <div style={{ borderTop: '1px solid var(--bd)', padding: '12px 0 4px' }}>
@@ -3465,7 +3556,8 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
           title: p.title, image: p.image, emoji: p.emoji,
           originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price),
           discountPercent: p.discountPercent, customText: p.customText,
-          isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
+          isHistoricalLow: p.isHistoricalLow, tagOverrides: p.tagOverrides,
+          templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
         };
         const pLayout = layouts.find(l => l.id === p.layoutId);
         const pKb = keyboards.find(k => k.id === (pLayout?.keyboardId ?? 'kb1'));

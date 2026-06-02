@@ -309,7 +309,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             original_price = ${Number(uf.originalPrice ?? 0)},
             discounted_price = ${Number(uf.discountedPrice ?? 0)},
             discount_percent = ${Number(uf.discountPercent ?? 0)},
-            custom_text = ${uf.customText ?? ''}
+            custom_text = ${uf.customText ?? ''},
+            is_historical_low = ${uf.isHistoricalLow ?? false}
           WHERE id = ${id} AND user_id = ${userId}
         `.catch(() => {});
       }

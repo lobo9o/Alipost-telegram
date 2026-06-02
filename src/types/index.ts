@@ -206,6 +206,7 @@ export interface PublishedPost {
   terminata?: boolean;
   isMulti?: boolean;
   multiItems?: PublishedMultiItem[];
+  tagOverrides?: Record<string, string>;
 }
 
 export interface TerminataConfig {
