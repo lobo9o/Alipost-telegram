@@ -618,7 +618,7 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrow
           top: `${terminata.overlayTextY}%`,
           transform: 'translate(-50%, -50%)',
           fontSize: `${terminataFontPx}px`,
-          fontWeight: 900, fontFamily: 'Impact, Arial Black',
+          fontWeight: 900, fontFamily: `"${terminata.overlayTextFont || 'Impact'}", Impact, Arial Black`,
           color: terminata.overlayTextColor,
           textShadow: `0 0 ${terminataFontPx * 0.08}px #000, 0 0 ${terminataFontPx * 0.04}px #000`,
           whiteSpace: 'nowrap', pointerEvents: 'none',
