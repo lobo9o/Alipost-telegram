@@ -99,6 +99,9 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   // ── Profumi ────────────────────────────────────────────────────────────────
   { re: /\b(profumo|eau de|parfum|colonia).{0,20}(uomo|donna|ml)\b/i, emoji: '🌺' },
 
+  // ── Candele ───────────────────────────────────────────────────────────────
+  { re: /\b(candel[ae]|tealight|tea.?light|woodwick|yankee.?candle|diffusore.{0,15}(ambiente|profumato)|wax.?melt)\b/i, emoji: '🕯️' },
+
   // ── Skincare & Crema ──────────────────────────────────────────────────────
   { re: /\b(crema|siero|contorno.{0,10}(occhi|viso)|idratante|struccante|skincare|toner.{0,10}(viso|pelle)|moisturizer)\b/i, emoji: '🧴' },
 
@@ -148,6 +151,10 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(gioiello|gioielli|collana|bracciale|anello|orecchini|ciondolo)\b/i, emoji: '💍' },
   { re: /\b(nike|adidas|new balance|asics|converse|vans|puma)\b/i, emoji: '👟' },
 
+  // ── Animali domestici (prima degli alimentari: pet food contiene parole come manzo/pollo) ──
+  { re: /\b(cane|cani|cucciolo|puppy)\b/i, emoji: '🐶' },
+  { re: /\b(gatt[oi]|gatti|gattino|kitten|micio|micia)\b/i, emoji: '🐱' },
+
   // ── Alimentari ────────────────────────────────────────────────────────────
   { re: /\b(caffè|caffe|espresso.{0,10}(capsule|cialde)|nescafe|lavazza|illy|borbone)\b/i, emoji: '☕' },
   { re: /\b(cioccolato|cacao|lindt|ferrero|nutella|kinder)\b/i, emoji: '🍫' },
@@ -180,8 +187,8 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(bilancia|pesapersone|pesa.{0,10}(digital|elettronic|cucina)|bilancino)\b/i, emoji: '⚖️' },
   { re: /\b(maschera.{0,10}facciale|mascherina|ffp2|ffp3)\b/i, emoji: '😷' },
 
-  // ── Animali ───────────────────────────────────────────────────────────────
-  { re: /\b(cibo.{0,10}(cane|gatto)|crocchette|croccantini|pedigree|whiskas|royal canin|hill.?s)\b/i, emoji: '🐾' },
+  // ── Animali (accessori e brand ambigui — fallback) ────────────────────────
+  { re: /\b(crocchette|croccantini|pedigree|royal canin|hill.?s|whiskas|eukanuba|farmina|trainer)\b/i, emoji: '🐾' },
   { re: /\b(cuccia|lettiera|guinzaglio|collare.{0,10}(cane|gatto)|gioco.{0,10}(cane|gatto)|albero.{0,10}(gatt|felino|micio)|tiragraffi)\b/i, emoji: '🐾' },
   { re: /\b(pesci|acquario|tartaruga|uccelli.{0,10}(gabbia|cibo))\b/i, emoji: '🐾' },
 
