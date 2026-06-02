@@ -174,7 +174,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(lego|duplo|mattoncini.{0,10}costruzione)\b/i, emoji: '🧱' },
   { re: /\b(bambola|barbie|hot wheels|action figure|playmobil)\b/i, emoji: '🧸' },
   { re: /\b(passeggino|carrozzina|seggiolino|ovetto|neonato|baby monitor)\b/i, emoji: '🍼' },
-  { re: /\b(giocattolo|gioco.{0,10}(tavolo|da tavolo|societario)|puzzle|costruzioni)\b/i, emoji: '🎲' },
+  { re: /\b(giocattolo|giocattoli|giochi|lisciani|clementoni|hasbro|mattel|fisher.?price|vtech|chicco.{0,10}(gioco|bimb)|banchetto.{0,15}(led|bambini?|gioco|imparo)|gioco.{0,15}(tavolo|da tavolo|societario|imparo|apprendimento|educativ)|puzzle|costruzioni)\b/i, emoji: '🎲' },
 
   // ── Libri ─────────────────────────────────────────────────────────────────
   { re: /\b(libro|romanzo|saggio|enciclopedia|fumetto|graphic novel)\b/i, emoji: '📚' },
