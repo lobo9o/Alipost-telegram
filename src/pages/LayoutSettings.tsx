@@ -745,6 +745,7 @@ const FONTS = [
   'Lobster',
   'Milano',
   'Montserrat',
+  'Montserrat Black Italic',
   'Open Sans',
   'Open Sans Bold',
   'The Blacklist',
@@ -1219,8 +1220,9 @@ function TemplateSection() {
 // ── Terminata Panel ───────────────────────────────────────────
 const DEFAULT_TERMINATA: TerminataConfig = {
   grayscale: true, overlayText: '❌ OFFERTA TERMINATA', overlayTextColor: '#ff0000',
-  overlayTextSize: 7, overlayTextX: 50, overlayTextY: 50,
+  overlayTextSize: 7, overlayTextX: 50, overlayTextY: 50, overlayTextFont: 'Impact',
   showPrezzo: true, showPrezzoPrecedente: false, showSconto: false, layoutId: '',
+  telegramMode: 'keep', telegramText: '❌ Offerta terminata',
 };
 
 function TerminataPanel() {
@@ -1271,6 +1273,12 @@ function TerminataPanel() {
           <input type="range" min={3} max={15} value={cfg.overlayTextSize} onChange={e => update('overlayTextSize', Number(e.target.value))} style={{ width: '100%', marginTop: 10 }} />
         </div>
       </div>
+      <div className="fld">
+        <label className="lbl">Font</label>
+        <select className="sel" value={cfg.overlayTextFont || 'Impact'} onChange={e => update('overlayTextFont', e.target.value)}>
+          {FONTS.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+        </select>
+      </div>
 
       {/* Anteprima reale — frecce per spostare il testo overlay */}
       <div className="lbl" style={{ marginBottom: 4 }}>ANTEPRIMA</div>
@@ -1299,13 +1307,27 @@ function TerminataPanel() {
       <ToggleRow label="Mostra percentuale sconto" value={cfg.showSconto} onChange={v => update('showSconto', v)} />
 
       <div className="stit" style={{ marginTop: 8 }}>TESTO TELEGRAM</div>
-      <div className="fld">
-        <label className="lbl">Layout testo Telegram</label>
-        <select className="sel" value={cfg.layoutId} onChange={e => update('layoutId', e.target.value)}>
-          <option value="">— Solo prefisso ❌ TERMINATA —</option>
-          {layouts.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
-        </select>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        {([
+          { value: 'keep',   label: 'Mantieni testo', sub: 'Cambia solo immagine' },
+          { value: 'append', label: 'Aggiungi scritta', sub: 'Testo originale + scritta' },
+          { value: 'only',   label: 'Solo scritta', sub: 'Cancella testo originale' },
+        ] as { value: TerminataConfig['telegramMode']; label: string; sub: string }[]).map(opt => (
+          <button key={opt.value}
+            onClick={() => update('telegramMode', opt.value)}
+            className={`btn bsm ${(cfg.telegramMode ?? 'keep') === opt.value ? 'bp' : 'bgh'}`}
+            style={{ flex: 1, flexDirection: 'column', height: 'auto', padding: '6px 4px', lineHeight: 1.3, whiteSpace: 'normal', textAlign: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 700 }}>{opt.label}</span>
+            <span style={{ fontSize: 9, opacity: 0.7, display: 'block' }}>{opt.sub}</span>
+          </button>
+        ))}
       </div>
+      {(cfg.telegramMode ?? 'keep') !== 'keep' && (
+        <div className="fld">
+          <label className="lbl">Scritta terminata (Telegram)</label>
+          <input className="inp" value={cfg.telegramText ?? ''} onChange={e => update('telegramText', e.target.value)} placeholder="❌ Offerta terminata" />
+        </div>
+      )}
 
       <button className="btn bp bfull" style={{ marginTop: 8 }} onClick={save}>✅ Salva</button>
       {saved && <div style={{ marginTop: 8, color: '#4ade80', fontSize: 13, textAlign: 'center' }}>✓ Salvato</div>}

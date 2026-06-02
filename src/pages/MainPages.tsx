@@ -2732,7 +2732,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           {/* Azioni SOPRA l'immagine */}
           {(() => {
             const sil = item.silenzioso;
-            const notifLabel = sil === false ? '🔔 Notif.' : sil === true ? '🔕 Silen.' : '🔔 Auto';
+            const notifLabel = sil === false ? '🔔' : sil === true ? '🔕' : '🔔';
             const notifBg = sil === false ? 'rgba(74,222,128,0.15)' : sil === true ? 'rgba(100,100,100,0.15)' : 'var(--bg3)';
             const notifColor = sil === false ? '#4ade80' : sil === true ? 'var(--t3)' : 'var(--t2)';
             const notifBorder = sil === false ? '1px solid #4ade80' : sil === true ? '1px solid var(--bd)' : '1px solid var(--bd)';
@@ -2751,14 +2751,15 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                     disabled={safeIdx === 0} title="Porta in cima alla coda">⇈</button>
                   <button style={{ ...btnBase, opacity: safeIdx === 0 ? 0.3 : 1 }}
                     onClick={() => { move(item.id, 'up'); setCurrentIdx(i => Math.max(0, i - 1)); }}
-                    disabled={safeIdx === 0}>↑ Su</button>
+                    disabled={safeIdx === 0} title="Sposta su">↑</button>
                   <button style={{ ...btnBase, opacity: safeIdx === queue.length - 1 ? 0.3 : 1 }}
                     onClick={() => { move(item.id, 'down'); setCurrentIdx(i => Math.min(queue.length - 1, i + 1)); }}
-                    disabled={safeIdx === queue.length - 1}>↓ Giù</button>
+                    disabled={safeIdx === queue.length - 1} title="Sposta giù">↓</button>
                   <button style={{ ...btnBase, opacity: safeIdx === queue.length - 1 ? 0.3 : 1 }}
                     onClick={() => { moveToEdge(item.id, 'last'); setCurrentIdx(queue.length - 1); }}
                     disabled={safeIdx === queue.length - 1} title="Porta in fondo alla coda">⇊</button>
-                  <button style={{ ...btnBase, background: notifBg, color: notifColor, border: notifBorder }} onClick={toggleSil}>
+                  <button style={{ ...btnBase, background: notifBg, color: notifColor, border: notifBorder }} onClick={toggleSil}
+                    title={sil === false ? 'Con notifica' : sil === true ? 'Silenzioso' : 'Notifica automatica'}>
                     {notifLabel}
                   </button>
                   <div style={{ flex: 1 }} />
@@ -3117,7 +3118,8 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
 
     const terminataCfg = settings.terminata;
     const tmpl = templates[0];
-    const terminataLayout = layouts.find(l => l.id === terminataCfg.layoutId);
+    const telegramMode = terminataCfg.telegramMode ?? 'keep';
+    const telegramText = terminataCfg.telegramText ?? '❌ Offerta terminata';
 
     let newImage: string | undefined;
     if (tmpl && p.image && p.image.startsWith('http')) {
@@ -3131,13 +3133,28 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
       } catch { /* fallback: solo testo */ }
     }
 
+    // Costruisce il body in base alla modalità scelta
+    const body: Record<string, any> = {
+      chatId: p.chatId, messageId: p.messageId, terminata: true, newImage,
+      telegramMode,
+    };
+    if (telegramMode === 'only') {
+      body.telegramText = telegramText;
+    } else if (telegramMode === 'append') {
+      body.telegramText = telegramText;
+      // Passa i dati del post per ricostruire il testo originale lato server
+      const postLayout = layouts.find(l => l.id === p.layoutId);
+      body.layoutContenuto = postLayout?.contenuto ?? '';
+      body.postData = {
+        title: p.title, discountedPrice: Number(p.price), originalPrice: p.originalPrice,
+        discountPercent: p.discountPercent, customText: p.customText,
+        isHistoricalLow: p.isHistoricalLow, platform: p.platform, sourceUrl: p.sourceUrl,
+        productId: p.productId,
+      };
+    }
+
     try {
-      await publishedApi.editTelegram(p.id, {
-        chatId: p.chatId, messageId: p.messageId,
-        terminata: true,
-        newCaption: terminataLayout?.contenuto,
-        newImage,
-      } as any);
+      await publishedApi.editTelegram(p.id, body as any);
       setPublished(prev => prev.map(x => x.id === p.id ? { ...x, terminata: true } : x));
     } catch (e) {
       alert('Errore: ' + (e instanceof Error ? e.message : String(e)));

@@ -194,10 +194,13 @@ export interface TerminataConfig {
   overlayTextSize: number;
   overlayTextX: number;
   overlayTextY: number;
+  overlayTextFont: string;
   showPrezzo: boolean;
   showPrezzoPrecedente: boolean;
   showSconto: boolean;
   layoutId: string;
+  telegramMode: 'keep' | 'append' | 'only';
+  telegramText: string;
 }
 
 export interface AmazonSettings {

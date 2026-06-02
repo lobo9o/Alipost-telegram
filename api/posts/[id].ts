@@ -255,28 +255,43 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   // ── PATCH — edit already-published Telegram message ─────────
   if (req.method === 'PATCH') {
-    const { chatId, messageId, newCaption, terminata, newImage } = req.body ?? {};
+    const { chatId, messageId, newCaption, terminata, newImage, telegramMode, telegramText, layoutContenuto: patchLayout, postData } = req.body ?? {};
     if (!chatId || !messageId) { res.status(400).json({ error: 'chatId and messageId required' }); return; }
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) { res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN non configurato' }); return; }
     const tgBase = `https://api.telegram.org/bot${botToken}`;
-    const caption = terminata
-      ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim()
-      : (newCaption ?? '');
+
+    // Determina caption in base alla modalità
+    let caption: string | undefined;
+    if (telegramMode === 'keep') {
+      caption = undefined; // non toccare il testo
+    } else if (telegramMode === 'only') {
+      caption = telegramText ?? '';
+    } else if (telegramMode === 'append') {
+      // Ricostruisce il testo originale dal layout + dati post, poi aggiunge la scritta
+      const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato} <s>{oldprezzo}</s>\n🏷️ Sconto: -{sconto}\n\n{custom}`;
+      const affiliateUrl = postData?.sourceUrl ?? '';
+      const tagRows = await sql`SELECT name, value FROM tags WHERE user_id = ${userId} OR user_id = 'legacy' ORDER BY (user_id = ${userId}) ASC`;
+      const customTags: Record<string, string> = {};
+      for (const tr of tagRows) customTags[tr.name as string] = tr.value as string;
+      const builtCaption = buildMessage(patchLayout || defaultLayout, postData ?? {}, affiliateUrl, undefined, customTags);
+      caption = `${builtCaption}\n\n${telegramText ?? ''}`.trim();
+    } else {
+      // Backward compat: vecchio formato con newCaption
+      caption = terminata ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim() : (newCaption ?? '');
+    }
 
     let tgRes: Response;
     let tgData: { ok: boolean; description?: string };
 
     if (newImage && typeof newImage === 'string' && newImage.startsWith('data:')) {
-      // Invia nuova immagine con editMessageMedia
       const base64 = newImage.replace(/^data:image\/\w+;base64,/, '');
       const imgBuffer = Buffer.from(base64, 'base64');
       const form = new FormData();
       form.append('chat_id', chatId);
       form.append('message_id', String(messageId));
-      // Includi caption solo se esplicitamente fornita o se è terminata — altrimenti Telegram mantiene il testo originale
       const mediaObj: Record<string, string> = { type: 'photo', media: 'attach://photo' };
-      if (newCaption !== undefined || terminata) {
+      if (caption !== undefined) {
         mediaObj.caption = caption.slice(0, 1024);
         mediaObj.parse_mode = 'HTML';
       }
@@ -284,8 +299,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'photo');
       tgRes = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form });
       tgData = await tgRes.json() as { ok: boolean; description?: string };
-    } else {
-      // Try editMessageCaption first (photo), fall back to editMessageText
+    } else if (caption !== undefined) {
       tgRes = await fetch(`${tgBase}/editMessageCaption`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption: caption.slice(0, 1024), parse_mode: 'HTML' }),
@@ -298,10 +312,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         });
         tgData = await tgRes.json() as { ok: boolean; description?: string };
       }
+    } else {
+      tgData = { ok: true }; // keep mode senza nuova immagine: niente da fare
     }
 
     if (!tgData.ok) { res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore'}` }); return; }
-    // Update terminata flag in DB
     if (terminata) {
       await sql`UPDATE published_posts SET terminata = true WHERE id = ${id} AND user_id = ${userId}`.catch(() => {});
     }

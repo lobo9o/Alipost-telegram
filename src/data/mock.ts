@@ -79,9 +79,12 @@ export const INITIAL_SETTINGS: AppSettings = {
     overlayTextSize: 7,
     overlayTextX: 50,
     overlayTextY: 50,
+    overlayTextFont: 'Impact',
     showPrezzo: true,
     showPrezzoPrecedente: false,
     showSconto: false,
     layoutId: '',
+    telegramMode: 'keep' as const,
+    telegramText: '❌ Offerta terminata',
   },
 };

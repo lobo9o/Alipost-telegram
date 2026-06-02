@@ -52,10 +52,13 @@ function mergeSettings(fetched: unknown): AppSettings {
       overlayTextSize: typeof tm.overlayTextSize === 'number' ? tm.overlayTextSize : 7,
       overlayTextX: typeof tm.overlayTextX === 'number' ? tm.overlayTextX : 50,
       overlayTextY: typeof tm.overlayTextY === 'number' ? tm.overlayTextY : 50,
+      overlayTextFont: typeof tm.overlayTextFont === 'string' ? tm.overlayTextFont : 'Impact',
       showPrezzo: typeof tm.showPrezzo === 'boolean' ? tm.showPrezzo : true,
       showPrezzoPrecedente: typeof tm.showPrezzoPrecedente === 'boolean' ? tm.showPrezzoPrecedente : false,
       showSconto: typeof tm.showSconto === 'boolean' ? tm.showSconto : false,
       layoutId: typeof tm.layoutId === 'string' ? tm.layoutId : '',
+      telegramMode: ['keep','append','only'].includes(tm.telegramMode) ? tm.telegramMode : 'keep',
+      telegramText: typeof tm.telegramText === 'string' ? tm.telegramText : '❌ Offerta terminata',
     },
     dealSearch: {
       autoPublishAliexpress: typeof r.dealSearch?.autoPublishAliexpress === 'boolean' ? r.dealSearch.autoPublishAliexpress : false,

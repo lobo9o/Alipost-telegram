@@ -321,10 +321,12 @@ export async function generateTerminataImage(
     const fs = (config.overlayTextSize / 100) * canvasRef;
     const tx = (config.overlayTextX / 100) * canvasW;
     const ty = (config.overlayTextY / 100) * canvasH;
+    const fontFamily = config.overlayTextFont || 'Impact';
+    await document.fonts.load(`bold ${fs * 2}px "${fontFamily}"`).catch(() => {});
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold ${fs}px Impact, Arial Black`;
+    ctx.font = `bold ${fs}px "${fontFamily}", Impact, Arial Black`;
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = fs * 0.08;
     ctx.lineJoin = 'round';
