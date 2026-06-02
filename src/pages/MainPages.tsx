@@ -3082,21 +3082,24 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 function MultiThumbnailGrid({ items }: { items: { image?: string; emoji?: string; title?: string }[] }) {
   if (items.length === 0) return null;
   const cols = items.length <= 3 ? items.length : items.length <= 4 ? 2 : 3;
+  const cellSize = 120;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 2, background: '#fff' }}>
-      {items.map((item, i) => (
-        <div key={i} style={{ aspectRatio: '1', background: '#f5f5f5', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {item.image
-            ? <img
-                src={item.image.startsWith('http') ? `/api/posts?img=${encodeURIComponent(item.image)}` : item.image}
-                alt={item.title ?? ''}
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            : <span style={{ fontSize: 24 }}>{item.emoji || '📦'}</span>
-          }
-        </div>
-      ))}
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 10px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`, gap: 3, background: 'var(--bg3)', borderRadius: 8, overflow: 'hidden' }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ width: cellSize, height: cellSize, background: '#f5f5f5', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {item.image
+              ? <img
+                  src={item.image.startsWith('http') ? `/api/posts?img=${encodeURIComponent(item.image)}` : item.image}
+                  alt={item.title ?? ''}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              : <span style={{ fontSize: 32 }}>{item.emoji || '📦'}</span>
+            }
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -3464,7 +3467,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* ── Post multiplo ── */}
             {p.isMulti && (
               <>
-                {/* Griglia thumbnail prodotti — nessun canvas, funziona sempre */}
+                {/* 1. Griglia immagini in cima (come nel post Telegram, più piccola) */}
                 <MultiThumbnailGrid items={p.multiItems ?? []} />
 
                 <div style={{ padding: '10px 12px 12px' }}>
@@ -3477,24 +3480,34 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                     {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
                   </div>
 
-                  {/* Testo Telegram */}
+                  {/* 2. Testo Telegram */}
                   {pPreviewText && editingKey !== `${p.id}:multi` && (
                     <div style={{ marginBottom: 10 }}>
                       <TelegramPreview text={pPreviewText} buttons={pKbBtns} />
                     </div>
                   )}
 
-                  {/* Editor multi-post oppure lista compatta prodotti */}
+                  {/* 3. Editor oppure lista prodotti con thumbnail + pulsanti */}
                   {editingKey === `${p.id}:multi` ? renderMultiEditForm(p) : (
                     <>
-                      {/* Lista compatta prodotti con terminata per ognuno */}
+                      {/* Lista prodotti: thumbnail + titolo/prezzo + ❌ termina */}
                       {(p.multiItems ?? []).map((item, idx) => (
                         <div key={item.id || idx} style={{
                           display: 'flex', alignItems: 'center', gap: 8,
                           padding: '6px 0', borderBottom: idx < (p.multiItems?.length ?? 0) - 1 ? '1px solid var(--bd)' : 'none',
                           opacity: item.terminata ? 0.55 : 1,
                         }}>
-                          <span style={{ fontSize: 14, flexShrink: 0 }}>{item.emoji}</span>
+                          {/* Thumbnail piccola */}
+                          <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {item.image
+                              ? <img
+                                  src={item.image.startsWith('http') ? `/api/posts?img=${encodeURIComponent(item.image)}` : item.image}
+                                  alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              : <span style={{ fontSize: 18 }}>{item.emoji || '📦'}</span>
+                            }
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
                             <div style={{ fontSize: 11, color: item.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: item.terminata ? 'line-through' : 'none' }}>
@@ -3507,6 +3520,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                           }
                         </div>
                       ))}
+                      {/* 4. Pulsanti */}
                       <div style={{ display: 'flex', gap: 5, marginTop: 10 }}>
                         <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEditMulti(p)}>✏️ Modifica</button>
                       </div>
