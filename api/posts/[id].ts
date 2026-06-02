@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
+import { getProductEmoji } from '../_titleFormat.js';
 
 const MARKETPLACE_DOMAINS: Record<string, string> = {
   IT: 'www.amazon.it', US: 'www.amazon.com', DE: 'www.amazon.de',
@@ -78,8 +79,8 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const pad = (n: number) => n < 10 ? `0${n}` : String(n);
   const valuta = currency ?? (post.platform === 'aliexpress' ? '$' : '€');
-  const discPrice = Number(post.discountedPrice).toFixed(2);
-  const origPrice = Number(post.originalPrice).toFixed(2);
+  const discPrice = Number(post.discountedPrice).toFixed(2).replace('.', ',');
+  const origPrice = Number(post.originalPrice).toFixed(2).replace('.', ',');
   const disc = Number(post.discountPercent);
   const titleShort = (post.title || '').length > 60 ? (post.title || '').slice(0, 57) + '...' : (post.title || '');
 
@@ -114,6 +115,8 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
     '{boxcoupon}':       (post as any).boxcoupon || '',
+    '{checkout}':        (post as any).checkout || '',
+    '{emojicat}':        getProductEmoji(post.title || '', post.cat || ''),
   };
 
   // Aggiunge tagOverrides per tag non già in tags (custom per-post)
