@@ -255,7 +255,80 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   // ── PATCH — edit already-published Telegram message ─────────
   if (req.method === 'PATCH') {
-    const { chatId, messageId, newCaption, terminata, newImage, telegramMode, telegramText, layoutContenuto: patchLayout, postData } = req.body ?? {};
+    const {
+      action,
+      chatId, messageId, newCaption, terminata, newImage,
+      telegramMode, telegramText, layoutContenuto: patchLayout, postData,
+      multiItemIndex, updatedFields,
+    } = req.body ?? {};
+
+    // ── action: editPublished — modifica completa di un post pubblicato ──────
+    if (action === 'editPublished') {
+      if (!chatId || !messageId) { res.status(400).json({ error: 'chatId and messageId required' }); return; }
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (!botToken) { res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN non configurato' }); return; }
+      const tgBase2 = `https://api.telegram.org/bot${botToken}`;
+      const uf = updatedFields ?? {};
+
+      // Aggiorna DB
+      if (typeof multiItemIndex === 'number') {
+        // Aggiorna un singolo item dentro multi_items
+        await sql`
+          UPDATE published_posts
+          SET multi_items = jsonb_set(
+            COALESCE(multi_items, '[]'::jsonb),
+            ${sql`ARRAY[${String(multiItemIndex)}, 'title']`},
+            ${sql`to_jsonb(${uf.title ?? ''}::text)`}
+          )
+          WHERE id = ${id} AND user_id = ${userId}
+        `.catch(() => {});
+        // Aggiorna i campi numerici e customText per il singolo item
+        await sql`
+          UPDATE published_posts
+          SET multi_items = (
+            SELECT jsonb_agg(
+              CASE WHEN (elem->>'id') = ${uf.itemId ?? ''} OR idx = ${multiItemIndex}
+              THEN elem || jsonb_build_object(
+                'title', ${uf.title ?? ''}::text,
+                'price', ${String(uf.discountedPrice ?? 0)},
+                'originalPrice', ${Number(uf.originalPrice ?? 0)},
+                'discountPercent', ${Number(uf.discountPercent ?? 0)},
+                'customText', ${uf.customText ?? ''}::text
+              )
+              ELSE elem END
+            )
+            FROM jsonb_array_elements(COALESCE(multi_items, '[]'::jsonb)) WITH ORDINALITY AS t(elem, idx)
+          )
+          WHERE id = ${id} AND user_id = ${userId}
+        `.catch(() => {});
+      } else {
+        // Aggiorna post singolo
+        await sql`
+          UPDATE published_posts SET
+            title = ${uf.title ?? ''},
+            original_price = ${Number(uf.originalPrice ?? 0)},
+            discounted_price = ${Number(uf.discountedPrice ?? 0)},
+            discount_percent = ${Number(uf.discountPercent ?? 0)},
+            custom_text = ${uf.customText ?? ''}
+          WHERE id = ${id} AND user_id = ${userId}
+        `.catch(() => {});
+      }
+
+      // Aggiorna Telegram se c'è un caption
+      if (newCaption) {
+        const tgBody = { chat_id: chatId, message_id: messageId, caption: String(newCaption).slice(0, 1024), parse_mode: 'HTML' };
+        let tgR = await fetch(`${tgBase2}/editMessageCaption`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tgBody) });
+        let tgD = await tgR.json() as { ok: boolean; description?: string };
+        if (!tgD.ok && tgD.description?.includes('there is no caption')) {
+          tgR = await fetch(`${tgBase2}/editMessageText`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: String(newCaption).slice(0, 4096), parse_mode: 'HTML' }) });
+          tgD = await tgR.json() as { ok: boolean; description?: string };
+        }
+        if (!tgD.ok) { res.status(500).json({ error: `Telegram: ${tgD.description ?? 'errore'}` }); return; }
+      }
+      res.json({ ok: true });
+      return;
+    }
+
     if (!chatId || !messageId) { res.status(400).json({ error: 'chatId and messageId required' }); return; }
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) { res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN non configurato' }); return; }
@@ -266,19 +339,25 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     if (telegramMode === 'keep') {
       caption = undefined; // non toccare il testo
     } else if (telegramMode === 'only') {
-      caption = telegramText ?? '';
+      // Per multi-post con multiItemIndex: il frontend passa newCaption già costruito
+      caption = newCaption !== undefined ? String(newCaption) : (telegramText ?? '');
     } else if (telegramMode === 'append') {
-      // Ricostruisce il testo originale dal layout + dati post, poi aggiunge la scritta
-      const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato} <s>{oldprezzo}</s>\n🏷️ Sconto: -{sconto}\n\n{custom}`;
-      const affiliateUrl = postData?.sourceUrl ?? '';
-      const tagRows = await sql`SELECT name, value FROM tags WHERE user_id = ${userId} OR user_id = 'legacy' ORDER BY (user_id = ${userId}) ASC`;
-      const customTags: Record<string, string> = {};
-      for (const tr of tagRows) customTags[tr.name as string] = tr.value as string;
-      const builtCaption = buildMessage(patchLayout || defaultLayout, postData ?? {}, affiliateUrl, undefined, customTags);
-      caption = `${telegramText ?? ''}\n\n${builtCaption}`.trim();
+      if (newCaption !== undefined) {
+        // Frontend ha già costruito il testo (es. per multi-post item)
+        caption = String(newCaption);
+      } else {
+        // Ricostruisce il testo originale dal layout + dati post, poi aggiunge la scritta
+        const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato} <s>{oldprezzo}</s>\n🏷️ Sconto: -{sconto}\n\n{custom}`;
+        const affiliateUrl = postData?.sourceUrl ?? '';
+        const tagRows = await sql`SELECT name, value FROM tags WHERE user_id = ${userId} OR user_id = 'legacy' ORDER BY (user_id = ${userId}) ASC`;
+        const customTags: Record<string, string> = {};
+        for (const tr of tagRows) customTags[tr.name as string] = tr.value as string;
+        const builtCaption = buildMessage(patchLayout || defaultLayout, postData ?? {}, affiliateUrl, undefined, customTags);
+        caption = `${telegramText ?? ''}\n\n${builtCaption}`.trim();
+      }
     } else {
       // Backward compat: vecchio formato con newCaption
-      caption = terminata ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim() : (newCaption ?? '');
+      caption = terminata ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim() : (newCaption !== undefined ? String(newCaption) : undefined);
     }
 
     let tgRes: Response;
@@ -316,10 +395,38 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       tgData = { ok: true }; // keep mode senza nuova immagine: niente da fare
     }
 
-    if (!tgData.ok) { res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore'}` }); return; }
+    // Aggiorna DB terminata SEMPRE (indipendentemente dal risultato Telegram)
     if (terminata) {
-      await sql`UPDATE published_posts SET terminata = true WHERE id = ${id} AND user_id = ${userId}`.catch(() => {});
+      if (typeof multiItemIndex === 'number') {
+        // Marca solo il singolo item come terminato + aggiorna terminata row se tutti terminati
+        await sql`
+          UPDATE published_posts
+          SET multi_items = (
+            SELECT jsonb_agg(
+              CASE WHEN idx - 1 = ${multiItemIndex}
+              THEN elem || '{"terminata":true}'::jsonb
+              ELSE elem END
+            )
+            FROM jsonb_array_elements(COALESCE(multi_items, '[]'::jsonb)) WITH ORDINALITY AS t(elem, idx)
+          )
+          WHERE id = ${id} AND user_id = ${userId}
+        `.catch(() => {});
+        // Se tutti gli item sono terminati, marca anche il post come terminato
+        await sql`
+          UPDATE published_posts
+          SET terminata = true
+          WHERE id = ${id} AND user_id = ${userId}
+            AND (
+              SELECT bool_and((elem->>'terminata')::boolean)
+              FROM jsonb_array_elements(COALESCE(multi_items, '[]'::jsonb)) AS elem
+            ) = true
+        `.catch(() => {});
+      } else {
+        await sql`UPDATE published_posts SET terminata = true WHERE id = ${id} AND user_id = ${userId}`.catch(() => {});
+      }
     }
+
+    if (!tgData.ok) { res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore'}` }); return; }
     res.json({ ok: true });
     return;
   }

@@ -166,6 +166,25 @@ export interface QueueItem {
   silenzioso?: boolean; // undefined=usa soglia impostazioni, true=forza silenzioso, false=forza notifica
 }
 
+export interface PublishedMultiItem {
+  id: string;
+  title: string;
+  emoji: string;
+  image: string;
+  price: string;
+  originalPrice: number;
+  discountPercent: number;
+  platform: Platform;
+  sourceUrl: string;
+  productId: string;
+  customText: string;
+  layoutId: string;
+  isHistoricalLow: boolean;
+  coupon?: string;
+  terminata?: boolean;
+  resolvedText?: string;
+}
+
 export interface PublishedPost {
   id: string;
   emoji: string;
@@ -185,6 +204,8 @@ export interface PublishedPost {
   publishedAt: string;
   ts: string;
   terminata?: boolean;
+  isMulti?: boolean;
+  multiItems?: PublishedMultiItem[];
 }
 
 export interface TerminataConfig {

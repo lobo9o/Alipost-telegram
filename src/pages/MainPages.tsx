@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout, LinkItem, NewPostItem } from '../types';
+import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout, LinkItem, NewPostItem, PublishedMultiItem } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
 import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, DealProduct } from '../lib/api';
-import { generatePostImage, generateMultiPostImage, generateTerminataImage, applyCurrPos, applyDecimalSep, applySconto } from '../utils/imageCompose';
+import { generatePostImage, generateMultiPostImage, generateTerminataImage, generateMultiTerminataImage, applyCurrPos, applyDecimalSep, applySconto } from '../utils/imageCompose';
 import { getProductEmoji, shortenTitle } from '../lib/titleFormat';
 function CustomTextEditor({ initialValue, onSave, rows = 2 }: { initialValue: string; onSave: (v: string) => void; rows?: number }) {
   const [val, setVal] = useState(initialValue);
@@ -2379,6 +2379,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         const multiCurrency = multiPosts[0]?.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
         const layoutContenuto = layout?.contenuto ?? '';
         let expandedLayout: string;
+        const perItemTexts: string[] = [];
         if (layoutContenuto.includes('{lista_prodotti}')) {
           const lista = multiPosts.map((mp, i) => {
             const cur = mp.platform === 'aliexpress' ? multiCurrency : '€';
@@ -2388,11 +2389,12 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           expandedLayout = layoutContenuto.replace('{lista_prodotti}', lista);
         } else {
           const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">APRI SU AMAZON</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
-          const template = layoutContenuto || defaultMultiLayout;
-          expandedLayout = multiPosts.map(mp => {
+          const layoutTpl = layoutContenuto || defaultMultiLayout;
+          multiPosts.forEach(mp => {
             const cur = mp.platform === 'aliexpress' ? multiCurrency : '€';
-            return resolvePostTags(template, mp, tags, cur);
-          }).join('\n');
+            perItemTexts.push(resolvePostTags(layoutTpl, mp, tags, cur));
+          });
+          expandedLayout = perItemTexts.join('\n');
         }
         const layoutKb = layout?.keyboardId ? keyboards.find(k => k.id === layout.keyboardId) : null;
         const multiKeyboard = layoutKb?.contenuto;
@@ -2405,13 +2407,31 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         });
         autopostApi.delete(id).catch(() => {});
         const now = new Date().toISOString();
+        const multiItems = multiPosts.map((mp, idx) => ({
+          id: mp.id,
+          title: mp.title,
+          emoji: mp.emoji || '📦',
+          image: mp.image || '',
+          price: Number(mp.discountedPrice).toFixed(2),
+          originalPrice: mp.originalPrice,
+          discountPercent: mp.discountPercent,
+          platform: mp.platform,
+          sourceUrl: mp.sourceUrl || '',
+          productId: mp.productId || '',
+          customText: mp.customText || '',
+          layoutId: mp.layoutId || '',
+          isHistoricalLow: mp.isHistoricalLow || false,
+          coupon: (mp as any).coupon || '',
+          terminata: false,
+          resolvedText: perItemTexts[idx] ?? '',
+        }));
         const pubRecord = {
           id: post.id, emoji: '🗂️', title: `Post multiplo (${multiPosts.length} prodotti)`,
           price: '0.00', originalPrice: 0, discountPercent: 0,
           platform: post.platform, image: post.image,
           sourceUrl: post.sourceUrl, productId: post.productId,
           customText: post.customText, layoutId: post.layoutId,
-          isHistoricalLow: false,
+          isHistoricalLow: false, isMulti: true, multiItems,
           chatId: pubResult.chatId ?? '', messageId: pubResult.messageId ?? 0,
           publishedAt: now, ts: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         };
@@ -3056,10 +3076,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 // PUBLISHED PAGE
 // ============================================================
+type EditFields = { title: string; originalPrice: string; discountedPrice: string; discountPercent: number; customText: string };
+
 export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
   const { published, setPublished, setQueue, layouts, tags, settings, templates } = useApp();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
+  // editingKey: "postId" per singolo, "postId:itemIdx" per prodotto in multi-post
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editFields, setEditFields] = useState<EditFields>({ title: '', originalPrice: '', discountedPrice: '', discountPercent: 0, customText: '' });
   const [editErr, setEditErr] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -3077,34 +3100,107 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     nav('queue');
   };
 
-  const startEdit = (p: typeof published[0]) => {
-    setEditingId(p.id);
-    setEditText(p.customText || '');
+  const startEditSingle = (p: typeof published[0]) => {
+    setEditingKey(p.id);
+    setEditFields({
+      title: p.title, originalPrice: String(p.originalPrice),
+      discountedPrice: p.price, discountPercent: p.discountPercent,
+      customText: p.customText || '',
+    });
     setEditErr('');
+  };
+
+  const startEditMultiItem = (p: typeof published[0], idx: number) => {
+    const item = p.multiItems?.[idx];
+    if (!item) return;
+    setEditingKey(`${p.id}:${idx}`);
+    setEditFields({
+      title: item.title, originalPrice: String(item.originalPrice),
+      discountedPrice: item.price, discountPercent: item.discountPercent,
+      customText: item.customText || '',
+    });
+    setEditErr('');
+  };
+
+  const handlePriceChange = (field: 'originalPrice' | 'discountedPrice', val: string) => {
+    const orig = field === 'originalPrice' ? parseFloat(val) || 0 : parseFloat(editFields.originalPrice) || 0;
+    const disc = field === 'discountedPrice' ? parseFloat(val) || 0 : parseFloat(editFields.discountedPrice) || 0;
+    const pct = orig > 0 ? Math.max(0, Math.round((1 - disc / orig) * 100)) : 0;
+    setEditFields(prev => ({ ...prev, [field]: val, discountPercent: pct }));
   };
 
   const saveEdit = async (p: typeof published[0]) => {
     if (!p.chatId || !p.messageId) {
-      setEditErr('message_id Telegram non disponibile — il post è stato pubblicato con una versione precedente del bot.');
+      setEditErr('message_id Telegram non disponibile.');
       return;
     }
     setSaving(true); setEditErr('');
     try {
-      const layout = layouts.find(l => l.id === p.layoutId);
-      const updatedPost = { ...p, customText: editText };
-      const pCurrency = p.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-      const newCaption = layout
-        ? resolvePostTags(layout.contenuto, {
-            id: p.id, platform: p.platform, sourceUrl: p.sourceUrl, productId: p.productId,
-            title: p.title, image: p.image, emoji: p.emoji,
-            originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price),
-            discountPercent: p.discountPercent, customText: editText,
-            isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
-          }, tags, pCurrency)
-        : editText;
-      await publishedApi.editTelegram(p.id, { chatId: p.chatId, messageId: p.messageId, newCaption } as any);
-      setPublished(prev => prev.map(x => x.id === p.id ? { ...x, customText: editText } : x));
-      setEditingId(null);
+      const origPrice = parseFloat(editFields.originalPrice) || 0;
+      const discPrice = parseFloat(editFields.discountedPrice) || 0;
+      const isMultiKey = editingKey?.includes(':');
+      const multiItemIndex = isMultiKey ? parseInt(editingKey!.split(':')[1]) : undefined;
+      const updatedFields = {
+        title: editFields.title,
+        originalPrice: origPrice,
+        discountedPrice: discPrice,
+        discountPercent: editFields.discountPercent,
+        customText: editFields.customText,
+        itemId: multiItemIndex !== undefined ? (p.multiItems?.[multiItemIndex]?.id ?? '') : undefined,
+      };
+
+      // Costruisce la nuova caption
+      let newCaption: string | undefined;
+      if (isMultiKey && multiItemIndex !== undefined && p.multiItems) {
+        // Ricostruisce il testo del singolo item con i nuovi valori
+        const item = p.multiItems[multiItemIndex];
+        const cur = item.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const layout = layouts.find(l => l.id === item.layoutId);
+        const updatedItem: PublishedMultiItem = { ...item, ...updatedFields, price: discPrice.toFixed(2) };
+        const updatedItemAsPost = {
+          id: item.id, platform: item.platform as Platform, sourceUrl: item.sourceUrl, productId: item.productId,
+          title: editFields.title, image: item.image, emoji: item.emoji,
+          originalPrice: origPrice, discountedPrice: discPrice,
+          discountPercent: editFields.discountPercent, customText: editFields.customText,
+          isHistoricalLow: item.isHistoricalLow, templateId: 'tpl1', layoutId: item.layoutId, keyboardId: 'kb1',
+        } as CreatedPost;
+        const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">APRI SU AMAZON</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
+        const newItemText = layout ? resolvePostTags(layout.contenuto, updatedItemAsPost, tags, cur) : resolvePostTags(defaultMultiLayout, updatedItemAsPost, tags, cur);
+        // Ricostruisce il testo completo: sostituisce la sezione dell'item modificato
+        const sections = p.multiItems.map((it, i) => i === multiItemIndex ? newItemText : (it.resolvedText ?? ''));
+        newCaption = sections.join('\n');
+        // Aggiorna anche resolvedText nell'item locale
+        setPublished(prev => prev.map(x => {
+          if (x.id !== p.id) return x;
+          const newItems = (x.multiItems ?? []).map((it, i) =>
+            i === multiItemIndex ? { ...it, ...updatedFields, price: discPrice.toFixed(2), resolvedText: newItemText } : it
+          );
+          return { ...x, multiItems: newItems };
+        }));
+      } else {
+        // Post singolo: ricostruisce caption
+        const layout = layouts.find(l => l.id === p.layoutId);
+        const cur = p.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const updatedPost = {
+          id: p.id, platform: p.platform as Platform, sourceUrl: p.sourceUrl, productId: p.productId,
+          title: editFields.title, image: p.image, emoji: p.emoji,
+          originalPrice: origPrice, discountedPrice: discPrice,
+          discountPercent: editFields.discountPercent, customText: editFields.customText,
+          isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
+        } as CreatedPost;
+        newCaption = layout ? resolvePostTags(layout.contenuto, updatedPost, tags, cur) : editFields.customText;
+        setPublished(prev => prev.map(x => x.id !== p.id ? x : {
+          ...x, title: editFields.title, originalPrice: origPrice,
+          price: discPrice.toFixed(2), discountPercent: editFields.discountPercent,
+          customText: editFields.customText,
+        }));
+      }
+
+      await publishedApi.editTelegram(p.id, {
+        action: 'editPublished', chatId: p.chatId, messageId: p.messageId,
+        newCaption, updatedFields, multiItemIndex,
+      } as any);
+      setEditingKey(null);
     } catch (e) {
       setEditErr(e instanceof Error ? e.message : 'Errore durante la modifica');
     } finally {
@@ -3112,7 +3208,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     }
   };
 
-  const markTerminata = async (p: typeof published[0]) => {
+  const markTerminataSingle = async (p: typeof published[0]) => {
     if (!p.chatId || !p.messageId) { alert('message_id non disponibile'); return; }
     if (!window.confirm(`Segnare "${p.title.slice(0, 30)}..." come TERMINATA?`)) return;
 
@@ -3133,16 +3229,11 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
       } catch { /* fallback: solo testo */ }
     }
 
-    // Costruisce il body in base alla modalità scelta
-    const body: Record<string, any> = {
-      chatId: p.chatId, messageId: p.messageId, terminata: true, newImage,
-      telegramMode,
-    };
+    const body: Record<string, any> = { chatId: p.chatId, messageId: p.messageId, terminata: true, newImage, telegramMode };
     if (telegramMode === 'only') {
       body.telegramText = telegramText;
     } else if (telegramMode === 'append') {
       body.telegramText = telegramText;
-      // Passa i dati del post per ricostruire il testo originale lato server
       const postLayout = layouts.find(l => l.id === p.layoutId);
       body.layoutContenuto = postLayout?.contenuto ?? '';
       body.postData = {
@@ -3160,6 +3251,92 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
       alert('Errore: ' + (e instanceof Error ? e.message : String(e)));
     }
   };
+
+  const markTerminataItem = async (p: typeof published[0], idx: number) => {
+    if (!p.chatId || !p.messageId) { alert('message_id non disponibile'); return; }
+    const item = p.multiItems?.[idx];
+    if (!item) return;
+    if (!window.confirm(`Terminare "${item.title.slice(0, 30)}..."?`)) return;
+
+    const terminataCfg = settings.terminata;
+    const telegramMode = terminataCfg.telegramMode ?? 'keep';
+    const telegramText = terminataCfg.telegramText ?? '❌ Offerta terminata';
+
+    // Genera immagine composita con solo quella cella in grigio
+    let newImage: string | undefined;
+    const allImages = (p.multiItems ?? []).map(it => it.image);
+    const alreadyTerminated = (p.multiItems ?? []).map((it, i) => i !== idx && !!it.terminata ? i : -1).filter(i => i >= 0);
+    const terminatedNow = [...alreadyTerminated, idx];
+    try {
+      newImage = await generateMultiTerminataImage(allImages, terminatedNow, terminataCfg);
+    } catch { /* usa immagine originale */ }
+
+    // Ricostruisce il testo completo con terminata per questa sezione
+    let newCaption: string | undefined;
+    if (telegramMode !== 'keep' && p.multiItems) {
+      const sections = p.multiItems.map((it, i) => {
+        const base = it.resolvedText ?? '';
+        if (i === idx) {
+          if (telegramMode === 'only') return telegramText;
+          if (telegramMode === 'append') return `${telegramText}\n${base}`;
+        }
+        return base;
+      });
+      newCaption = sections.join('\n');
+    }
+
+    const body: Record<string, any> = {
+      chatId: p.chatId, messageId: p.messageId, terminata: true,
+      newImage, telegramMode, multiItemIndex: idx,
+      ...(newCaption !== undefined ? { newCaption } : {}),
+    };
+
+    try {
+      await publishedApi.editTelegram(p.id, body as any);
+      setPublished(prev => prev.map(x => {
+        if (x.id !== p.id) return x;
+        const newItems = (x.multiItems ?? []).map((it, i) => i === idx ? { ...it, terminata: true } : it);
+        const allDone = newItems.every(it => it.terminata);
+        return { ...x, multiItems: newItems, terminata: allDone };
+      }));
+    } catch (e) {
+      alert('Errore: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const renderEditForm = (p: typeof published[0], isMultiItem: boolean) => (
+    <>
+      <div style={{ marginBottom: 8 }}>
+        <div className="lbl">TITOLO</div>
+        <input className="inp" value={editFields.title} onChange={e => setEditFields(prev => ({ ...prev, title: e.target.value }))} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+        <div style={{ flex: 1 }}>
+          <div className="lbl">PREZZO ORIG.</div>
+          <input className="inp" type="number" step="0.01" value={editFields.originalPrice}
+            onChange={e => handlePriceChange('originalPrice', e.target.value)} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div className="lbl">PREZZO SCONTATO</div>
+          <input className="inp" type="number" step="0.01" value={editFields.discountedPrice}
+            onChange={e => handlePriceChange('discountedPrice', e.target.value)} />
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--am2)', fontWeight: 700, marginBottom: 8, textAlign: 'right' }}>
+        -{editFields.discountPercent}%
+      </div>
+      <div className="lbl">TESTO PERSONALIZZATO</div>
+      <textarea className="txta" rows={2} value={editFields.customText}
+        onChange={e => setEditFields(prev => ({ ...prev, customText: e.target.value }))}
+        style={{ marginBottom: 8 }} />
+      {editErr && <ErrorBanner>{editErr}</ErrorBanner>}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn bs bsm" style={{ flex: 1 }} onClick={() => setEditingKey(null)}>Annulla</button>
+        <button className="btn bp bsm" style={{ flex: 2 }} disabled={saving}
+          onClick={() => saveEdit(p)}>{saving ? '...' : '💾 Salva su Telegram'}</button>
+      </div>
+    </>
+  );
 
   return (
     <div className="pg">
@@ -3179,36 +3356,63 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <SourceBadge platform={p.platform} />
-              <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts}</span>
-              {p.isHistoricalLow && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700 }}>🏆 MIN</span>}
+              <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+              {p.isMulti && <span style={{ fontSize: 10, color: 'var(--a1)', fontWeight: 700 }}>🗂️ MULTI</span>}
               {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
               {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: p.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: p.terminata ? 'line-through' : 'none' }}>€{p.price}</span>
-              <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{p.discountPercent}%</span>
-            </div>
 
-            {/* Edit form */}
-            {editingId === p.id ? (
+            {/* Post singolo */}
+            {!p.isMulti && (
               <>
-                <div className="lbl">TESTO PERSONALIZZATO</div>
-                <textarea className="txta" rows={2} value={editText}
-                  onChange={e => setEditText(e.target.value)} style={{ marginBottom: 8 }} />
-                {editErr && <ErrorBanner>{editErr}</ErrorBanner>}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn bs bsm" style={{ flex: 1 }} onClick={() => setEditingId(null)}>Annulla</button>
-                  <button className="btn bp bsm" style={{ flex: 2 }} disabled={saving}
-                    onClick={() => saveEdit(p)}>{saving ? '...' : '💾 Salva su Telegram'}</button>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: p.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: p.terminata ? 'line-through' : 'none' }}>€{p.price}</span>
+                  <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{p.discountPercent}%</span>
                 </div>
+                {editingKey === p.id ? renderEditForm(p, false) : (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEditSingle(p)}>✏️ Modifica</button>
+                    <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={p.terminata} onClick={() => markTerminataSingle(p)}>❌ Terminata</button>
+                    <button className="btn bsm bbl" disabled={p.terminata} onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
+                  </div>
+                )}
               </>
-            ) : (
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEdit(p)}>✏️ Modifica</button>
-                <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={p.terminata} onClick={() => markTerminata(p)}>❌ Terminata</button>
-                <button className="btn bsm bbl" disabled={p.terminata} onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
-              </div>
+            )}
+
+            {/* Post multiplo */}
+            {p.isMulti && (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 8 }}>
+                  {p.multiItems?.length ?? 0} prodotti
+                </div>
+                {(p.multiItems ?? []).map((item, idx) => {
+                  const itemKey = `${p.id}:${idx}`;
+                  const isEditingThis = editingKey === itemKey;
+                  return (
+                    <div key={item.id || idx} style={{
+                      background: 'var(--bg3)', borderRadius: 8, padding: '8px 10px',
+                      marginBottom: 8, opacity: item.terminata ? 0.6 : 1,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 13 }}>{item.emoji}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{item.title}</span>
+                        {item.terminata && <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700 }}>❌</span>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: isEditingThis ? 8 : 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: item.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: item.terminata ? 'line-through' : 'none' }}>€{item.price}</span>
+                        <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{item.discountPercent}%</span>
+                      </div>
+                      {isEditingThis ? renderEditForm(p, true) : (
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                          <button className="btn bsm bgh" disabled={item.terminata} onClick={() => startEditMultiItem(p, idx)}>✏️ Modifica</button>
+                          <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={item.terminata} onClick={() => markTerminataItem(p, idx)}>❌ Terminata</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
             )}
           </div>
         </div>

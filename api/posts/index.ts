@@ -26,6 +26,8 @@ async function ensurePublishedTable() {
       published_at      TIMESTAMP WITH TIME ZONE DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS is_multi BOOLEAN DEFAULT false`.catch(() => {});
+  await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS multi_items JSONB`.catch(() => {});
 }
 
 const TOKEN_URLS: Record<string, string> = {
@@ -361,6 +363,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           chat_id AS "chatId",
           message_id AS "messageId",
           terminata,
+          COALESCE(is_multi, false) AS "isMulti",
+          multi_items AS "multiItems",
           published_at AS "publishedAt"
         FROM published_posts
         WHERE user_id = ${userId}
@@ -373,24 +377,28 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     if (req.method === 'POST') {
       const p = req.body ?? {};
+      const multiItemsJson = p.multiItems ? sql.json(p.multiItems) : null;
       await sql`
         INSERT INTO published_posts (
           id, user_id, emoji, title, image,
           original_price, discounted_price, discount_percent,
           platform, source_url, product_id, custom_text,
-          layout_id, is_historical_low, chat_id, message_id
+          layout_id, is_historical_low, is_multi, multi_items, chat_id, message_id
         ) VALUES (
           ${p.id}, ${userId}, ${p.emoji ?? ''}, ${p.title ?? ''}, ${p.image ?? ''},
           ${p.originalPrice ?? 0}, ${p.discountedPrice ?? parseFloat(p.price) ?? 0},
           ${p.discountPercent ?? 0},
           ${p.platform ?? 'amazon'}, ${p.sourceUrl ?? ''}, ${p.productId ?? ''},
           ${p.customText ?? ''}, ${p.layoutId ?? ''}, ${p.isHistoricalLow ?? false},
+          ${p.isMulti ?? false}, ${multiItemsJson},
           ${p.chatId ?? ''}, ${p.messageId ?? 0}
         )
         ON CONFLICT (id) DO UPDATE SET
           chat_id = EXCLUDED.chat_id,
           message_id = EXCLUDED.message_id,
-          custom_text = EXCLUDED.custom_text
+          custom_text = EXCLUDED.custom_text,
+          is_multi = EXCLUDED.is_multi,
+          multi_items = EXCLUDED.multi_items
       `;
       res.status(201).json({ ok: true });
       return;

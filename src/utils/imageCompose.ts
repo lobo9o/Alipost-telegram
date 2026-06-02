@@ -275,6 +275,87 @@ export async function generateMultiPostImage(imageUrls: string[]): Promise<strin
   return canvas.toDataURL('image/jpeg', 0.88);
 }
 
+export async function generateMultiTerminataImage(
+  imageUrls: string[],
+  terminatedIndices: number[],
+  config: TerminataConfig,
+): Promise<string> {
+  const n = imageUrls.length;
+  if (n === 0) return '';
+  const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
+  const rows = Math.ceil(n / cols);
+  const cellSize = Math.round(1024 / cols);
+  const canvasW = cellSize * cols;
+  const canvasH = cellSize * rows;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasW;
+  canvas.height = canvasH;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  const PAD = 4;
+  const terminated = new Set(terminatedIndices);
+
+  for (let i = 0; i < n; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const itemsInRow = Math.min(cols, n - row * cols);
+    const rowOffsetX = Math.floor(((cols - itemsInRow) * cellSize) / 2);
+    const cellX = rowOffsetX + col * cellSize;
+    const cellY = row * cellSize;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cellX, cellY, cellSize, cellSize);
+    if (!imageUrls[i]) continue;
+    try {
+      const proxyUrl = imageUrls[i].startsWith('http')
+        ? `/api/posts?img=${encodeURIComponent(imageUrls[i])}`
+        : imageUrls[i];
+      const img = await loadImage(proxyUrl);
+      const availW = cellSize - PAD * 2;
+      const availH = cellSize - PAD * 2;
+      const ratio = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
+      const dw = img.naturalWidth * ratio;
+      const dh = img.naturalHeight * ratio;
+      ctx.drawImage(img, cellX + PAD + (availW - dw) / 2, cellY + PAD + (availH - dh) / 2, dw, dh);
+    } catch { /* skip */ }
+
+    if (terminated.has(i)) {
+      // Grayscale solo questa cella
+      if (config.grayscale) {
+        const cellData = ctx.getImageData(cellX, cellY, cellSize, cellSize);
+        const d = cellData.data;
+        for (let j = 0; j < d.length; j += 4) {
+          const g = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+          d[j] = d[j + 1] = d[j + 2] = g;
+        }
+        ctx.putImageData(cellData, cellX, cellY);
+      }
+      // Testo terminata sovrapposto sulla cella
+      if (config.overlayText) {
+        const fs = (config.overlayTextSize / 100) * cellSize;
+        const tx = cellX + cellSize / 2;
+        const ty = cellY + cellSize * (config.overlayTextY / 100);
+        const fontFamily = config.overlayTextFont || 'Impact';
+        await document.fonts.load(`bold ${fs * 2}px "${fontFamily}"`).catch(() => {});
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `bold ${fs}px "${fontFamily}", Impact, Arial Black`;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = fs * 0.08;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(config.overlayText, tx, ty);
+        ctx.fillStyle = config.overlayTextColor;
+        ctx.fillText(config.overlayText, tx, ty);
+        ctx.restore();
+      }
+    }
+  }
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
 export async function generateTerminataImage(
   template: Template,
   productImageUrl: string,
