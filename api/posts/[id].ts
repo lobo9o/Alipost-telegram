@@ -433,7 +433,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // ── POST — publish to Telegram ───────────────────────────────
-  const { post, layoutContenuto, keyboardContenuto, generatedImage, disableNotification = true } = req.body ?? {};
+  const { post, layoutContenuto, keyboardContenuto, generatedImage, disableNotification = true, channelOverride: bodyChannel } = req.body ?? {};
   console.log('[publish] disableNotification from body:', req.body?.disableNotification, '→ resolved:', disableNotification);
   if (!post) { res.status(400).json({ error: 'post required' }); return; }
 
@@ -445,16 +445,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const rawData = settingsRow?.data ?? {};
   const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
 
-  const channelOverride = process.env.CHANNEL_OVERRIDE || '';
-  const channels: string[] = channelOverride
-    ? [channelOverride]
+  const envChannelOverride = process.env.CHANNEL_OVERRIDE || '';
+  const channels: string[] = envChannelOverride
+    ? [envChannelOverride]
     : Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
   console.log('[publish] channels from settings:', channels);
   if (!channels.length) {
     res.status(400).json({ error: 'Nessun canale Telegram configurato. Vai in Impostazioni → Canali Telegram.' });
     return;
   }
-  const channel = channels[0];
+  // Se env override attivo, ignora la scelta dal body (sicurezza dev)
+  const channel = envChannelOverride
+    ? channels[0]
+    : (bodyChannel && channels.includes(bodyChannel) ? bodyChannel : channels[0]);
 
   // Build affiliate URL
   let affiliateUrl: string = post.sourceUrl ?? '';

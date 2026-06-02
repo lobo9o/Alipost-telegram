@@ -2028,6 +2028,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [itemChannels, setItemChannels] = useState<Record<string, string>>({});
   const [priceWarnings, setPriceWarnings] = useState<string[]>([]);
   const [multiEditSelected, setMultiEditSelected] = useState<Set<string>>(new Set());
   const [splittingId, setSplittingId] = useState<string | null>(null);
@@ -2343,6 +2344,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     if (publishingId) return;
     const item = queue.find(x => x.id === id);
     if (!item) { setPublishErr('Elemento coda non trovato'); return; }
+    const channelOverride = itemChannels[id] || undefined;
     const rawPost = item.posts[0];
     if (!rawPost || typeof rawPost !== 'object' || Array.isArray(rawPost)) {
       setPublishErr('Post non valido'); return;
@@ -2405,7 +2407,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           generatedImage = await generateMultiPostImage(multiPosts.map(mp => mp.image)).catch(() => undefined);
         }
         const pubResult = await postsApi.publish(post.id, {
-          post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard, generatedImage, disableNotification,
+          post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard, generatedImage, disableNotification, channelOverride,
         });
         autopostApi.delete(id).catch(() => {});
         const now = new Date().toISOString();
@@ -2459,7 +2461,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       }
       const effectiveKbId = layout?.keyboardId ?? post.keyboardId;
       const keyboard = keyboards.find(k => k.id === effectiveKbId) ?? keyboards[0];
-      const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage, disableNotification });
+      const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage, disableNotification, channelOverride });
       autopostApi.delete(id).catch(() => {}); // cleanup finale, fire-and-forget OK (status già aggiornato)
       const now = new Date().toISOString();
       const pubRecord = {
@@ -2795,6 +2797,17 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                   <button style={{ ...btnBase, background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
                     onClick={() => del(item.id)}>🗑️</button>
                 </div>
+                {/* Selezione canale — visibile solo se ci sono 2+ canali configurati */}
+                {settings.channels.filter(Boolean).length > 1 && (
+                  <select className="sel" style={{ marginBottom: 6, fontSize: 13 }}
+                    value={itemChannels[item.id] ?? ''}
+                    onChange={e => setItemChannels(prev => ({ ...prev, [item.id]: e.target.value }))}>
+                    <option value="">📤 {settings.channels.filter(Boolean)[0]} (default)</option>
+                    {settings.channels.filter(Boolean).slice(1).map((ch: string) => (
+                      <option key={ch} value={ch}>📤 {ch}</option>
+                    ))}
+                  </select>
+                )}
                 {/* Riga primaria: pubblica (full width, prominente) */}
                 <button
                   style={{ height: 42, borderRadius: 10, border: 'none', background: publishingId ? 'var(--bg3)' : 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', fontSize: 15, fontWeight: 800, cursor: publishingId ? 'not-allowed' : 'pointer', opacity: publishingId ? 0.6 : 1, letterSpacing: 0.3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
