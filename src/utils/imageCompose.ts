@@ -282,6 +282,17 @@ export async function generateTerminataImage(
   config: TerminataConfig,
   values: { prezzo?: string; prezzoPrecedente?: string; sconto?: string; testoCustom?: string } = {},
 ): Promise<string> {
+  // Crea una copia del template disabilitando i campi che non vanno mostrati sulla terminata
+  const tmpl: Template = {
+    ...template,
+    prezzo:           { ...template.prezzo,           enabled: template.prezzo.enabled           && config.showPrezzo },
+    prezzoPrecedente: { ...template.prezzoPrecedente, enabled: template.prezzoPrecedente.enabled && config.showPrezzoPrecedente },
+    sconto:           { ...template.sconto,           enabled: template.sconto.enabled           && config.showSconto },
+  };
+
+  // Genera l'immagine completa del template (stesso rendering del publish normale)
+  const baseDataUrl = await generatePostImage(tmpl, productImageUrl, false, platform, values);
+
   const canvas = document.createElement('canvas');
   const canvasW = template.canvasW ?? 1024;
   const canvasH = template.canvasH ?? 1024;
@@ -290,35 +301,11 @@ export async function generateTerminataImage(
   canvas.height = canvasH;
   const ctx = canvas.getContext('2d')!;
 
-  ctx.fillStyle = template.bgColor || '#ffffff';
-  ctx.fillRect(0, 0, canvasW, canvasH);
+  // Disegna l'immagine base del template
+  const baseImg = await loadImage(baseDataUrl);
+  ctx.drawImage(baseImg, 0, 0, canvasW, canvasH);
 
-  if (productImageUrl && productImageUrl.startsWith('http')) {
-    try {
-      const img = await loadImage(`/api/posts?img=${encodeURIComponent(productImageUrl)}`);
-      drawContained(ctx, img, template.product, canvasW, canvasH, canvasRef);
-    } catch { /* skip */ }
-  }
-
-  if (template.overlay.enabled && template.overlay.src) {
-    try {
-      const img = await loadImage(template.overlay.src);
-      const el = template.overlay;
-      ctx.drawImage(img, (el.x / 100) * canvasW, (el.y / 100) * canvasH, (el.size / 100) * canvasW, (el.size / 100) * canvasH);
-    } catch { /* skip */ }
-  }
-
-  const storeEl2 = platform === 'amazon' ? template.storeAmazon : template.storeAliexpress;
-  if (storeEl2?.enabled) {
-    try {
-      const img = await loadImage(makeStoreImageUrl(platform));
-      const h = (storeEl2.size / 100) * STORE_SCALE[platform] * canvasRef;
-      const w = h * (img.naturalWidth / img.naturalHeight);
-      ctx.drawImage(img, (storeEl2.x / 100) * canvasW, (storeEl2.y / 100) * canvasH, w, h);
-    } catch { /* skip */ }
-  }
-
-  // Grayscale sull'intera immagine (prodotto + overlay + store)
+  // Grayscale opzionale sull'immagine finale
   if (config.grayscale) {
     const imageData = ctx.getImageData(0, 0, canvasW, canvasH);
     const d = imageData.data;
@@ -329,20 +316,7 @@ export async function generateTerminataImage(
     ctx.putImageData(imageData, 0, 0);
   }
 
-  // Assicura che i font siano caricati nel contesto browser prima di disegnare
-  {
-    const textEls = [template.prezzo, template.prezzoPrecedente, template.sconto, template.testoCustom];
-    await Promise.all(textEls.filter(el => el?.enabled && el?.fontFamily).map(el => {
-      const w = el.bold ? '700' : '400';
-      return document.fonts.load(`${w} ${el.fontSize * 2}px "${el.fontFamily}"`).catch(() => {});
-    }));
-  }
-
-  if (config.showPrezzo) drawTextEl(ctx, template.prezzo, applyDecimalSep(applyCurrPos(values.prezzo ?? template.prezzo.text, template.prezzo.currencyPos), template.prezzo.decimalSep), canvasW, canvasH);
-  if (config.showPrezzoPrecedente) drawTextEl(ctx, template.prezzoPrecedente, applyDecimalSep(applyCurrPos(values.prezzoPrecedente ?? template.prezzoPrecedente.text, template.prezzoPrecedente.currencyPos), template.prezzoPrecedente.decimalSep), canvasW, canvasH);
-  if (config.showSconto) drawTextEl(ctx, template.sconto, applySconto(values.sconto ?? template.sconto.text, template.sconto.hidePercent, template.sconto.hideMinus), canvasW, canvasH);
-  drawTextEl(ctx, template.testoCustom, values.testoCustom ?? template.testoCustom.text, canvasW, canvasH);
-
+  // Testo "TERMINATA" sovrapposto
   if (config.overlayText) {
     const fs = (config.overlayTextSize / 100) * canvasRef;
     const tx = (config.overlayTextX / 100) * canvasW;
