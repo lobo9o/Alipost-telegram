@@ -3338,7 +3338,8 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     if (telegramMode !== 'keep' && p.multiItems) {
       const sections = p.multiItems.map((it, i) => {
         const base = it.resolvedText ?? '';
-        if (i === idx) {
+        const isTerminata = i === idx || !!it.terminata;
+        if (isTerminata) {
           if (telegramMode === 'only') return telegramText;
           if (telegramMode === 'append') return `${telegramText}\n${base}`;
         }
