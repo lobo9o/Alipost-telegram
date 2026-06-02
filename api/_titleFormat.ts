@@ -145,7 +145,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(cappello|berretto|cappellino|beanie)\b/i, emoji: '🧢' },
   { re: /\b(occhiali.{0,10}(sole|vista|lettura))\b/i, emoji: '🕶️' },
   { re: /\b(maglia|maglione|pullover|cardigan)\b/i, emoji: '🧶' },
-  { re: /\b(maglietta|t-shirt|felpa)\b/i, emoji: '👕' },
+  { re: /\b(maglietta|t-shirt|felpa|polo.{0,20}(uomo|donna|bambino|bambina|shirt|cotone|manica)|camicia|helly.?hansen|north.?face|columbia.{0,10}(giacca|giubbotto|felpa|magliett)|tommy.?hilfiger|ralph.?lauren|lacoste)\b/i, emoji: '👕' },
   { re: /\b(pantaloni|jeans|shorts|bermuda|leggings)\b/i, emoji: '👖' },
   { re: /\b(costume.{0,10}bagno|bikini|trikini)\b/i, emoji: '👙' },
   { re: /\b(cintura|cinture)\b/i, emoji: '👔' },
