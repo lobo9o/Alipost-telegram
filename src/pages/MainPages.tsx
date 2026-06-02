@@ -3076,13 +3076,25 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 // PUBLISHED PAGE
 // ============================================================
-type EditFields = { title: string; originalPrice: string; discountedPrice: string; discountPercent: number; customText: string };
+
+function MultiCompositePreview({ imageUrls }: { imageUrls: string[] }) {
+  const [src, setSrc] = React.useState('');
+  React.useEffect(() => {
+    generateMultiPostImage(imageUrls).then(setSrc).catch(() => {});
+  }, [imageUrls.join(',')]); // eslint-disable-line
+  if (!src) return <div style={{ height: 140, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--t3)' }}>⏳ Composizione immagine...</div>;
+  return <img src={src} alt="multi" style={{ width: '100%', display: 'block' }} />;
+}
+
+type EditFields = { title: string; originalPrice: string; discountedPrice: string; discountPercent: number; customText: string; coupon: string };
+type MultiEditMap = Record<number, EditFields>;
 
 export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
   const { published, setPublished, setQueue, layouts, keyboards, tags, settings, templates } = useApp();
-  // editingKey: "postId" per singolo, "postId:itemIdx" per prodotto in multi-post
+  // editingKey: "postId" per singolo, "postId:multi" per multi-post
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editFields, setEditFields] = useState<EditFields>({ title: '', originalPrice: '', discountedPrice: '', discountPercent: 0, customText: '' });
+  const [editFields, setEditFields] = useState<EditFields>({ title: '', originalPrice: '', discountedPrice: '', discountPercent: 0, customText: '', coupon: '' });
+  const [multiEditMap, setMultiEditMap] = useState<MultiEditMap>({});
   const [editErr, setEditErr] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -3105,20 +3117,22 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     setEditFields({
       title: p.title, originalPrice: String(p.originalPrice),
       discountedPrice: p.price, discountPercent: p.discountPercent,
-      customText: p.customText || '',
+      customText: p.customText || '', coupon: '',
     });
     setEditErr('');
   };
 
-  const startEditMultiItem = (p: typeof published[0], idx: number) => {
-    const item = p.multiItems?.[idx];
-    if (!item) return;
-    setEditingKey(`${p.id}:${idx}`);
-    setEditFields({
-      title: item.title, originalPrice: String(item.originalPrice),
-      discountedPrice: item.price, discountPercent: item.discountPercent,
-      customText: item.customText || '',
+  const startEditMulti = (p: typeof published[0]) => {
+    const map: MultiEditMap = {};
+    (p.multiItems ?? []).forEach((item, idx) => {
+      map[idx] = {
+        title: item.title, originalPrice: String(item.originalPrice),
+        discountedPrice: item.price, discountPercent: item.discountPercent,
+        customText: item.customText || '', coupon: item.coupon || '',
+      };
     });
+    setMultiEditMap(map);
+    setEditingKey(`${p.id}:multi`);
     setEditErr('');
   };
 
@@ -3130,55 +3144,40 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
   };
 
   const saveEdit = async (p: typeof published[0]) => {
-    if (!p.chatId || !p.messageId) {
-      setEditErr('message_id Telegram non disponibile.');
-      return;
-    }
+    if (!p.chatId || !p.messageId) { setEditErr('message_id Telegram non disponibile.'); return; }
     setSaving(true); setEditErr('');
     try {
-      const origPrice = parseFloat(editFields.originalPrice) || 0;
-      const discPrice = parseFloat(editFields.discountedPrice) || 0;
-      const isMultiKey = editingKey?.includes(':');
-      const multiItemIndex = isMultiKey ? parseInt(editingKey!.split(':')[1]) : undefined;
-      const updatedFields = {
-        title: editFields.title,
-        originalPrice: origPrice,
-        discountedPrice: discPrice,
-        discountPercent: editFields.discountPercent,
-        customText: editFields.customText,
-        itemId: multiItemIndex !== undefined ? (p.multiItems?.[multiItemIndex]?.id ?? '') : undefined,
-      };
-
-      // Costruisce la nuova caption
+      const isMultiEdit = editingKey === `${p.id}:multi`;
       let newCaption: string | undefined;
-      if (isMultiKey && multiItemIndex !== undefined && p.multiItems) {
-        // Ricostruisce il testo del singolo item con i nuovi valori
-        const item = p.multiItems[multiItemIndex];
-        const cur = item.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-        const layout = layouts.find(l => l.id === item.layoutId);
-        const updatedItem: PublishedMultiItem = { ...item, ...updatedFields, price: discPrice.toFixed(2) };
-        const updatedItemAsPost = {
-          id: item.id, platform: item.platform as Platform, sourceUrl: item.sourceUrl, productId: item.productId,
-          title: editFields.title, image: item.image, emoji: item.emoji,
-          originalPrice: origPrice, discountedPrice: discPrice,
-          discountPercent: editFields.discountPercent, customText: editFields.customText,
-          isHistoricalLow: item.isHistoricalLow, templateId: 'tpl1', layoutId: item.layoutId, keyboardId: 'kb1',
-        } as CreatedPost;
+
+      if (isMultiEdit && p.multiItems) {
+        // Ricostruisce tutte le sezioni con i valori modificati
         const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">APRI SU AMAZON</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
-        const newItemText = layout ? resolvePostTags(layout.contenuto, updatedItemAsPost, tags, cur) : resolvePostTags(defaultMultiLayout, updatedItemAsPost, tags, cur);
-        // Ricostruisce il testo completo: sostituisce la sezione dell'item modificato
-        const sections = p.multiItems.map((it, i) => i === multiItemIndex ? newItemText : (it.resolvedText ?? ''));
-        newCaption = sections.join('\n');
-        // Aggiorna anche resolvedText nell'item locale
-        setPublished(prev => prev.map(x => {
-          if (x.id !== p.id) return x;
-          const newItems = (x.multiItems ?? []).map((it, i) =>
-            i === multiItemIndex ? { ...it, ...updatedFields, price: discPrice.toFixed(2), resolvedText: newItemText } : it
-          );
-          return { ...x, multiItems: newItems };
-        }));
+        const newItemTexts: string[] = [];
+        const newItems = p.multiItems.map((item, idx) => {
+          const ef = multiEditMap[idx] ?? { title: item.title, originalPrice: String(item.originalPrice), discountedPrice: item.price, discountPercent: item.discountPercent, customText: item.customText || '', coupon: item.coupon || '' };
+          const origP = parseFloat(ef.originalPrice) || 0;
+          const discP = parseFloat(ef.discountedPrice) || 0;
+          const cur = item.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+          const layout = layouts.find(l => l.id === item.layoutId);
+          const updPost = {
+            id: item.id, platform: item.platform as Platform, sourceUrl: item.sourceUrl, productId: item.productId,
+            title: ef.title, image: item.image, emoji: item.emoji,
+            originalPrice: origP, discountedPrice: discP, discountPercent: ef.discountPercent,
+            customText: ef.customText, coupon: ef.coupon,
+            isHistoricalLow: item.isHistoricalLow, templateId: 'tpl1', layoutId: item.layoutId, keyboardId: 'kb1',
+          } as CreatedPost;
+          const txt = layout ? resolvePostTags(layout.contenuto, updPost, tags, cur) : resolvePostTags(defaultMultiLayout, updPost, tags, cur);
+          newItemTexts.push(txt);
+          return { ...item, title: ef.title, price: discP.toFixed(2), originalPrice: origP, discountPercent: ef.discountPercent, customText: ef.customText, coupon: ef.coupon, resolvedText: txt };
+        });
+        newCaption = newItemTexts.join('\n');
+        setPublished(prev => prev.map(x => x.id !== p.id ? x : { ...x, multiItems: newItems }));
+        await publishedApi.editTelegram(p.id, { action: 'editPublished', chatId: p.chatId, messageId: p.messageId, newCaption, updatedFields: { multiItems: newItems } } as any);
       } else {
-        // Post singolo: ricostruisce caption
+        // Post singolo
+        const origPrice = parseFloat(editFields.originalPrice) || 0;
+        const discPrice = parseFloat(editFields.discountedPrice) || 0;
         const layout = layouts.find(l => l.id === p.layoutId);
         const cur = p.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
         const updatedPost = {
@@ -3194,12 +3193,11 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
           price: discPrice.toFixed(2), discountPercent: editFields.discountPercent,
           customText: editFields.customText,
         }));
+        await publishedApi.editTelegram(p.id, {
+          action: 'editPublished', chatId: p.chatId, messageId: p.messageId, newCaption,
+          updatedFields: { title: editFields.title, originalPrice: origPrice, discountedPrice: discPrice, discountPercent: editFields.discountPercent, customText: editFields.customText },
+        } as any);
       }
-
-      await publishedApi.editTelegram(p.id, {
-        action: 'editPublished', chatId: p.chatId, messageId: p.messageId,
-        newCaption, updatedFields, multiItemIndex,
-      } as any);
       setEditingKey(null);
     } catch (e) {
       setEditErr(e instanceof Error ? e.message : 'Errore durante la modifica');
@@ -3328,7 +3326,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
       <div className="lbl">TESTO PERSONALIZZATO</div>
       <textarea className="txta" rows={2} value={editFields.customText}
         onChange={e => setEditFields(prev => ({ ...prev, customText: e.target.value }))}
-        style={{ marginBottom: 8 }} />
+        style={{ marginBottom: 6 }} />
       {editErr && <ErrorBanner>{editErr}</ErrorBanner>}
       <div style={{ display: 'flex', gap: 6 }}>
         <button className="btn bs bsm" style={{ flex: 1 }} onClick={() => setEditingKey(null)}>Annulla</button>
@@ -3336,6 +3334,53 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
           onClick={() => saveEdit(p)}>{saving ? '...' : '💾 Salva su Telegram'}</button>
       </div>
     </>
+  );
+
+  const renderMultiEditForm = (p: typeof published[0]) => (
+    <div style={{ borderTop: '1px solid var(--bd)', padding: '12px 0 4px' }}>
+      <div className="stit">MODIFICA POST MULTIPLO — {p.multiItems?.length ?? 0} PRODOTTI</div>
+      {(p.multiItems ?? []).map((item, idx) => {
+        const ef = multiEditMap[idx] ?? { title: item.title, originalPrice: String(item.originalPrice), discountedPrice: item.price, discountPercent: item.discountPercent, customText: item.customText || '', coupon: item.coupon || '' };
+        const setEf = (changes: Partial<EditFields>) => setMultiEditMap(prev => ({ ...prev, [idx]: { ...ef, ...changes } }));
+        const origN = parseFloat(ef.originalPrice) || 0;
+        const discN = parseFloat(ef.discountedPrice) || 0;
+        const handleMPrice = (field: 'originalPrice' | 'discountedPrice', val: string) => {
+          const o = field === 'originalPrice' ? parseFloat(val) || 0 : origN;
+          const d = field === 'discountedPrice' ? parseFloat(val) || 0 : discN;
+          setEf({ [field]: val, discountPercent: o > 0 ? Math.max(0, Math.round((1 - d / o) * 100)) : 0 });
+        };
+        return (
+          <div key={item.id || idx} style={{ marginBottom: 10, padding: '8px 10px', background: 'var(--bg3)', borderRadius: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 6, fontWeight: 600 }}>{idx + 1}. {item.emoji} {item.title.slice(0, 40)}</div>
+            <input className="inp" style={{ marginBottom: 6, fontSize: 12 }} value={ef.title}
+              onChange={e => setEf({ title: e.target.value })} placeholder="Titolo" />
+            <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+              <div style={{ flex: 1 }}>
+                <div className="lbl" style={{ fontSize: 10 }}>PREZZO ORIG.</div>
+                <input className="inp" type="text" inputMode="decimal" style={{ fontSize: 12 }} value={ef.originalPrice}
+                  onChange={e => handleMPrice('originalPrice', e.target.value)} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div className="lbl" style={{ fontSize: 10 }}>PREZZO SCONT.</div>
+                <input className="inp" type="text" inputMode="decimal" style={{ fontSize: 12 }} value={ef.discountedPrice}
+                  onChange={e => handleMPrice('discountedPrice', e.target.value)} />
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--am2)', fontWeight: 700, marginBottom: 6, textAlign: 'right' }}>-{ef.discountPercent}%</div>
+            <input className="inp" style={{ marginBottom: 4, fontSize: 12 }} value={ef.customText}
+              onChange={e => setEf({ customText: e.target.value })} placeholder="Testo personalizzato..." />
+            <input className="inp" style={{ fontSize: 12 }} value={ef.coupon}
+              onChange={e => setEf({ coupon: e.target.value })} placeholder="Coupon (opzionale)..." />
+          </div>
+        );
+      })}
+      {editErr && <ErrorBanner>{editErr}</ErrorBanner>}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        <button className="btn bs bsm" style={{ flex: 1 }} onClick={() => setEditingKey(null)}>Annulla</button>
+        <button className="btn bp bsm" style={{ flex: 2 }} disabled={saving}
+          onClick={() => saveEdit(p)}>{saving ? '...' : '💾 Salva su Telegram'}</button>
+      </div>
+    </div>
   );
 
   const mainTemplate = templates[0];
@@ -3400,58 +3445,55 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* ── Post multiplo ── */}
             {p.isMulti && (
               <>
-                {/* Header comune (ora, ID messaggio) */}
-                <div style={{ padding: '8px 12px 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <SourceBadge platform={p.platform} />
-                  <span style={{ fontSize: 10, color: 'var(--a1)', fontWeight: 700 }}>🗂️ MULTI</span>
-                  <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
-                  {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
-                  {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
-                </div>
+                {/* Immagine composita rigenerata */}
+                <MultiCompositePreview imageUrls={(p.multiItems ?? []).map(it => it.image).filter(Boolean)} />
 
-                {/* Testo Telegram del post multiplo */}
-                {pPreviewText && !editingKey?.startsWith(p.id + ':') && (
-                  <div style={{ padding: '0 12px 8px' }}>
-                    <TelegramPreview text={pPreviewText} buttons={pKbBtns} />
+                <div style={{ padding: '10px 12px 12px' }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <SourceBadge platform={p.platform} />
+                    <span style={{ fontSize: 10, color: 'var(--a1)', fontWeight: 700 }}>🗂️ MULTI ({p.multiItems?.length ?? 0})</span>
+                    <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+                    {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
+                    {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
                   </div>
-                )}
 
-                {/* Ogni prodotto come card singola con TemplateImagePreview */}
-                {(p.multiItems ?? []).map((item, idx) => {
-                  const itemKey = `${p.id}:${idx}`;
-                  const isEditingThis = editingKey === itemKey;
-                  const itemAsPost: CreatedPost = {
-                    id: item.id, platform: item.platform as Platform,
-                    sourceUrl: item.sourceUrl, productId: item.productId,
-                    title: item.title, image: item.image, emoji: item.emoji,
-                    originalPrice: item.originalPrice,
-                    discountedPrice: parseFloat(item.price),
-                    discountPercent: item.discountPercent,
-                    customText: item.customText,
-                    isHistoricalLow: item.isHistoricalLow,
-                    templateId: 'tpl1', layoutId: item.layoutId, keyboardId: 'kb1',
-                  };
-                  return (
-                    <div key={item.id || idx} style={{
-                      borderTop: '1px solid var(--bd)',
-                      opacity: item.terminata ? 0.65 : 1,
-                    }}>
-                      <TemplateImagePreview post={itemAsPost} template={mainTemplate} />
-                      <div style={{ padding: '6px 12px 10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{item.emoji} {item.title}</span>
-                          {item.terminata && <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 6px', borderRadius: 8 }}>❌ TERMINATA</span>}
-                        </div>
-                        {isEditingThis ? renderEditForm(p, true) : (
-                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                            <button className="btn bsm bgh" disabled={item.terminata} onClick={() => startEditMultiItem(p, idx)}>✏️ Modifica</button>
-                            <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={item.terminata} onClick={() => markTerminataItem(p, idx)}>❌ Terminata</button>
-                          </div>
-                        )}
-                      </div>
+                  {/* Testo Telegram */}
+                  {pPreviewText && editingKey !== `${p.id}:multi` && (
+                    <div style={{ marginBottom: 10 }}>
+                      <TelegramPreview text={pPreviewText} buttons={pKbBtns} />
                     </div>
-                  );
-                })}
+                  )}
+
+                  {/* Editor multi-post oppure lista compatta prodotti */}
+                  {editingKey === `${p.id}:multi` ? renderMultiEditForm(p) : (
+                    <>
+                      {/* Lista compatta prodotti con terminata per ognuno */}
+                      {(p.multiItems ?? []).map((item, idx) => (
+                        <div key={item.id || idx} style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '6px 0', borderBottom: idx < (p.multiItems?.length ?? 0) - 1 ? '1px solid var(--bd)' : 'none',
+                          opacity: item.terminata ? 0.55 : 1,
+                        }}>
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{item.emoji}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
+                            <div style={{ fontSize: 11, color: item.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: item.terminata ? 'line-through' : 'none' }}>
+                              €{item.price} <span style={{ color: 'var(--t3)' }}>-{item.discountPercent}%</span>
+                            </div>
+                          </div>
+                          {item.terminata
+                            ? <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700 }}>❌</span>
+                            : <button className="btn bsm bgh" style={{ color: '#ef4444', flexShrink: 0 }} onClick={() => markTerminataItem(p, idx)}>❌</button>
+                          }
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', gap: 5, marginTop: 10 }}>
+                        <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEditMulti(p)}>✏️ Modifica</button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </>
             )}
 
