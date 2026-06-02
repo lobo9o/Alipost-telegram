@@ -72,7 +72,24 @@ async function main() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
 
-  app.use(express.static(path.join(__dirname, 'build')));
+  // Preflight OPTIONS globale — necessario per WebView Telegram che manda preflight CORS
+  app.options('*', (_req: any, res: any) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-tg-init-data, Authorization, x-internal-user-id');
+    res.status(204).end();
+  });
+
+  // index.html: no-cache (forza ricaricamento dopo deploy)
+  // static assets (js/css con hash): cache lunga
+  app.use(express.static(path.join(__dirname, 'build'), {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+      }
+    },
+  }));
 
   app.all('/api/settings', settingsHandler);
   app.all('/api/tags', tagsHandler);
@@ -98,6 +115,8 @@ async function main() {
   app.all('/api/tg-monitor/channels/:id', withId(tgMonitorChannelsHandler));
 
   app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
   });
 
