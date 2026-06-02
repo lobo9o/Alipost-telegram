@@ -733,10 +733,14 @@ function StorePanel({ tpl, onUpdate, onPreviewPlatform }: {
 }
 
 const FONTS = [
+  'Aero',
   'Arial',
   'Bangers',
+  'Built Titling Lt It',
   'Comix Heavy',
   'Comix Loud',
+  'Designer',
+  'Digital 7',
   'Edwardian Script ITC',
   'Gobold Italic',
   'Gotham Rounded',

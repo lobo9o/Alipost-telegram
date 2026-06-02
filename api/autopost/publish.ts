@@ -291,6 +291,7 @@ async function generateTemplateImageServer(
         { file: 'ComixLoud.ttf',    family: 'Comix Loud' },
         { file: 'Lobster.ttf',      family: 'Lobster' },
         { file: 'Montserrat.ttf',   family: 'Montserrat' },
+        { file: 'MontserratBlackItalic.ttf', family: 'Montserrat Black Italic', weight: '900', style: 'italic' },
         { file: 'OpenSans.ttf',     family: 'Open Sans' },
         { file: 'OpenSans.ttf',     family: 'Open Sans Bold', weight: 'bold' },
         { file: 'TheBlacklist.ttf', family: 'The Blacklist' },
@@ -300,6 +301,10 @@ async function generateTemplateImageServer(
         { file: 'LemonMilkBold.woff2', family: 'Lemon Milk Bold', weight: 'bold' },
         { file: 'Milano.woff2', family: 'Milano' },
         { file: 'EdwardianScriptITC.woff2', family: 'Edwardian Script ITC' },
+        { file: 'Aero.ttf',             family: 'Aero' },
+        { file: 'Designer.otf',         family: 'Designer' },
+        { file: 'Digital7.ttf',         family: 'Digital 7' },
+        { file: 'BuiltTitlingLtIt.otf', family: 'Built Titling Lt It', style: 'italic' },
       ];
       for (const f of customFonts) {
         try {
@@ -766,7 +771,7 @@ function buildMessage(
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
     '{coupon}':          post.coupon || '',
-    '{boxcoupon}':       post.boxcoupon || '',
+    '{boxcoupon}':       post.boxcoupon ? (customTags['{boxcoupon}'] || 'Abilita il coupon prima di acquistare') : '',
     '{checkout}':        post.checkout || '',
     '{emojicat}':        getProductEmoji(post.title || '', post.cat || ''),
   };
@@ -788,7 +793,8 @@ function buildMessage(
       let resolved = inner;
       for (const [tag, val] of Object.entries(tags)) {
         if (inner.includes(tag)) {
-          if (!val || val.trim() === '') hasEmpty = true;
+          const valStr = typeof val === 'string' ? val : String(val ?? '');
+          if (!valStr || valStr.trim() === '') hasEmpty = true;
           resolved = resolved.split(tag).join(val);
         }
       }
