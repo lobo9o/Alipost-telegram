@@ -2384,7 +2384,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           const lista = multiPosts.map((mp, i) => {
             const cur = mp.platform === 'aliexpress' ? multiCurrency : '€';
             const title = mp.title.length > 55 ? mp.title.slice(0, 55) + '…' : mp.title;
-            return `${i + 1}. ${mp.emoji || '📦'} ${title}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${mp.discountPercent}%)`;
+            const line = `${i + 1}. ${mp.emoji || '📦'} ${title}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2)} (-${mp.discountPercent}%)`;
+            perItemTexts.push(line);
+            return line;
           }).join('\n\n');
           expandedLayout = layoutContenuto.replace('{lista_prodotti}', lista);
         } else {
@@ -3406,7 +3408,11 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
         const pKb = keyboards.find(k => k.id === (pLayout?.keyboardId ?? 'kb1'));
         const pPreviewText = !p.isMulti && pLayout
           ? resolvePostTags(pLayout.contenuto, pAsPost, tags, pCurrency)
-          : (p.multiItems ?? []).map(it => it.resolvedText ?? '').filter(Boolean).join('\n') || '';
+          : (() => {
+            const stored = (p.multiItems ?? []).map(it => it.resolvedText ?? '').filter(Boolean).join('\n');
+            if (stored) return stored;
+            return (p.multiItems ?? []).map(it => `${it.emoji || '📦'} <b>${it.title}</b>\n💶 €${it.price} (-${it.discountPercent}%)`).join('\n\n');
+          })();
         const pKbBtns: string[] | undefined = pKb
           ? undefined
           : (p.isMulti ? undefined : [`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]);
