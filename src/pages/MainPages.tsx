@@ -2430,7 +2430,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         const pubRecord = {
           id: post.id, emoji: '🗂️', title: `Post multiplo (${multiPosts.length} prodotti)`,
           price: '0.00', originalPrice: 0, discountPercent: 0,
-          platform: post.platform, image: post.image,
+          platform: post.platform, image: generatedImage || post.image,
           sourceUrl: post.sourceUrl, productId: post.productId,
           customText: post.customText, layoutId: post.layoutId,
           isHistoricalLow: false, isMulti: true, multiItems,
@@ -3451,8 +3451,11 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* ── Post multiplo ── */}
             {p.isMulti && (
               <>
-                {/* Immagine composita rigenerata */}
-                <MultiCompositePreview imageUrls={(p.multiItems ?? []).map(it => it.image).filter(Boolean)} />
+                {/* Immagine composita: usa base64 salvato al publish, o rigenera da URLs */}
+                {p.image?.startsWith('data:')
+                  ? <img src={p.image} alt="multi" style={{ width: '100%', display: 'block' }} />
+                  : <MultiCompositePreview imageUrls={(p.multiItems ?? []).map(it => it.image).filter(Boolean)} />
+                }
 
                 <div style={{ padding: '10px 12px 12px' }}>
                   {/* Header */}
