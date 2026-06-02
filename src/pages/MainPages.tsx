@@ -2430,7 +2430,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         const pubRecord = {
           id: post.id, emoji: '🗂️', title: `Post multiplo (${multiPosts.length} prodotti)`,
           price: '0.00', originalPrice: 0, discountPercent: 0,
-          platform: post.platform, image: generatedImage || post.image,
+          platform: post.platform, image: post.image,
           sourceUrl: post.sourceUrl, productId: post.productId,
           customText: post.customText, layoutId: post.layoutId,
           isHistoricalLow: false, isMulti: true, multiItems,
@@ -3079,13 +3079,26 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 // PUBLISHED PAGE
 // ============================================================
 
-function MultiCompositePreview({ imageUrls }: { imageUrls: string[] }) {
-  const [src, setSrc] = React.useState('');
-  React.useEffect(() => {
-    generateMultiPostImage(imageUrls).then(setSrc).catch(() => {});
-  }, [imageUrls.join(',')]); // eslint-disable-line
-  if (!src) return <div style={{ height: 140, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--t3)' }}>⏳ Composizione immagine...</div>;
-  return <img src={src} alt="multi" style={{ width: '100%', display: 'block' }} />;
+function MultiThumbnailGrid({ items }: { items: { image?: string; emoji?: string; title?: string }[] }) {
+  if (items.length === 0) return null;
+  const cols = items.length <= 3 ? items.length : items.length <= 4 ? 2 : 3;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 2, background: '#fff' }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ aspectRatio: '1', background: '#f5f5f5', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {item.image
+            ? <img
+                src={item.image.startsWith('http') ? `/api/posts?img=${encodeURIComponent(item.image)}` : item.image}
+                alt={item.title ?? ''}
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            : <span style={{ fontSize: 24 }}>{item.emoji || '📦'}</span>
+          }
+        </div>
+      ))}
+    </div>
+  );
 }
 
 type EditFields = { title: string; originalPrice: string; discountedPrice: string; discountPercent: number; customText: string; coupon: string };
@@ -3451,11 +3464,8 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* ── Post multiplo ── */}
             {p.isMulti && (
               <>
-                {/* Immagine composita: usa base64 salvato al publish, o rigenera da URLs */}
-                {p.image?.startsWith('data:')
-                  ? <img src={p.image} alt="multi" style={{ width: '100%', display: 'block' }} />
-                  : <MultiCompositePreview imageUrls={(p.multiItems ?? []).map(it => it.image).filter(Boolean)} />
-                }
+                {/* Griglia thumbnail prodotti — nessun canvas, funziona sempre */}
+                <MultiThumbnailGrid items={p.multiItems ?? []} />
 
                 <div style={{ padding: '10px 12px 12px' }}>
                   {/* Header */}
