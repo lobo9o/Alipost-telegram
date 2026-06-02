@@ -3079,7 +3079,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
 type EditFields = { title: string; originalPrice: string; discountedPrice: string; discountPercent: number; customText: string };
 
 export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { published, setPublished, setQueue, layouts, tags, settings, templates } = useApp();
+  const { published, setPublished, setQueue, layouts, keyboards, tags, settings, templates } = useApp();
   // editingKey: "postId" per singolo, "postId:itemIdx" per prodotto in multi-post
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editFields, setEditFields] = useState<EditFields>({ title: '', originalPrice: '', discountedPrice: '', discountPercent: 0, customText: '' });
@@ -3338,6 +3338,8 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     </>
   );
 
+  const mainTemplate = templates[0];
+
   return (
     <div className="pg">
       <PageHeader title="Pubblicati oggi" onBack={() => nav('dash')} badge={`${published.length}`} badgeVariant="green" />
@@ -3346,77 +3348,107 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
         <EmptyState icon="✅" text="Nessun post pubblicato oggi."
           action={<button className="btn bp" onClick={() => nav('queue')}>Vai alla coda</button>} />
       )}
-      {published.map(p => (
-        <div key={p.id} className="card" style={{ margin: '0 16px 12px', padding: 0, overflow: 'hidden' }}>
-          {/* Mini image */}
-          {p.image && p.image.startsWith('http') && (
-            <img src={p.image} alt="" style={{ width: '100%', aspectRatio: '2/1', objectFit: 'cover', display: 'block' }} />
-          )}
-          <div style={{ padding: '10px 12px 12px' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <SourceBadge platform={p.platform} />
-              <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
-              {p.isMulti && <span style={{ fontSize: 10, color: 'var(--a1)', fontWeight: 700 }}>🗂️ MULTI</span>}
-              {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
-              {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
-            </div>
+      {published.map(p => {
+        const pCurrency = p.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const pAsPost: CreatedPost = {
+          id: p.id, platform: p.platform as Platform, sourceUrl: p.sourceUrl, productId: p.productId,
+          title: p.title, image: p.image, emoji: p.emoji,
+          originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price),
+          discountPercent: p.discountPercent, customText: p.customText,
+          isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
+        };
+        const pLayout = layouts.find(l => l.id === p.layoutId);
+        const pKb = keyboards.find(k => k.id === (pLayout?.keyboardId ?? 'kb1'));
+        const pPreviewText = !p.isMulti && pLayout
+          ? resolvePostTags(pLayout.contenuto, pAsPost, tags, pCurrency)
+          : (p.multiItems ?? []).map(it => it.resolvedText ?? '').filter(Boolean).join('\n') || '';
+        const pKbBtns: string[] | undefined = pKb
+          ? undefined
+          : (p.isMulti ? undefined : [`🛒 Compra su ${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}`]);
 
-            {/* Post singolo */}
-            {!p.isMulti && (
-              <>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: p.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: p.terminata ? 'line-through' : 'none' }}>€{p.price}</span>
-                  <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{p.discountPercent}%</span>
+        return (
+          <div key={p.id} className="card" style={{ margin: '0 16px 12px', padding: 0, overflow: 'hidden' }}>
+            {/* Anteprima immagine template */}
+            {p.isMulti ? (
+              <div style={{ margin: '0', borderRadius: '0', overflow: 'hidden', background: 'var(--bg3)' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 8 }}>
+                  {(p.multiItems ?? []).slice(0, 6).map((it, i) => (
+                    it.image && it.image.startsWith('http')
+                      ? <img key={i} src={`/api/posts?img=${encodeURIComponent(it.image)}`}
+                          alt="" style={{ width: 'calc(33% - 4px)', aspectRatio: '1', objectFit: 'contain', background: '#fff', borderRadius: 6 }} />
+                      : <div key={i} style={{ width: 'calc(33% - 4px)', aspectRatio: '1', background: 'var(--bg2)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>{it.emoji}</div>
+                  ))}
                 </div>
-                {editingKey === p.id ? renderEditForm(p, false) : (
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                    <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEditSingle(p)}>✏️ Modifica</button>
-                    <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={p.terminata} onClick={() => markTerminataSingle(p)}>❌ Terminata</button>
-                    <button className="btn bsm bbl" disabled={p.terminata} onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
-                  </div>
-                )}
-              </>
+              </div>
+            ) : (
+              <TemplateImagePreview post={pAsPost} template={mainTemplate} />
             )}
 
-            {/* Post multiplo */}
-            {p.isMulti && (
-              <>
-                <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 8 }}>
-                  {p.multiItems?.length ?? 0} prodotti
+            <div style={{ padding: '10px 12px 12px' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <SourceBadge platform={p.platform} />
+                <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+                {p.isMulti && <span style={{ fontSize: 10, color: 'var(--a1)', fontWeight: 700 }}>🗂️ MULTI</span>}
+                {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
+                {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
+              </div>
+
+              {/* Anteprima testo Telegram */}
+              {pPreviewText && editingKey !== p.id && !(p.isMulti && editingKey?.startsWith(p.id + ':')) && (
+                <div style={{ marginBottom: 10 }}>
+                  <TelegramPreview text={pPreviewText} buttons={pKbBtns} />
                 </div>
-                {(p.multiItems ?? []).map((item, idx) => {
-                  const itemKey = `${p.id}:${idx}`;
-                  const isEditingThis = editingKey === itemKey;
-                  return (
-                    <div key={item.id || idx} style={{
-                      background: 'var(--bg3)', borderRadius: 8, padding: '8px 10px',
-                      marginBottom: 8, opacity: item.terminata ? 0.6 : 1,
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <span style={{ fontSize: 13 }}>{item.emoji}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{item.title}</span>
-                        {item.terminata && <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700 }}>❌</span>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginBottom: isEditingThis ? 8 : 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: item.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: item.terminata ? 'line-through' : 'none' }}>€{item.price}</span>
-                        <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{item.discountPercent}%</span>
-                      </div>
-                      {isEditingThis ? renderEditForm(p, true) : (
-                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                          <button className="btn bsm bgh" disabled={item.terminata} onClick={() => startEditMultiItem(p, idx)}>✏️ Modifica</button>
-                          <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={item.terminata} onClick={() => markTerminataItem(p, idx)}>❌ Terminata</button>
-                        </div>
-                      )}
+              )}
+
+              {/* Post singolo: form modifica / bottoni */}
+              {!p.isMulti && (
+                <>
+                  {editingKey === p.id ? renderEditForm(p, false) : (
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEditSingle(p)}>✏️ Modifica</button>
+                      <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={p.terminata} onClick={() => markTerminataSingle(p)}>❌ Terminata</button>
+                      <button className="btn bsm bbl" disabled={p.terminata} onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
                     </div>
-                  );
-                })}
-              </>
-            )}
+                  )}
+                </>
+              )}
+
+              {/* Post multiplo: sotto-card per ogni prodotto */}
+              {p.isMulti && (
+                <>
+                  {(p.multiItems ?? []).map((item, idx) => {
+                    const itemKey = `${p.id}:${idx}`;
+                    const isEditingThis = editingKey === itemKey;
+                    return (
+                      <div key={item.id || idx} style={{
+                        background: 'var(--bg3)', borderRadius: 8, padding: '8px 10px',
+                        marginBottom: 8, opacity: item.terminata ? 0.6 : 1,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <span style={{ fontSize: 13 }}>{item.emoji}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{item.title}</span>
+                          {item.terminata && <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 700 }}>❌</span>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: isEditingThis ? 8 : 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: item.terminata ? 'var(--t3)' : 'var(--gr2)', textDecoration: item.terminata ? 'line-through' : 'none' }}>€{item.price}</span>
+                          <span style={{ fontSize: 11, color: 'var(--t3)', alignSelf: 'center' }}>-{item.discountPercent}%</span>
+                        </div>
+                        {isEditingThis ? renderEditForm(p, true) : (
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                            <button className="btn bsm bgh" disabled={item.terminata} onClick={() => startEditMultiItem(p, idx)}>✏️ Modifica</button>
+                            <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={item.terminata} onClick={() => markTerminataItem(p, idx)}>❌ Terminata</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

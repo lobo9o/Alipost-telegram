@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/static/css/main.b4e72730.css",
-    "main.js": "/static/js/main.a365badc.js",
+    "main.js": "/static/js/main.4229463b.js",
     "index.html": "/index.html",
     "main.b4e72730.css.map": "/static/css/main.b4e72730.css.map",
-    "main.a365badc.js.map": "/static/js/main.a365badc.js.map"
+    "main.4229463b.js.map": "/static/js/main.4229463b.js.map"
   },
   "entrypoints": [
     "static/css/main.b4e72730.css",
-    "static/js/main.a365badc.js"
+    "static/js/main.4229463b.js"
   ]
 }
