@@ -7,11 +7,34 @@ export default withErrorHandler(async (req, res) => {
 
   // ── GET: lista canali ────────────────────────────────────────
   if (req.method === 'GET') {
-    const rows = await sql<{ id: string; channel: string; active: boolean }[]>`
-      SELECT id, channel, active FROM tg_monitor_channels
+    await sql`ALTER TABLE tg_monitor_channels ADD COLUMN IF NOT EXISTS auto_publish BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
+    const rows = await sql<{ id: string; channel: string; active: boolean; auto_publish: boolean }[]>`
+      SELECT id, channel, active, auto_publish FROM tg_monitor_channels
       WHERE user_id = ${userId} ORDER BY created_at ASC
     `;
     return res.json(rows);
+  }
+
+  // ── PATCH: aggiorna impostazioni canale ──────────────────────
+  if (req.method === 'PATCH') {
+    const id = req.query.id as string;
+    if (!id) return res.status(400).json({ error: 'ID mancante' });
+    const { auto_publish, active } = req.body ?? {};
+
+    if (typeof active === 'boolean' && typeof auto_publish === 'boolean') {
+      await sql`UPDATE tg_monitor_channels SET active = ${active}, auto_publish = ${auto_publish} WHERE id = ${id} AND user_id = ${userId}`;
+    } else if (typeof active === 'boolean') {
+      await sql`UPDATE tg_monitor_channels SET active = ${active} WHERE id = ${id} AND user_id = ${userId}`;
+    } else if (typeof auto_publish === 'boolean') {
+      await sql`UPDATE tg_monitor_channels SET auto_publish = ${auto_publish} WHERE id = ${id} AND user_id = ${userId}`;
+    } else {
+      return res.status(400).json({ error: 'Nessun campo valido da aggiornare' });
+    }
+
+    const { reloadUser } = await import('./worker.js');
+    reloadUser(userId);
+
+    return res.json({ ok: true });
   }
 
   // ── POST: aggiungi canale ────────────────────────────────────
