@@ -388,6 +388,7 @@ async function generateTemplateImageServer(
 
         ctx.save();
         ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+        if (el.letterSpacing) try { (ctx as any).letterSpacing = (Number(el.letterSpacing) * 2) + 'px'; } catch { /* node-canvas older */ }
         ctx.font = fontStr(fs);
         const capH = (ctx.measureText('H') as any).actualBoundingBoxAscent ?? fs * 0.72;
         const baseline = y + capH;
@@ -560,7 +561,8 @@ async function generateTemplateImageServer(
       console.log(`[tpl] textElToSvg: fontFamily="${family}" text="${String(text).slice(0, 20)}"`);
       const fill = String(el.color || '#ffffff');
       const safeStr = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const common = `x="${xTop}" y="${y}" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}"`;
+      const lsAttr = el.letterSpacing ? ` letter-spacing="${Number(el.letterSpacing) * 2}"` : '';
+      const common = `x="${xTop}" y="${y}" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}"${lsAttr}`;
 
       const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
       const parts = scale < 1 ? splitAtDecimal(text) : null;

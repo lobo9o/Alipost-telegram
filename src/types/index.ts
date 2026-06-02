@@ -91,6 +91,7 @@ export interface TextEl {
   strikethrough: boolean;
   strikethroughColor: string;
   textAnchor: 'left' | 'right' | 'center';
+  letterSpacing?: number;
   text: string;
   currencyPos?: 'before' | 'after';
   decimalFontScale?: number;

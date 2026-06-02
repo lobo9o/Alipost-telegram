@@ -64,6 +64,7 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, can
   ctx.save();
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
+  if (el.letterSpacing) (ctx as any).letterSpacing = el.letterSpacing + 'px';
 
   // Misura la cap height reale per allineare il top visivo a y (uguale a CSS top: Y%)
   // actualBoundingBoxAscent è cross-platform e non dipende da hhea/winAscent del font

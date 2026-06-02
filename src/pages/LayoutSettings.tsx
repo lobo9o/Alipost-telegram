@@ -843,11 +843,19 @@ function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, show
         </div>
       )}
 
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 8 }}>
         <div className="lbl">FONT</div>
         <select className="sel" value={el.fontFamily} onChange={e => onUpdate({ fontFamily: e.target.value })}>
           {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
         </select>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>SPAZIATURA LETTERE (px)</span>
+        <input type="number" className="inp" step="0.5" min="-10" max="100"
+          style={{ width: 72, textAlign: 'right' }}
+          value={el.letterSpacing ?? 0}
+          onChange={e => onUpdate({ letterSpacing: parseFloat(e.target.value) || 0 })} />
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
