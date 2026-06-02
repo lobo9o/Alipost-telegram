@@ -524,15 +524,16 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     const finalCoupon   = product.coupon   || textCoupon;
     const finalBoxcoupon = product.coupon ? (product.couponBox ?? false) : false;
 
-    // Prezzi: il testo del post ha sempre la priorità sull'API.
-    // I prezzi originali di AliExpress sono spesso gonfiati artificialmente.
+    // Prezzi: per post singolo il testo ha priorità sull'API (più preciso).
+    // Per post multi-prodotto NON si sovrascrive: il prezzo nel testo potrebbe
+    // riferirsi a un solo prodotto e verrebbe applicato sbagliato a tutti gli altri.
     let finalOriginalPrice   = product.originalPrice ?? 0;
     let finalDiscountedPrice = product.discountedPrice ?? 0;
-    if (textPrice > 0) {
+    if (!isMulti && textPrice > 0) {
       console.log(`[tg-monitor] ${userId} — prezzi da testo: scontato=${textPrice} precedente=${textOriginalPrice || '(non trovato)'} | API: scontato=${finalDiscountedPrice} precedente=${finalOriginalPrice}`);
       finalDiscountedPrice = textPrice;
       if (textOriginalPrice > textPrice) finalOriginalPrice = textOriginalPrice;
-    } else if (textOriginalPrice > 0 && textOriginalPrice > finalDiscountedPrice) {
+    } else if (!isMulti && textOriginalPrice > 0 && textOriginalPrice > finalDiscountedPrice) {
       console.log(`[tg-monitor] ${userId} — prezzo precedente da testo: ${textOriginalPrice} (API aveva orig=${finalOriginalPrice})`);
       finalOriginalPrice = textOriginalPrice;
     }
