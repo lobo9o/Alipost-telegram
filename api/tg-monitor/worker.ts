@@ -74,9 +74,11 @@ async function wasRecentlyQueuedDB(userId: string, productIds: string[], destCha
         if (sameChannel) { console.log(`[tg-monitor] dedup DB: trovato ${hit} in draft (${row.created_at})`); return true; }
       }
     }
-    // 2) Controlla già pubblicati nelle ultime 24h — filtra per canale di destinazione
+    // 2) Controlla già pubblicati nelle ultime 24h — solo per lo stesso canale di destinazione.
+    // Se destChannel è null = non sappiamo il canale → blocca su tutto (comportamento conservativo).
+    // Se destChannel è valorizzato → blocca solo se già pubblicato su QUEL canale specifico.
     const channelFilter = destChannel
-      ? sql`AND (chat_id = ${destChannel} OR chat_id IS NULL OR chat_id = '')`
+      ? sql`AND chat_id = ${destChannel}`
       : sql``;
     const published = await sql<{ product_id: string; published_at: string }[]>`
       SELECT product_id, published_at FROM published_posts

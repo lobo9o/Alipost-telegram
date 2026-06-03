@@ -1428,10 +1428,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             prezzo:           `${currSym}${Number(post.discountedPrice).toFixed(2)}`,
             prezzoPrecedente: `${currSym}${Number(post.originalPrice).toFixed(2)}`,
             sconto:           `-${Number(post.discountPercent)}%`,
-          }).catch(() => null);
+          }).catch((e: any) => { console.error(`[autopost] ❌ generateTemplateImageServer fallita template=${pubTpl.id}:`, e?.message ?? e); return null; });
           if (genImg) {
             post = { ...post, generatedImage: genImg };
-            console.log(`[autopost] immagine generata al publish con template ${pubTpl.id}`);
+            console.log(`[autopost] ✅ immagine generata con template ${pubTpl.id} (${channelTemplateId ? 'canale' : 'default'})`);
+          } else {
+            console.warn(`[autopost] ⚠️ immagine NON generata, uso URL prodotto`);
           }
         }
       }
