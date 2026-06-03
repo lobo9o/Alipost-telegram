@@ -70,8 +70,15 @@ async function wasRecentlyQueuedDB(userId: string, productIds: string[], destCha
       const ids = posts.map((p: any) => normalizeId(String(p.productId ?? p.asin ?? ''))).filter(Boolean);
       const hit = targetIds.find(id => ids.includes(id));
       if (hit) {
-        const sameChannel = destChannel === null || row.dest_channel === null || row.dest_channel === destChannel;
-        if (sameChannel) { console.log(`[tg-monitor] dedup DB: trovato ${hit} in draft (${row.created_at})`); return true; }
+        // "stesso canale" = non sappiamo il target (conservativo) OPPURE canale esatto.
+        // NON includiamo "row.dest_channel === null": un draft senza canale va al default,
+        // non deve bloccare richieste con canale specifico (evita falsi positivi multi-canale).
+        const sameChannel = destChannel === null || row.dest_channel === destChannel;
+        if (sameChannel) {
+          console.log(`[tg-monitor] dedup DB draft: bloccato ${hit} draft_ch=${row.dest_channel ?? 'null'} target_ch=${destChannel ?? 'null'} (${row.created_at})`);
+          return true;
+        }
+        console.log(`[tg-monitor] dedup DB draft: trovato ${hit} ma canale diverso draft_ch=${row.dest_channel ?? 'null'} target_ch=${destChannel ?? 'null'} → no block`);
       }
     }
     // 2) Controlla già pubblicati nelle ultime 24h — solo per lo stesso canale di destinazione.
@@ -482,6 +489,7 @@ async function fetchProduct(userId: string, url: string, headers: Record<string,
 }
 
 async function processMessage(userId: string, urls: string[], autoPublish = false, messageText = '', destChannel: string | null = null) {
+  console.log(`[tg-monitor] ${userId} — processMessage ENTER: autoPublish=${autoPublish} destChannel=${destChannel ?? 'null'} urls=[${urls.join(', ').slice(0, 120)}]`);
   // Se autopost è disabilitato nelle impostazioni globali, non salvare nulla
   const [settingsRow] = await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${userId}`;
   const cfgRaw = settingsRow?.data ?? {};
