@@ -1618,6 +1618,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
       singlePostsToSave.forEach(p => postsApi.create(p).catch(() => {}));
 
       const saved: QueueItem[] = [];
+      let lastCreateError: string | null = null;
       for (const qi of queueItems) {
         try {
           const resp = await autopostApi.create(qi);
@@ -1631,10 +1632,13 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
             saved.push(qi);
           }
         }
-        catch (e) { console.error('[creaPost]', e); }
+        catch (e) {
+          lastCreateError = e instanceof Error ? e.message : String(e);
+          console.error('[creaPost]', e);
+        }
       }
 
-      if (!saved.length) throw new Error('Nessun post salvato nel DB. Riprova.');
+      if (!saved.length) throw new Error(lastCreateError ?? 'Nessun post salvato nel DB. Riprova.');
 
       const firstNewIdx = queue.length;
       sessionStorage.setItem('queueJumpIdx', String(firstNewIdx));
