@@ -489,6 +489,22 @@ async function fetchProduct(userId: string, url: string, headers: Record<string,
 }
 
 async function processMessage(userId: string, urls: string[], autoPublish = false, messageText = '', destChannel: string | null = null) {
+  // ── Dedup URL-level ATOMICO (prima di qualsiasi await) ────────────────────
+  // Node.js è single-thread: nessun await → nessuna race condition tra push+poll.
+  // Due chiamate concorrenti con la stessa URL arrivano qui in sequenza; la seconda
+  // trova già la chiave nel Set e ritorna prima di fare qualsiasi query DB.
+  const urlKey = [...urls].sort().join('|');
+  const urlDedupKey = `${urlKey}:${destChannel ?? ''}`;
+  if (!recentlyProcessedUrls.has(userId)) recentlyProcessedUrls.set(userId, new Set());
+  const urlSeen = recentlyProcessedUrls.get(userId)!;
+  if (urlSeen.has(urlDedupKey)) {
+    console.log(`[tg-monitor] ${userId} — dedup URL skip: ${urlKey.slice(0, 80)}`);
+    return;
+  }
+  urlSeen.add(urlDedupKey);
+  // TTL breve (5 min): blocca solo duplicati rapidi push+poll, permette retry in caso di errore
+  setTimeout(() => urlSeen.delete(urlDedupKey), 5 * 60 * 1000);
+
   console.log(`[tg-monitor] ${userId} — processMessage ENTER: autoPublish=${autoPublish} destChannel=${destChannel ?? 'null'} urls=[${urls.join(', ').slice(0, 120)}]`);
   // Se autopost è disabilitato nelle impostazioni globali, non salvare nulla
   const [settingsRow] = await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${userId}`;
@@ -504,20 +520,6 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     'x-internal-user-id': userId,
   };
   if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
-
-  // ── Dedup URL-level (prima del fetch): stessa URL+canale già vista → skip ─
-  // Gestisce repost/forward identici che arrivano con msgId diversi.
-  const urlKey = [...urls].sort().join('|');
-  const urlDedupKey = `${urlKey}:${destChannel ?? ''}`;
-  if (!recentlyProcessedUrls.has(userId)) recentlyProcessedUrls.set(userId, new Set());
-  const urlSeen = recentlyProcessedUrls.get(userId)!;
-  if (urlSeen.has(urlDedupKey)) {
-    console.log(`[tg-monitor] ${userId} — dedup URL skip: ${urlKey.slice(0, 80)}`);
-    return;
-  }
-  urlSeen.add(urlDedupKey);
-  // TTL breve (5 min): blocca solo duplicati rapidi push+poll, permette retry in caso di errore
-  setTimeout(() => urlSeen.delete(urlDedupKey), 5 * 60 * 1000);
 
   const { getLayoutAndKeyboard, templateId } = await getUserLayouts(userId);
   const isMulti = urls.length > 1;
