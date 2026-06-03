@@ -175,12 +175,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const tmpl = tmplResult as Template[] | null;
       if (tmpl !== null) {
         if (tmpl.length > 0) {
-          // Usa il primo template (più recente = quello configurato dall'utente)
-          const first = tmpl[0];
-          const base = { ...makeDefaultTemplate(first.id), ...first };
-          if ((first as any).store && !first.storeAmazon) base.storeAmazon = (first as any).store;
-          if ((first as any).store && !first.storeAliexpress) base.storeAliexpress = (first as any).store;
-          setTemplates([base]);
+          const loaded = tmpl.map(t => {
+            const base = { ...makeDefaultTemplate(t.id), ...t };
+            if ((t as any).store && !t.storeAmazon) base.storeAmazon = (t as any).store;
+            if ((t as any).store && !t.storeAliexpress) base.storeAliexpress = (t as any).store;
+            return base;
+          });
+          setTemplates(loaded);
           templateFromDB.current = true;
         } else {
           // Nessun template nel DB: crea e usa l'id assegnato dal server (UUID)

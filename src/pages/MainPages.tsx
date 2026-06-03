@@ -2541,7 +2541,13 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const item = queue[safeIdx];
   const isMultiPost = item?.tipo === 'multi';
   const p = item?.posts[0] as CreatedPost | undefined;
-  const template = p ? templates.find(t => t.id === p.templateId) : undefined;
+  const queueItemChannel = item ? (itemChannels[item.id] ?? '') : '';
+  const queueChannelTplId = queueItemChannel ? (settings.channelTemplates?.[queueItemChannel] ?? '') : '';
+  const template = (() => {
+    if (!p) return undefined;
+    const chTpl = queueChannelTplId ? templates.find(t => t.id === queueChannelTplId) : null;
+    return chTpl ?? templates.find(t => t.id === p.templateId);
+  })();
   const layout = p ? layouts.find(l => l.id === p.layoutId) : undefined;
   const qCurrency = p?.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
   const previewText = layout && p
