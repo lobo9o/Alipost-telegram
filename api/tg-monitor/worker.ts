@@ -45,37 +45,45 @@ function isActiveHours(): boolean {
   return h < 1 || h >= 6;
 }
 
-// Dedup in-memory: productId già processati per userId → auto-cleared dopo 24h.
-// Risolve la race condition tra due canali che pubblicano lo stesso prodotto
-// quasi in simultanea: check+add sono sincroni → atomici nel single-thread Node.js.
+// Dedup in-memory: chiave "productId:destChannel" → canali diversi possono pubblicare lo stesso prodotto.
+// check+add sincroni → atomici nel single-thread Node.js.
 const recentlyProcessedProducts = new Map<string, Set<string>>();
 
-// Dedup prodotti: controlla sul DB se gli stessi productId sono già in coda
-// (resistente ai riavvii PM2, a differenza della precedente versione in-memory)
-async function wasRecentlyQueuedDB(userId: string, productIds: string[]): Promise<boolean> {
+// Dedup URL-level: blocca la stessa URL prima ancora del fetch prodotto (gestisce repost/forward identici).
+const recentlyProcessedUrls = new Map<string, Set<string>>();
+
+// Dedup prodotti: controlla sul DB se gli stessi productId sono già stati pubblicati/accodati
+// per lo stesso canale di destinazione nelle ultime 24h (PM2-restart safe).
+async function wasRecentlyQueuedDB(userId: string, productIds: string[], destChannel: string | null = null): Promise<boolean> {
   if (!productIds.length) return false;
   const normalizeId = (s: string) => s.trim().toUpperCase();
   const targetIds = productIds.map(normalizeId).filter(Boolean);
   if (!targetIds.length) return false;
   try {
-    // 1) Controlla draft in coda (non ancora pubblicati)
-    const drafts = await sql<{ posts: unknown; created_at: string }[]>`
-      SELECT posts, created_at FROM autopost_queue
+    // 1) Controlla draft in coda — blocca solo se stesso canale (o entrambi senza canale)
+    const drafts = await sql<{ posts: unknown; created_at: string; dest_channel: string | null }[]>`
+      SELECT posts, created_at, dest_channel FROM autopost_queue
       WHERE user_id = ${userId} AND status = 'draft'
     `;
     for (const row of drafts) {
       const posts: any[] = typeof row.posts === 'string' ? JSON.parse(row.posts) : (row.posts as any[]) ?? [];
       const ids = posts.map((p: any) => normalizeId(String(p.productId ?? p.asin ?? ''))).filter(Boolean);
       const hit = targetIds.find(id => ids.includes(id));
-      if (hit) { console.log(`[tg-monitor] dedup DB: trovato ${hit} in draft (${row.created_at})`); return true; }
+      if (hit) {
+        const sameChannel = destChannel === null || row.dest_channel === null || row.dest_channel === destChannel;
+        if (sameChannel) { console.log(`[tg-monitor] dedup DB: trovato ${hit} in draft (${row.created_at})`); return true; }
+      }
     }
-    // 2) Controlla già pubblicati nelle ultime 24h (la coda li elimina dopo la publish,
-    //    quindi bisogna cercare in published_posts)
+    // 2) Controlla già pubblicati nelle ultime 24h — filtra per canale di destinazione
+    const channelFilter = destChannel
+      ? sql`AND (chat_id = ${destChannel} OR chat_id IS NULL OR chat_id = '')`
+      : sql``;
     const published = await sql<{ product_id: string; published_at: string }[]>`
       SELECT product_id, published_at FROM published_posts
       WHERE user_id = ${userId}
         AND published_at > NOW() - INTERVAL '24 hours'
         AND product_id = ANY(${targetIds})
+        ${channelFilter}
       LIMIT 1
     `;
     if (published.length) {
@@ -487,6 +495,19 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   };
   if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
 
+  // ── Dedup URL-level (prima del fetch): stessa URL+canale già vista → skip ─
+  // Gestisce repost/forward identici che arrivano con msgId diversi.
+  const urlKey = [...urls].sort().join('|');
+  const urlDedupKey = `${urlKey}:${destChannel ?? ''}`;
+  if (!recentlyProcessedUrls.has(userId)) recentlyProcessedUrls.set(userId, new Set());
+  const urlSeen = recentlyProcessedUrls.get(userId)!;
+  if (urlSeen.has(urlDedupKey)) {
+    console.log(`[tg-monitor] ${userId} — dedup URL skip: ${urlKey.slice(0, 80)}`);
+    return;
+  }
+  urlSeen.add(urlDedupKey);
+  setTimeout(() => urlSeen.delete(urlDedupKey), 24 * 60 * 60 * 1000);
+
   const { getLayoutAndKeyboard, templateId } = await getUserLayouts(userId);
   const isMulti = urls.length > 1;
 
@@ -496,24 +517,25 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
 
   const productIds = products.map((p: any) => (p.asin ?? p.productId ?? '').toString()).filter(Boolean);
 
-  // ── Dedup in-memory (atomico nel single-thread Node.js) ──────────────────
-  // Nessun await tra check e add → nessun'altra callback può intromettersi.
+  // ── Dedup in-memory per-canale (atomico nel single-thread Node.js) ───────
+  // Chiave "productId:destChannel" → canali diversi possono pubblicare lo stesso prodotto.
   if (productIds.length > 0) {
     if (!recentlyProcessedProducts.has(userId)) recentlyProcessedProducts.set(userId, new Set());
     const userSeen = recentlyProcessedProducts.get(userId)!;
-    if (productIds.some(id => userSeen.has(id))) {
-      console.log(`[tg-monitor] ${userId} — dedup in-memory skip: ${productIds.join(',')}`);
+    const chKey = (id: string) => `${id}:${destChannel ?? ''}`;
+    if (productIds.some(id => userSeen.has(chKey(id)))) {
+      console.log(`[tg-monitor] ${userId} — dedup in-memory skip: ${productIds.join(',')} ch=${destChannel ?? 'default'}`);
       return;
     }
     productIds.forEach(id => {
-      userSeen.add(id);
-      setTimeout(() => userSeen.delete(id), 24 * 60 * 60 * 1000);
+      userSeen.add(chKey(id));
+      setTimeout(() => userSeen.delete(chKey(id)), 24 * 60 * 60 * 1000);
     });
   }
 
-  // ── Dedup DB (backup post-riavvio PM2) ───────────────────────────────────
-  if (productIds.length > 0 && await wasRecentlyQueuedDB(userId, productIds)) {
-    console.log(`[tg-monitor] ${userId} — dedup DB skip: ${productIds.join(',')}`);
+  // ── Dedup DB per-canale (backup post-riavvio PM2) ─────────────────────────
+  if (productIds.length > 0 && await wasRecentlyQueuedDB(userId, productIds, destChannel)) {
+    console.log(`[tg-monitor] ${userId} — dedup DB skip: ${productIds.join(',')} ch=${destChannel ?? 'default'}`);
     return;
   }
 

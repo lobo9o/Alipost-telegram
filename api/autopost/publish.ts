@@ -1636,9 +1636,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
       // Usa dest_channel dell'item se impostato, altrimenti il primo canale configurato
       // CHANNEL_OVERRIDE (env dev) ha sempre precedenza assoluta
+      const destCh = queueItem?.dest_channel as string | null | undefined;
       const channel = channelOverride
         ? channels[0]
-        : (queueItem?.dest_channel as string | null | undefined) || channels[0];
+        : destCh || channels[0];
+      if (!channelOverride && !destCh && channels.length > 1) {
+        console.log(`[autopost] ⚠️ dest_channel non impostato per item ${queueItem?.id} — uso canale default ${channels[0]}`);
+      }
 
       // Per post multipli senza immagine composita: genera griglia server-side
       if (isMulti && !post.generatedImage) {
