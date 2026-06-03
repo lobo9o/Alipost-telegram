@@ -48,10 +48,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // POST — create new template
-  const { id: _clientId, ...config } = req.body ?? {};
+  const { id: clientId, ...config } = req.body ?? {};
+  const newId = (clientId && typeof clientId === 'string' && clientId.trim()) ? clientId.trim() : null;
   const [row] = await sql`
     INSERT INTO templates (id, user_id, nome, tipo, config)
-    VALUES (gen_random_uuid()::text, ${userId}, 'Template', 'normal', ${sql.json(config)})
+    VALUES (COALESCE(${newId}, gen_random_uuid()::text), ${userId}, 'Template', 'normal', ${sql.json(config)})
     RETURNING id, config
   `;
   res.status(201).json(parseConfig((row as any).config, (row as any).id));

@@ -1025,11 +1025,16 @@ function TemplateSection() {
   };
 
   const createTpl = () => {
-    const newId = `tpl_${Date.now()}`;
-    const newTpl: Template = { ...tpl, id: newId, name: `${tpl.name ? tpl.name + ' (copia)' : 'Nuovo Template'}` };
+    const tempId = `tpl_${Date.now()}`;
+    const newTpl: Template = { ...tpl, id: tempId, name: `${tpl.name ? tpl.name + ' (copia)' : 'Nuovo Template'}` };
     setTemplates(ts => [...ts, newTpl]);
-    setSelectedTplId(newId);
-    templatesApi.create(newTpl).catch(() => {});
+    setSelectedTplId(tempId);
+    templatesApi.create(newTpl).then(created => {
+      if (created.id !== tempId) {
+        setTemplates(ts => ts.map(t => t.id === tempId ? { ...t, id: created.id } : t));
+        setSelectedTplId(created.id);
+      }
+    }).catch(() => {});
   };
 
   const deleteTpl = (id: string) => {

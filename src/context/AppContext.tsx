@@ -197,7 +197,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // else: API fallita → templateFromDB resta false, il template di default in stato è solo visivo
       const rawS = s as AppSettings & { _publishedCount?: number };
       setPublishedCount(rawS._publishedCount ?? 0);
-      setSettings(mergeSettings(rawS));
+      const mergedS = mergeSettings(rawS);
+      // Pulisce channelTemplates che puntano a template non presenti nel DB
+      if (tmpl !== null && tmpl.length > 0) {
+        const validIds = new Set((tmpl as Template[]).map(t => t.id));
+        const ct = mergedS.channelTemplates ?? {};
+        const cleaned: Record<string, string> = {};
+        let changed = false;
+        for (const [ch, tplId] of Object.entries(ct)) {
+          if (validIds.has(tplId)) cleaned[ch] = tplId;
+          else changed = true;
+        }
+        if (changed) {
+          mergedS.channelTemplates = cleaned;
+          settingsApi.save(mergedS).catch(() => {});
+        }
+      }
+      setSettings(mergedS);
       if (pub.length > 0) setPublished(pub as PublishedPost[]);
       setLoaded(true);
     });
