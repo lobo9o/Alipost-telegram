@@ -122,6 +122,9 @@ export function initTgMonitor(port: number) {
   }, 5 * 60 * 1000);
 }
 
+// Debounce: più chiamate ravvicinate (es. swap di due canali) producono un solo reload
+const reloadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export function reloadUser(userId: string) {
   const isDevInstance = serverPort === 3001;
   const isDevUser = userId.endsWith('_dev');
@@ -129,10 +132,17 @@ export function reloadUser(userId: string) {
     console.log(`[tg-monitor] reloadUser ${userId} ignorato: non appartiene a questa istanza (${isDevInstance ? 'dev' : 'stable'})`);
     return;
   }
-  // Await stopUser prima di startUser: evita race condition tra vecchio poll e nuovo
-  stopUser(userId).then(() =>
-    startUser(userId).catch(e => console.error(`[tg-monitor] errore reload ${userId}:`, e))
-  );
+  // Cancella un reload già pendente per questo utente
+  const existing = reloadDebounceTimers.get(userId);
+  if (existing) clearTimeout(existing);
+  // Aspetta 300ms: se arrivano più PATCH ravvicinate (swap canali) parte un solo reload
+  const t = setTimeout(() => {
+    reloadDebounceTimers.delete(userId);
+    stopUser(userId).then(() =>
+      startUser(userId).catch(e => console.error(`[tg-monitor] errore reload ${userId}:`, e))
+    );
+  }, 300);
+  reloadDebounceTimers.set(userId, t);
 }
 
 async function startAll() {
