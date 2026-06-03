@@ -3,7 +3,7 @@ import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage } from 'telegram/events/index.js';
 
-const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|amzn\.eu|aliexpress\.com|s\.click\.aliexpress\.com|a\.aliexpress\.com)[^\s<>"')]+/gi;
+const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|amzn\.eu|amzlink\.to|aliexpress\.com|s\.click\.aliexpress\.com|a\.aliexpress\.com)[^\s<>"')]+/gi;
 
 function extractCouponFromText(text: string): { couponCode: string; textPrice: number; textOriginalPrice: number; textCountry: string } {
   // Coupon: "Coupon: ZSCADDR6" / "Coupon Sconto: SSIT12" / "✂️ Coupon➡️ H45Z8AJZ" / "codice: X" / "✂ ABCD1234"
