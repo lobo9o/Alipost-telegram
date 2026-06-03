@@ -59,9 +59,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
   const postsForDb = posts as any[];
 
-  // Verifica prezzo prima di accodare (solo post Amazon singoli — AliExpress non controllato)
+  // Verifica prezzo prima di accodare (solo post Amazon singoli — AliExpress non controllato).
+  // Gli item immediate=true sono catturati in tempo reale dal tg-monitor: il prezzo nel messaggio
+  // può essere un prezzo coupon (diverso dal prezzo API) → non bloccare.
   const firstPost = postsForDb[0];
-  if (postsForDb.length === 1 && firstPost?.platform !== 'aliexpress' && firstPost?.productId) {
+  if (postsForDb.length === 1 && firstPost?.platform !== 'aliexpress' && firstPost?.productId && !immediate) {
     const [cfgRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`.catch(() => [null]);
     const cfg = typeof cfgRow?.data === 'string' ? JSON.parse(cfgRow.data) : (cfgRow?.data ?? {});
     const priceCheck = await checkPostPrice(firstPost, cfg).catch(() => ({ valid: true as const }));
