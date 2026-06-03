@@ -902,9 +902,12 @@ function parseTemplateCfg(row: any): Record<string, any> | null {
 }
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
-  // Vercel invia CRON_SECRET come Bearer token nell'header Authorization
+  // Vercel invia CRON_SECRET come Bearer token nell'header Authorization.
+  // Richieste da localhost (worker interno) sono sempre autorizzate.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers['authorization'] !== `Bearer ${cronSecret}`) {
+  const remoteIp: string = (req as any).ip ?? (req.socket as any)?.remoteAddress ?? '';
+  const isLocalhost = remoteIp === '127.0.0.1' || remoteIp === '::1' || remoteIp === '::ffff:127.0.0.1';
+  if (cronSecret && !isLocalhost && req.headers['authorization'] !== `Bearer ${cronSecret}`) {
     res.status(401).json({ error: 'unauthorized' }); return;
   }
 
