@@ -2028,7 +2028,15 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
-  const [itemChannels, setItemChannels] = useState<Record<string, string>>({});
+  // Inizializza dal dest_channel salvato nel DB (persiste ai reload di pagina)
+  const [itemChannels, setItemChannels] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const qi of queue) {
+      const ch = (qi as any).destChannel;
+      if (ch) init[qi.id] = ch;
+    }
+    return init;
+  });
   const [priceWarnings, setPriceWarnings] = useState<string[]>([]);
   const [multiEditSelected, setMultiEditSelected] = useState<Set<string>>(new Set());
   const [splittingId, setSplittingId] = useState<string | null>(null);
