@@ -2811,7 +2811,11 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                 {settings.channels.filter(Boolean).length > 1 && (
                   <select className="sel" style={{ marginBottom: 6, fontSize: 13 }}
                     value={itemChannels[item.id] ?? ''}
-                    onChange={e => setItemChannels(prev => ({ ...prev, [item.id]: e.target.value }))}>
+                    onChange={e => {
+                      const ch = e.target.value;
+                      setItemChannels(prev => ({ ...prev, [item.id]: ch }));
+                      autopostApi.update(item.id, { destChannel: ch } as any).catch(() => {});
+                    }}>
                     <option value="">📤 {settings.channels.filter(Boolean)[0]} (default)</option>
                     {settings.channels.filter(Boolean).slice(1).map((ch: string) => (
                       <option key={ch} value={ch}>📤 {ch}</option>

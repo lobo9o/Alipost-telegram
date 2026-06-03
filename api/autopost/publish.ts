@@ -1408,7 +1408,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // Si applica ai post singoli senza generatedImage (es. da tg-monitor, o auto-ricerca
     // senza template configurato al momento della creazione).
     // Per i multi-post la composita viene generata più avanti con generateMultiImageServer.
-    if (!isMulti && !post.generatedImage && post.image && String(post.image).startsWith('http')
+    // Rigenera se: nessuna immagine pre-generata, OPPURE il canale ha un template specifico
+    // (l'immagine pre-generata potrebbe essere stata creata con il template del canale sbagliato).
+    if (!isMulti && (!post.generatedImage || !!channelTemplateId) && post.image && String(post.image).startsWith('http')
         && Number(post.discountedPrice ?? 0) > 0) {
       const CSYM: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
       const currSym = post.platform === 'aliexpress'

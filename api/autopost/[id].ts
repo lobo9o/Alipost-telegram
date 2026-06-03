@@ -15,10 +15,25 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   const body = req.body ?? {};
-  const hasPosts     = body.posts     !== undefined;
-  const hasStatus    = body.status    !== undefined;
-  const hasScheduled = body.scheduled !== undefined;
-  const hasSilenzioso = body.silenzioso !== undefined;
+  const hasPosts      = body.posts        !== undefined;
+  const hasStatus     = body.status       !== undefined;
+  const hasScheduled  = body.scheduled    !== undefined;
+  const hasSilenzioso = body.silenzioso   !== undefined;
+  const hasDestChannel = body.destChannel !== undefined;
+
+  // Aggiorna solo dest_channel — usato dalla QueuePage quando l'utente seleziona un canale
+  if (hasDestChannel && !hasPosts && !hasStatus && !hasScheduled && !hasSilenzioso) {
+    const destCh = body.destChannel === '' ? null : (body.destChannel ?? null);
+    const rows = await sql`
+      UPDATE autopost_queue SET dest_channel = ${destCh}
+      WHERE id = ${id} AND user_id = ${userId}
+      RETURNING id, posts, status, scheduled, silenzioso, dest_channel, created_at AS "createdAt"
+    `;
+    if (!rows[0]) { res.status(404).json({ error: 'Not found' }); return; }
+    const r = rows[0] as any;
+    res.json({ ...r, posts: typeof r.posts === 'string' ? JSON.parse(r.posts) : r.posts });
+    return;
+  }
 
   // Manteniamo generatedImage nel DB — serve al cron per pubblicare con overlay
   // NB: checkAndMarkHistoricalLow NON viene chiamato qui: l'utente può sovrascrivere
