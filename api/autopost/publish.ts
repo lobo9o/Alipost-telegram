@@ -1426,7 +1426,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       if (pubTpl) {
         const pubCfg = parseTemplateCfg(pubTpl);
         if (pubCfg) {
-          console.log(`[autopost] template ${pubTpl.id}${channelTemplateId ? ' (specifico canale)' : ''} prezzo.fontFamily=${pubCfg.prezzo?.fontFamily}`);
+          console.log(`[autopost] template ${pubTpl.id}${channelTemplateId ? ' (specifico canale)' : ''} prezzo.fontFamily=${pubCfg.prezzo?.fontFamily} bgColor=${pubCfg.bgColor ?? '(no)'} overlay.enabled=${pubCfg.overlay?.enabled ?? false} overlay.src=${pubCfg.overlay?.src ? pubCfg.overlay.src.slice(0, 60) : '(no)'}`);
           const genImg = await generateTemplateImageServer(pubCfg, String(post.image), String(post.platform ?? 'amazon'), {
             prezzo:           `${currSym}${Number(post.discountedPrice).toFixed(2)}`,
             prezzoPrecedente: `${currSym}${Number(post.originalPrice).toFixed(2)}`,
