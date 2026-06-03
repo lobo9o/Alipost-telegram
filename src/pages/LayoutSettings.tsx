@@ -946,6 +946,7 @@ function TemplateSection() {
   const [showInfo, setShowInfo] = useState(false);
   const [previewPlatform, setPreviewPlatform] = useState<'amazon' | 'aliexpress'>('amazon');
   const [arrowStep, setArrowStep] = useState(1);
+  const creatingTplRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestTplRef = useRef<Template | null>(null);
 
@@ -1025,6 +1026,8 @@ function TemplateSection() {
   };
 
   const createTpl = () => {
+    if (creatingTplRef.current) return;
+    creatingTplRef.current = true;
     const tempId = `tpl_${Date.now()}`;
     const newTpl: Template = { ...tpl, id: tempId, name: `${tpl.name ? tpl.name + ' (copia)' : 'Nuovo Template'}` };
     setTemplates(ts => [...ts, newTpl]);
@@ -1034,7 +1037,7 @@ function TemplateSection() {
         setTemplates(ts => ts.map(t => t.id === tempId ? { ...t, id: created.id } : t));
         setSelectedTplId(created.id);
       }
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => { creatingTplRef.current = false; });
   };
 
   const deleteTpl = (id: string) => {
