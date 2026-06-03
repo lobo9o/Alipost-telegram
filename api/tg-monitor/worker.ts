@@ -506,7 +506,8 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     return;
   }
   urlSeen.add(urlDedupKey);
-  setTimeout(() => urlSeen.delete(urlDedupKey), 24 * 60 * 60 * 1000);
+  // TTL breve (5 min): blocca solo duplicati rapidi push+poll, permette retry in caso di errore
+  setTimeout(() => urlSeen.delete(urlDedupKey), 5 * 60 * 1000);
 
   const { getLayoutAndKeyboard, templateId } = await getUserLayouts(userId);
   const isMulti = urls.length > 1;

@@ -1397,6 +1397,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       : (queueItem?.dest_channel as string | null | undefined) || channels[0];
     const channelTemplates = (cfg.channelTemplates ?? {}) as Record<string, string>;
     const channelTemplateId = channelTemplates[earlyChannel] ?? '';
+    console.log(`[autopost] canale=${earlyChannel} channelTemplateId=${channelTemplateId || '(nessuno)'} allChannelTemplates=${JSON.stringify(channelTemplates)}`);
 
     // ── Genera immagine dal template al momento della pubblicazione ───────────
     // Si applica ai post singoli senza generatedImage (es. da tg-monitor, o auto-ricerca
@@ -1417,6 +1418,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               AND tipo NOT IN ('historical_low')
             ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
           `.catch(() => [null]);
+      console.log(`[autopost] template lookup: channelTemplateId=${channelTemplateId || 'auto'} → pubTpl=${pubTpl?.id ?? 'non trovato'}`);
 
       if (pubTpl) {
         const pubCfg = parseTemplateCfg(pubTpl);
