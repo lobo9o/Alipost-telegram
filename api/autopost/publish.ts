@@ -1024,7 +1024,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         : sql``;
 
       const [candidate] = await sql`
-        SELECT id, posts, silenzioso, dest_channel FROM autopost_queue
+        SELECT id, posts, silenzioso, dest_channel, COALESCE(immediate, false) AS immediate FROM autopost_queue
         WHERE user_id = ${userId} AND status = 'draft' ${excludeClause}
         ORDER BY COALESCE(immediate, false) DESC, created_at ASC LIMIT 1
       `;
@@ -1053,8 +1053,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         }
       }
 
-      // Verifica prezzo prima di bloccare l'item (solo per post singoli, non aliexpress)
-      if (!isMulti && candidatePost.platform !== 'aliexpress') {
+      // Verifica prezzo prima di bloccare l'item (solo per post singoli, non aliexpress, non immediate).
+      // Gli item immediate=true sono catturati in tempo reale dal tg-monitor: il prezzo era valido
+      // al momento della pubblicazione nel canale sorgente (coupon, offerta flash, ecc.).
+      if (!isMulti && candidatePost.platform !== 'aliexpress' && !candidate.immediate) {
         const priceCheck = await checkPostPrice(candidatePost, cfg);
         if (!priceCheck.valid) {
           console.log(`[autopost] prezzo scaduto userId=${userId} postId=${candidatePost.id}: ${priceCheck.reason}`);
