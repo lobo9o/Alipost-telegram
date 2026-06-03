@@ -750,6 +750,7 @@ const FONTS = [
   'Milano',
   'Montserrat',
   'Montserrat Black Italic',
+  'Montserrat ExtraBold Italic',
   'Open Sans',
   'Open Sans Bold',
   'The Blacklist',
