@@ -237,11 +237,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadProfileData(activeProfileId).then(({ q, t, l, kb, s, pub, tmplResult }) => {
       const isPrimary = !activeProfileId.includes(':');
       applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
-      // Per profili secondari: _primaryChannels arriva già nella risposta settings
       if (!isPrimary) {
         const pc = (s as any)?._primaryChannels;
         if (Array.isArray(pc) && pc.length > 0) {
           setAllChannels(pc.filter(Boolean));
+        } else {
+          // Nessun canale primario trovato: torna al profilo principale
+          const base = activeProfileId.split(':')[0];
+          setActiveProfileId(base);
         }
       }
       setLoaded(true);
@@ -263,6 +266,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const pc = (s as any)?._primaryChannels;
         if (Array.isArray(pc) && pc.length > 0) {
           setAllChannels(pc.filter(Boolean));
+        } else {
+          const base = activeProfileId.split(':')[0];
+          setActiveProfileId(base);
         }
       }
       setLoaded(true);
