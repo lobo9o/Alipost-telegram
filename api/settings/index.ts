@@ -83,10 +83,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       SELECT COUNT(*)::int AS cnt FROM published_posts WHERE user_id = ${userId}
     `.catch(() => [{ cnt: 0 }]);
 
-    // Inietta sempre _primaryChannels: il server restituisce sempre dati del profilo primario,
-    // quindi i canali nella risposta sono quelli del primario. AppContext li usa per validare
-    // il canale secondario attivo nel ChannelSwitcher.
-    const primaryChannels = Array.isArray(merged.channels) ? (merged as any).channels.filter(Boolean) : [];
+    // _primaryChannels: sempre i canali del profilo primario, usati dal ChannelSwitcher
+    // per sapere tra quali canali può ciclare (anche quando si è su un profilo secondario).
+    let primaryChannels: string[];
+    if (isSecondary && primaryId) {
+      const [pRow] = await sql`SELECT data FROM settings WHERE user_id = ${primaryId}`.catch(() => [null]);
+      const pData = pRow ? (typeof pRow.data === 'string' ? JSON.parse(pRow.data) : pRow.data) as Record<string, any> : {};
+      primaryChannels = Array.isArray(pData.channels) ? pData.channels.filter(Boolean) : [];
+    } else {
+      primaryChannels = Array.isArray(merged.channels) ? (merged as any).channels.filter(Boolean) : [];
+    }
 
     res.json({
       ...merged,
