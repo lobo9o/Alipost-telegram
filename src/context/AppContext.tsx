@@ -227,7 +227,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAllChannels(mergedS.channels.filter(Boolean));
     }
 
-    if (pub.length > 0) setPublished(pub as PublishedPost[]);
+    setPublished(pub as PublishedPost[]);
   }, []);
 
   // Caricamento iniziale
