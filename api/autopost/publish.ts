@@ -403,8 +403,12 @@ async function generateTemplateImageServer(
           }
 
           const fsDec = Math.round(fs * scale);
-          ctx.textBaseline = 'middle';
+          ctx.textBaseline = 'alphabetic';
           const midY = boxY + boxHpx / 2;
+          // baseline = midY + capH/2 → visual center of caps at midY (matches CSS align-items:center)
+          ctx.font = fontStr(fs);
+          const capH = (ctx.measureText('H') as any).actualBoundingBoxAscent ?? Math.round(fs * 0.72);
+          const baselineY = Math.round(midY + capH / 2);
 
           // calcola larghezza totale per centrare
           let totalW: number;
@@ -426,9 +430,9 @@ async function generateTemplateImageServer(
             ctx.font = fontStr(fs);
             if (el.strokeEnabled && el.strokeWidth > 0) {
               ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-              ctx.strokeText(text, sx, midY);
+              ctx.strokeText(text, sx, baselineY);
             }
-            ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, sx, midY);
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, sx, baselineY);
             if (el.strikethrough) {
               const strkColor = el.strikethroughColor || el.color || '#fff';
               ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
@@ -439,26 +443,26 @@ async function generateTemplateImageServer(
             let curX = sx;
             if (el.strokeEnabled && el.strokeWidth > 0) {
               ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-              ctx.strokeText(parts.main, curX, midY);
+              ctx.strokeText(parts.main, curX, baselineY);
             }
-            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.main, curX, midY);
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.main, curX, baselineY);
             curX += ctx.measureText(parts.main).width;
 
             ctx.font = fontStr(fsDec);
             if (el.strokeEnabled && el.strokeWidth > 0) {
               ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-              ctx.strokeText(parts.dec, curX, midY);
+              ctx.strokeText(parts.dec, curX, baselineY);
             }
-            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.dec, curX, midY);
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.dec, curX, baselineY);
             curX += ctx.measureText(parts.dec).width;
 
             if (parts.suffix) {
               ctx.font = fontStr(fs);
               if (el.strokeEnabled && el.strokeWidth > 0) {
                 ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-                ctx.strokeText(parts.suffix, curX, midY);
+                ctx.strokeText(parts.suffix, curX, baselineY);
               }
-              ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.suffix, curX, midY);
+              ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.suffix, curX, baselineY);
             }
             if (el.strikethrough) {
               const strkColor = el.strikethroughColor || el.color || '#fff';
@@ -645,9 +649,11 @@ async function generateTemplateImageServer(
           ? Math.round(parts.main.length * fs * 0.60 + parts.dec.length * fsDec * 0.60 + (parts.suffix?.length ?? 0) * fs * 0.60)
           : Math.round(combinedText.length * fs * 0.60);
         const cx = boxX + Math.round((boxWpx - estW) / 2);
-        // centra verticalmente: dominant-baseline="middle" → y = centro riquadro
+        // baseline alfabetica a midY + 0.36*fs → centro visivo delle maiuscole a midY
+        // evita dominant-baseline (non supportato da librsvg vecchio su Pi)
         const midY = boxY + Math.round(boxHpx / 2);
-        const common = `x="${cx}" y="${midY}" dominant-baseline="middle" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="start"${lsAttr}`;
+        const svgBaseY = midY + Math.round(fs * 0.36);
+        const common = `x="${cx}" y="${svgBaseY}" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="start"${lsAttr}`;
         if (!parts) {
           const safe = safeStr(text);
           if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
