@@ -81,7 +81,7 @@ export interface TextEl {
   enabled: boolean;
   x: number;
   y: number;
-  fontSize: number;
+  fontSize: number;          // usato solo da template legacy (senza boxW/boxH)
   fontFamily: string;
   bold: boolean;
   color: string;
@@ -90,7 +90,7 @@ export interface TextEl {
   strokeWidth: number;
   strikethrough: boolean;
   strikethroughColor: string;
-  textAnchor: 'left' | 'right' | 'center';
+  textAnchor: 'left' | 'right' | 'center'; // legacy
   letterSpacing?: number;
   text: string;
   currencyPos?: 'before' | 'after';
@@ -98,6 +98,9 @@ export interface TextEl {
   decimalSep?: '.' | ',';
   hidePercent?: boolean;
   hideMinus?: boolean;
+  // riquadro auto-fit (nuovo sistema — sostituisce fontSize + textAnchor)
+  boxW?: number;  // larghezza riquadro in % del canvas
+  boxH?: number;  // altezza riquadro in % del canvas
 }
 
 export interface ImgEl {

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, KeyboardLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
@@ -468,9 +468,76 @@ function ZoomControls({ value, onChange, min = 5, max = 100, label = 'DIMENSIONE
   );
 }
 
-export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrowMove }: {
+function measureFitFontSize(text: string, boxWpx: number, maxFs: number, fontFamily: string, bold: boolean): number {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return maxFs;
+    let fs = maxFs;
+    ctx.font = `${bold ? 'bold ' : ''}${fs}px ${fontFamily}, Impact, sans-serif`;
+    while (fs > 6 && ctx.measureText(text).width > boxWpx * 0.92) {
+      fs -= 0.5;
+      ctx.font = `${bold ? 'bold ' : ''}${fs}px ${fontFamily}, Impact, sans-serif`;
+    }
+    return Math.round(fs * 10) / 10;
+  } catch { return maxFs; }
+}
+
+function FitTextBox({ el, text, containerW, containerH, isActive, showBox }: {
+  el: TextEl; text: string; containerW: number; containerH: number;
+  isActive?: boolean; showBox?: boolean;
+}) {
+  const boxWpx = ((el.boxW ?? 40) / 100) * containerW;
+  const boxHpx = ((el.boxH ?? 12) / 100) * containerH;
+  const maxFs  = boxHpx * 0.82;
+  const [fontSize, setFontSize] = useState(maxFs);
+
+  useLayoutEffect(() => {
+    setFontSize(measureFitFontSize(text, boxWpx, maxFs, el.fontFamily, el.bold));
+  }, [el.boxW, el.boxH, el.fontFamily, el.bold, text, containerW, containerH]);
+
+  const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
+  const decMatch = scale < 1 ? text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/) : null;
+  const content = decMatch
+    ? (<>
+        <span style={{ verticalAlign: 'bottom' }}>{decMatch[1]}</span>
+        <span style={{ fontSize: `${scale}em`, verticalAlign: 'bottom' }}>{decMatch[2]}{decMatch[3]}</span>
+      </>)
+    : text;
+
+  return (
+    <div style={{
+      position: 'absolute',
+      left: `${el.x}%`, top: `${el.y}%`,
+      width: `${el.boxW ?? 40}%`, height: `${el.boxH ?? 12}%`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
+      boxSizing: 'border-box',
+      border: showBox
+        ? isActive
+          ? '2px dashed rgba(99,102,241,0.9)'
+          : '1px dashed rgba(255,255,255,0.2)'
+        : undefined,
+      pointerEvents: 'none',
+    }}>
+      <span style={{
+        fontSize: `${fontSize}px`,
+        lineHeight: 1,
+        fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
+        color: el.color,
+        textDecoration: el.strikethrough ? `line-through ${el.strikethroughColor || el.color}` : 'none',
+        WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * containerW / 512}px ${el.strokeColor}` : undefined,
+        whiteSpace: 'nowrap',
+        letterSpacing: el.letterSpacing ? `${el.letterSpacing * containerW / 512}px` : undefined,
+      }}>{content}</span>
+    </div>
+  );
+}
+
+export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrowMove, activeTextKey }: {
   tpl: Template; terminata?: TerminataConfig; platform?: 'amazon' | 'aliexpress';
   onArrowMove?: (dx: number, dy: number) => void;
+  activeTextKey?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(340);
@@ -531,12 +598,23 @@ export function TemplatePreviewer({ tpl, terminata, platform = 'amazon', onArrow
 
       {/* Text elements */}
       {([
-        { el: tpl.prezzo as TextEl, text: (() => { const el = tpl.prezzo as TextEl; const sep = el.decimalSep ?? '.'; const base = sep === ',' ? (el.currencyPos === 'after' ? `24${sep}99€` : `€24${sep}99`) : (el.currencyPos === 'after' ? `24${sep}99€` : `€24${sep}99`); return base; })() },
-        { el: tpl.prezzoPrecedente as TextEl, text: (() => { const el = tpl.prezzoPrecedente as TextEl; const sep = el.decimalSep ?? '.'; return el.currencyPos === 'after' ? `49${sep}99€` : `€49${sep}99`; })() },
-        { el: tpl.sconto as TextEl, text: (() => { const el = tpl.sconto as TextEl; let t = '-50%'; if (el.hideMinus) t = t.replace(/^-/, ''); if (el.hidePercent) t = t.replace(/%$/, ''); return t; })() },
-        { el: tpl.testoCustom as TextEl, text: tpl.testoCustom.text || 'Testo' },
-      ]).map(({ el, text }, i) => {
+        { key: 'prezzo',           el: tpl.prezzo as TextEl,           text: (() => { const el = tpl.prezzo as TextEl; const sep = el.decimalSep ?? '.'; return el.currencyPos === 'after' ? `24${sep}99€` : `€24${sep}99`; })() },
+        { key: 'prezzoPrecedente', el: tpl.prezzoPrecedente as TextEl, text: (() => { const el = tpl.prezzoPrecedente as TextEl; const sep = el.decimalSep ?? '.'; return el.currencyPos === 'after' ? `49${sep}99€` : `€49${sep}99`; })() },
+        { key: 'sconto',           el: tpl.sconto as TextEl,           text: (() => { const el = tpl.sconto as TextEl; let t = '-50%'; if (el.hideMinus) t = t.replace(/^-/, ''); if (el.hidePercent) t = t.replace(/%$/, ''); return t; })() },
+        { key: 'testoCustom',      el: tpl.testoCustom as TextEl,      text: tpl.testoCustom.text || 'Testo' },
+      ]).map(({ key, el, text }, i) => {
         if (!el.enabled) return null;
+        // Nuovo sistema: riquadro auto-fit
+        if (el.boxW && el.boxH) {
+          return (
+            <FitTextBox key={i} el={el} text={text}
+              containerW={containerW} containerH={containerH}
+              isActive={activeTextKey === key}
+              showBox={!!onArrowMove}
+            />
+          );
+        }
+        // Legacy: fontSize + textAnchor
         const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
         const decMatch = scale < 1 ? text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/) : null;
         const content = decMatch
@@ -768,21 +846,26 @@ function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, show
       )}
 
       <DragHint x={el.x} y={el.y} onCenter={() => {
-        const yCenter = Math.round(Math.max(0, 50 - (el.fontSize / canvasH) * 100));
-        onUpdate({ x: 50, y: yCenter, textAnchor: 'center' });
+        const bw = el.boxW ?? 40; const bh = el.boxH ?? 12;
+        onUpdate({ x: Math.round((100 - bw) / 2), y: Math.round((100 - bh) / 2) });
       }} />
 
-      {/* Direzione crescita testo */}
-      <div style={{ marginBottom: 12 }}>
-        <div className="lbl">ANCORA TESTO</div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className={`btn bsm ${(el.textAnchor ?? 'left') === 'left' ? 'bp' : 'bgh'}`}
-            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'left' })}>◀ Sinistra</button>
-          <button className={`btn bsm ${el.textAnchor === 'center' ? 'bp' : 'bgh'}`}
-            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'center' })}>▶◀ Centro</button>
-          <button className={`btn bsm ${el.textAnchor === 'right' ? 'bp' : 'bgh'}`}
-            style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: 'right' })}>Destra ▶</button>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>LARGHEZZA RIQUADRO</span>
+        <input type="range" min={5} max={100} step={1}
+          value={el.boxW ?? 40}
+          style={{ flex: 2, accentColor: 'var(--a1)' }}
+          onChange={e => onUpdate({ boxW: Number(e.target.value) })} />
+        <span style={{ fontSize: 11, color: 'var(--t2)', width: 32, textAlign: 'right' }}>{el.boxW ?? 40}%</span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span className="lbl" style={{ marginBottom: 0, flex: 1 }}>ALTEZZA RIQUADRO</span>
+        <input type="range" min={2} max={50} step={1}
+          value={el.boxH ?? 12}
+          style={{ flex: 2, accentColor: 'var(--a1)' }}
+          onChange={e => onUpdate({ boxH: Number(e.target.value) })} />
+        <span style={{ fontSize: 11, color: 'var(--t2)', width: 32, textAlign: 'right' }}>{el.boxH ?? 12}%</span>
       </div>
 
       {showCurrencyPos && (
@@ -1081,10 +1164,7 @@ function TemplateSection() {
       const el = previewPlatform === 'amazon' ? tpl.storeAmazon : tpl.storeAliexpress;
       return { value: el.size, min: 5, max: 40, unit: '%' as const, onChange: v => updateImg(k, { size: v }) };
     }
-    if (isTextKey(activePanel)) {
-      const el = tpl[activePanel] as TextEl;
-      return { value: el.fontSize, min: 10, max: 300, unit: 'px' as const, onChange: (v: number) => updateText(activePanel, { fontSize: v }) };
-    }
+    if (isTextKey(activePanel)) return null;
     return null;
   };
 
@@ -1193,6 +1273,7 @@ function TemplateSection() {
       <TemplatePreviewer
         tpl={tpl} platform={previewPlatform}
         onArrowMove={activePanel && activePanel !== 'terminata' ? handleArrowMove : undefined}
+        activeTextKey={activePanel && isTextKey(activePanel as ComponentKey) ? activePanel : null}
       />
 
       {/* Selettore step + zoom sulla stessa riga */}

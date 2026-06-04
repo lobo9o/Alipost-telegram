@@ -378,73 +378,140 @@ async function generateTemplateImageServer(
 
       const drawTextEl = (el: any, text: string, debugName?: string) => {
         if (!el?.enabled || !text?.trim()) return;
-        const fs = (Number(el.fontSize) || 36) * 2;
-        const x = (el.x / 100) * canvasW; const y = (el.y / 100) * canvasH;
-        const anchor = el.textAnchor === 'right' ? 'right' : el.textAnchor === 'center' ? 'center' : 'left';
-        if (debugName) console.log(`[tpl] ${debugName}: color=${JSON.stringify(el.color)} strikethroughColor=${JSON.stringify(el.strikethroughColor)} strokeColor=${JSON.stringify(el.strokeColor)} strikethrough=${el.strikethrough}`);
+        if (debugName) console.log(`[tpl] ${debugName}: color=${JSON.stringify(el.color)} strikethrough=${el.strikethrough}`);
         const fontStr = (size: number) => `${el.bold ? 'bold ' : ''}${size}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
         const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
         const parts = scale < 1 ? splitAtDecimal(text) : null;
 
         ctx.save();
-        ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
         if (el.letterSpacing) try { (ctx as any).letterSpacing = (Number(el.letterSpacing) * 2) + 'px'; } catch { /* node-canvas older */ }
-        ctx.font = fontStr(fs);
-        const capH = (ctx.measureText('H') as any).actualBoundingBoxAscent ?? fs * 0.72;
-        const baseline = y + capH;
 
-        if (!parts) {
-          const tw = ctx.measureText(text).width;
-          const sx = anchor === 'right' ? x - tw : anchor === 'center' ? x - tw / 2 : x;
-          if (el.strokeEnabled && el.strokeWidth > 0) {
-            ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-            ctx.strokeText(text, sx, baseline);
+        // Nuovo sistema: riquadro auto-fit centrato
+        if (el.boxW && el.boxH) {
+          const boxWpx = (el.boxW / 100) * canvasW;
+          const boxHpx = (el.boxH / 100) * canvasH;
+          const boxX   = (el.x / 100) * canvasW;
+          const boxY   = (el.y / 100) * canvasH;
+          let fs = Math.round(boxHpx * 0.82);
+
+          // auto-fit: misura testo combinato e riduce fontSize finché entra
+          const combinedText = parts ? (parts.main + parts.dec + (parts.suffix || '')) : text;
+          ctx.font = fontStr(fs);
+          while (fs > 6 && ctx.measureText(combinedText).width > boxWpx * 0.92) {
+            fs--;
+            ctx.font = fontStr(fs);
           }
-          ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, sx, baseline);
-          if (el.strikethrough) {
-            const strkColor = el.strikethroughColor || el.color || '#fff';
-            if (debugName) console.log(`[tpl] ${debugName} strikethrough: usando colore=${JSON.stringify(strkColor)}`);
-            ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
-            ctx.beginPath(); ctx.moveTo(sx, baseline - capH * 0.5); ctx.lineTo(sx + tw, baseline - capH * 0.5); ctx.stroke();
-          }
-        } else {
+
           const fsDec = Math.round(fs * scale);
-          ctx.font = fontStr(fs);
-          const mainW = ctx.measureText(parts.main).width;
-          ctx.font = fontStr(fsDec);
-          const decW = ctx.measureText(parts.dec).width;
-          ctx.font = fontStr(fs);
-          const sufW = parts.suffix ? ctx.measureText(parts.suffix).width : 0;
-          const totalW = mainW + decW + sufW;
-          const sx = anchor === 'right' ? x - totalW : anchor === 'center' ? x - totalW / 2 : x;
+          ctx.textBaseline = 'middle';
+          const midY = boxY + boxHpx / 2;
 
-          ctx.font = fontStr(fs);
-          if (el.strokeEnabled && el.strokeWidth > 0) {
-            ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-            ctx.strokeText(parts.main, sx, baseline);
+          // calcola larghezza totale per centrare
+          let totalW: number;
+          if (!parts) {
+            ctx.font = fontStr(fs);
+            totalW = ctx.measureText(text).width;
+          } else {
+            ctx.font = fontStr(fs);
+            const mw = ctx.measureText(parts.main).width;
+            ctx.font = fontStr(fsDec);
+            const dw = ctx.measureText(parts.dec).width;
+            ctx.font = fontStr(fs);
+            const sw = parts.suffix ? ctx.measureText(parts.suffix).width : 0;
+            totalW = mw + dw + sw;
           }
-          ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.main, sx, baseline);
+          const sx = boxX + (boxWpx - totalW) / 2;
 
-          ctx.font = fontStr(fsDec);
-          if (el.strokeEnabled && el.strokeWidth > 0) {
-            ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-            ctx.strokeText(parts.dec, sx + mainW, baseline);
-          }
-          ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.dec, sx + mainW, baseline);
-
-          if (parts.suffix) {
+          if (!parts) {
             ctx.font = fontStr(fs);
             if (el.strokeEnabled && el.strokeWidth > 0) {
               ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
-              ctx.strokeText(parts.suffix, sx + mainW + decW, baseline);
+              ctx.strokeText(text, sx, midY);
             }
-            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.suffix, sx + mainW + decW, baseline);
-          }
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, sx, midY);
+            if (el.strikethrough) {
+              const strkColor = el.strikethroughColor || el.color || '#fff';
+              ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
+              ctx.beginPath(); ctx.moveTo(sx, midY); ctx.lineTo(sx + totalW, midY); ctx.stroke();
+            }
+          } else {
+            ctx.font = fontStr(fs);
+            let curX = sx;
+            if (el.strokeEnabled && el.strokeWidth > 0) {
+              ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
+              ctx.strokeText(parts.main, curX, midY);
+            }
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.main, curX, midY);
+            curX += ctx.measureText(parts.main).width;
 
-          if (el.strikethrough) {
-            const strkColor = el.strikethroughColor || el.color || '#fff';
-            ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
-            ctx.beginPath(); ctx.moveTo(sx, baseline - capH * 0.5); ctx.lineTo(sx + totalW, baseline - capH * 0.5); ctx.stroke();
+            ctx.font = fontStr(fsDec);
+            if (el.strokeEnabled && el.strokeWidth > 0) {
+              ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
+              ctx.strokeText(parts.dec, curX, midY);
+            }
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.dec, curX, midY);
+            curX += ctx.measureText(parts.dec).width;
+
+            if (parts.suffix) {
+              ctx.font = fontStr(fs);
+              if (el.strokeEnabled && el.strokeWidth > 0) {
+                ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
+                ctx.strokeText(parts.suffix, curX, midY);
+              }
+              ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.suffix, curX, midY);
+            }
+            if (el.strikethrough) {
+              const strkColor = el.strikethroughColor || el.color || '#fff';
+              ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
+              ctx.beginPath(); ctx.moveTo(sx, midY); ctx.lineTo(sx + totalW, midY); ctx.stroke();
+            }
+          }
+        } else {
+          // Legacy: fontSize + textAnchor
+          const fs = (Number(el.fontSize) || 36) * 2;
+          const x = (el.x / 100) * canvasW; const y = (el.y / 100) * canvasH;
+          const anchor = el.textAnchor === 'right' ? 'right' : el.textAnchor === 'center' ? 'center' : 'left';
+          ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+          ctx.font = fontStr(fs);
+          const capH = (ctx.measureText('H') as any).actualBoundingBoxAscent ?? fs * 0.72;
+          const baseline = y + capH;
+
+          if (!parts) {
+            const tw = ctx.measureText(text).width;
+            const sx = anchor === 'right' ? x - tw : anchor === 'center' ? x - tw / 2 : x;
+            if (el.strokeEnabled && el.strokeWidth > 0) {
+              ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round';
+              ctx.strokeText(text, sx, baseline);
+            }
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(text, sx, baseline);
+            if (el.strikethrough) {
+              const strkColor = el.strikethroughColor || el.color || '#fff';
+              ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
+              ctx.beginPath(); ctx.moveTo(sx, baseline - capH * 0.5); ctx.lineTo(sx + tw, baseline - capH * 0.5); ctx.stroke();
+            }
+          } else {
+            const fsDec = Math.round(fs * scale);
+            ctx.font = fontStr(fs); const mainW = ctx.measureText(parts.main).width;
+            ctx.font = fontStr(fsDec); const decW = ctx.measureText(parts.dec).width;
+            ctx.font = fontStr(fs); const sufW = parts.suffix ? ctx.measureText(parts.suffix).width : 0;
+            const totalW = mainW + decW + sufW;
+            const sx = anchor === 'right' ? x - totalW : anchor === 'center' ? x - totalW / 2 : x;
+            ctx.font = fontStr(fs);
+            if (el.strokeEnabled && el.strokeWidth > 0) { ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round'; ctx.strokeText(parts.main, sx, baseline); }
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.main, sx, baseline);
+            ctx.font = fontStr(fsDec);
+            if (el.strokeEnabled && el.strokeWidth > 0) { ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round'; ctx.strokeText(parts.dec, sx + mainW, baseline); }
+            ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.dec, sx + mainW, baseline);
+            if (parts.suffix) {
+              ctx.font = fontStr(fs);
+              if (el.strokeEnabled && el.strokeWidth > 0) { ctx.strokeStyle = el.strokeColor || '#000'; ctx.lineWidth = (el.strokeWidth || 3) * 2; ctx.lineJoin = 'round'; ctx.strokeText(parts.suffix, sx + mainW + decW, baseline); }
+              ctx.fillStyle = el.color || '#fff'; ctx.fillText(parts.suffix, sx + mainW + decW, baseline);
+            }
+            if (el.strikethrough) {
+              const strkColor = el.strikethroughColor || el.color || '#fff';
+              ctx.strokeStyle = strkColor; ctx.lineWidth = Math.max(1, fs * 0.06);
+              ctx.beginPath(); ctx.moveTo(sx, baseline - capH * 0.5); ctx.lineTo(sx + totalW, baseline - capH * 0.5); ctx.stroke();
+            }
           }
         }
         ctx.restore();
@@ -551,21 +618,67 @@ async function generateTemplateImageServer(
     const svgEls: string[] = [];
     function textElToSvg(el: any, text: string) {
       if (!el?.enabled || !text?.trim()) return;
+      const family = String(el.fontFamily || 'Impact').replace(/"/g, '');
+      const fill = String(el.color || '#ffffff');
+      const safeStr = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
+      const parts = scale < 1 ? splitAtDecimal(text) : null;
+      const lsAttr = el.letterSpacing ? ` letter-spacing="${Number(el.letterSpacing) * 2}"` : '';
+
+      // Nuovo sistema: riquadro auto-fit centrato
+      if (el.boxW && el.boxH) {
+        const boxWpx = Math.round((el.boxW / 100) * sW);
+        const boxHpx = Math.round((el.boxH / 100) * sH);
+        const boxX   = Math.round((el.x / 100) * sW);
+        const boxY   = Math.round((el.y / 100) * sH);
+        let fs = Math.round(boxHpx * 0.82);
+        // stima larghezza: 0.6 char-width per carattere (conservativo)
+        const combinedText = parts ? (parts.main + parts.dec + (parts.suffix || '')) : text;
+        const avgCharW = fs * 0.60;
+        if (combinedText.length * avgCharW > boxWpx * 0.92) {
+          fs = Math.floor(fs * (boxWpx * 0.92) / (combinedText.length * avgCharW));
+          fs = Math.max(fs, 6);
+        }
+        const fsDec = Math.round(fs * scale);
+        // centra orizzontalmente: stima larghezza
+        const estW = parts
+          ? Math.round(parts.main.length * fs * 0.60 + parts.dec.length * fsDec * 0.60 + (parts.suffix?.length ?? 0) * fs * 0.60)
+          : Math.round(combinedText.length * fs * 0.60);
+        const cx = boxX + Math.round((boxWpx - estW) / 2);
+        // centra verticalmente: dominant-baseline="middle" → y = centro riquadro
+        const midY = boxY + Math.round(boxHpx / 2);
+        const common = `x="${cx}" y="${midY}" dominant-baseline="middle" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="start"${lsAttr}`;
+        if (!parts) {
+          const safe = safeStr(text);
+          if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
+            svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${safe}</text>`);
+          } else {
+            svgEls.push(`<text ${common} fill="${fill}">${safe}</text>`);
+          }
+        } else {
+          const dy = Math.round(0.20 * (fs - fsDec));
+          const inner = `<tspan>${safeStr(parts.main)}</tspan><tspan font-size="${fsDec}" dy="${dy}">${safeStr(parts.dec)}</tspan>${parts.suffix ? `<tspan font-size="${fs}" dy="${-dy}">${safeStr(parts.suffix)}</tspan>` : ''}`;
+          if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
+            svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${inner}</text>`);
+          } else {
+            svgEls.push(`<text ${common} fill="${fill}">${inner}</text>`);
+          }
+        }
+        if (el.strikethrough) {
+          const strkColor = String(el.strikethroughColor || el.color || '#ffffff');
+          const lw = Math.max(1, Math.round(fs * 0.06));
+          svgEls.push(`<line x1="${cx}" y1="${midY}" x2="${cx + estW}" y2="${midY}" stroke="${strkColor}" stroke-width="${lw}" stroke-linecap="round"/>`);
+        }
+        return;
+      }
+
+      // Legacy: fontSize + textAnchor
       const fs = (Number(el.fontSize) || 36) * 2;
       const xTop = Math.round((el.x / 100) * sW);
       const yTop = Math.round((el.y / 100) * sH);
-      // librsvg usa baseline alfabetico: sposta y in giù di ~0.80*fs per allineare il bordo superiore a yTop
       const y = yTop + Math.round(fs * 0.80);
       const anchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'center' ? 'middle' : 'start';
-      const family = String(el.fontFamily || 'Impact').replace(/"/g, '');
-      console.log(`[tpl] textElToSvg: fontFamily="${family}" text="${String(text).slice(0, 20)}"`);
-      const fill = String(el.color || '#ffffff');
-      const safeStr = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const lsAttr = el.letterSpacing ? ` letter-spacing="${Number(el.letterSpacing) * 2}"` : '';
       const common = `x="${xTop}" y="${y}" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${anchor}"${lsAttr}`;
-
-      const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
-      const parts = scale < 1 ? splitAtDecimal(text) : null;
 
       if (!parts) {
         const safe = safeStr(text);
@@ -576,27 +689,20 @@ async function generateTemplateImageServer(
         }
       } else {
         const fsDec = Math.round(fs * scale);
-        // dy positivo per abbassare la baseline dei decimali e allineare i fondi con il testo principale
         const dy = Math.round(0.20 * (fs - fsDec));
-        const safeMain = safeStr(parts.main);
-        const safeDec = safeStr(parts.dec);
-        const safeSuf = parts.suffix ? safeStr(parts.suffix) : '';
-        // suffix torna alla dimensione piena con dy negativo per tornare alla baseline originale
-        const suffixSpan = safeSuf ? `<tspan font-size="${fs}" dy="${-dy}">${safeSuf}</tspan>` : '';
-        const inner = `<tspan>${safeMain}</tspan><tspan font-size="${fsDec}" dy="${dy}">${safeDec}</tspan>${suffixSpan}`;
+        const suffixSpan = parts.suffix ? `<tspan font-size="${fs}" dy="${-dy}">${safeStr(parts.suffix)}</tspan>` : '';
+        const inner = `<tspan>${safeStr(parts.main)}</tspan><tspan font-size="${fsDec}" dy="${dy}">${safeStr(parts.dec)}</tspan>${suffixSpan}`;
         if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
           svgEls.push(`<text ${common} stroke="${el.strokeColor || '#000'}" stroke-width="${Number(el.strokeWidth) * 2}" stroke-linejoin="round" paint-order="stroke" fill="${fill}">${inner}</text>`);
         } else {
           svgEls.push(`<text ${common} fill="${fill}">${inner}</text>`);
         }
       }
-
-      // Barrato come linea SVG separata con colore esplicito (text-decoration ignora il fill in librsvg)
       if (el.strikethrough) {
         const strkColor = String(el.strikethroughColor || el.color || '#ffffff');
         const mainChars = parts ? parts.main.length : text.length;
         const decChars  = parts ? parts.dec.length  : 0;
-        const sufChars  = parts ? parts.suffix.length : 0;
+        const sufChars  = parts ? (parts.suffix?.length ?? 0) : 0;
         const fsDec = parts ? Math.round(fs * scale) : fs;
         const approxWidth = Math.round(mainChars * fs * 0.50 + decChars * fsDec * 0.50 + sufChars * fs * 0.50);
         const lx = anchor === 'end' ? xTop - approxWidth : anchor === 'middle' ? xTop - approxWidth / 2 : xTop;
