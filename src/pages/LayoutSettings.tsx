@@ -1124,13 +1124,6 @@ function TemplateSection() {
 
   return (
     <>
-      {/* Nome template attivo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px 2px' }}>
-        <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>Nome:</span>
-        <input className="inp" style={{ fontSize: 12 }} value={tpl.name ?? ''} placeholder="Nome template"
-          onChange={e => updateTpl({ name: e.target.value })} />
-      </div>
-
       {/* Bottoni + toggle ON/OFF + ℹ️ SOPRA l'anteprima */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, padding: '10px 16px 8px' }}>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1 }}>
