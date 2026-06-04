@@ -232,8 +232,10 @@ export function getUserId(req: VercelRequest): string | null {
   const baseId = userId + suffix;
 
   // Supporto profili canale: X-Profile-Id deve iniziare con baseId
+  // I profili secondari (con ':') sono temporaneamente disabilitati lato server:
+  // si usa sempre il baseId per garantire stabilità durante il fix del multi-canale
   const profileId = (req.headers['x-profile-id'] as string | undefined)?.trim();
-  if (profileId && (profileId === baseId || profileId.startsWith(baseId + ':'))) {
+  if (profileId && profileId === baseId) {
     return profileId;
   }
   return baseId;
