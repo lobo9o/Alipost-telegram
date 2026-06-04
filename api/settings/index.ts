@@ -54,16 +54,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // Per i profili secondari, inietta le credenziali del profilo primario
     let merged: Record<string, any> = data;
     if (isSecondary && primaryId) {
+      const channelId = userId.split(':')[1]; // il canale di questo profilo
       const [primRow] = await sql`SELECT data FROM settings WHERE user_id = ${primaryId}`.catch(() => [null]);
       if (primRow) {
         const primData = (typeof primRow.data === 'string' ? JSON.parse(primRow.data) : primRow.data) as Record<string, any>;
         const shared = extractSharedCreds(primData);
         merged = {
           ...data,
+          // Il profilo secondario pubblica sempre sul proprio canale
+          channels: Array.isArray(data.channels) && data.channels.length > 0
+            ? data.channels
+            : [channelId],
           amazon: {
-            enabled: primData.amazon?.enabled ?? false, // default dal primario
-            ...data.amazon,                             // secondario può sovrascrivere
-            ...shared.amazon,                           // credenziali sempre dal primario
+            enabled: primData.amazon?.enabled ?? false,
+            ...data.amazon,
+            ...shared.amazon,
           },
           aliexpress: {
             enabled: primData.aliexpress?.enabled ?? false,

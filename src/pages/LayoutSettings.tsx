@@ -1914,38 +1914,55 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
             {s.channels.filter(Boolean).length > 0 ? `${s.channels.filter(Boolean).length} canale` : 'Nessuno'}
           </div>
         </div>
-        <InfoBanner>
-          1. Aggiungi il bot come <b>amministratore</b> del canale.<br />
-          2. Inserisci <b>@username</b> o <b>ID numerico</b> (es. -1001234567890).<br />
-          3. Il primo canale è quello usato per la pubblicazione.
-        </InfoBanner>
-        {settings.channels.filter(Boolean).length > 0 && (
-          <div style={{ fontSize: 11, color: '#4ade80', marginBottom: 8, padding: '6px 10px', background: '#0a2a0a', borderRadius: 6 }}>
-            ✓ Salvato: {settings.channels.filter(Boolean).join(', ')}
+
+        {isSecondaryProfile ? (
+          <div style={{ padding: '8px 0' }}>
+            <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#a5b4fc' }}>
+              🔗 Questo profilo pubblica sul canale del profilo secondario. Per aggiungere o rimuovere canali vai al profilo principale.
+            </div>
+            {s.channels.filter(Boolean).map((ch, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
+                <input className="inp" value={ch} readOnly style={{ opacity: 0.6, cursor: 'not-allowed' }} />
+              </div>
+            ))}
           </div>
+        ) : (
+          <>
+            <InfoBanner>
+              1. Aggiungi il bot come <b>amministratore</b> del canale.<br />
+              2. Inserisci <b>@username</b> o <b>ID numerico</b> (es. -1001234567890).<br />
+              3. Il primo canale è quello usato per la pubblicazione.
+            </InfoBanner>
+            {settings.channels.filter(Boolean).length > 0 && (
+              <div style={{ fontSize: 11, color: '#4ade80', marginBottom: 8, padding: '6px 10px', background: '#0a2a0a', borderRadius: 6 }}>
+                ✓ Salvato: {settings.channels.filter(Boolean).join(', ')}
+              </div>
+            )}
+            {s.channels.map((ch, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
+                <input className="inp" value={ch} placeholder="@username oppure -1001234567890"
+                  onChange={e => {
+                    const v = e.target.value;
+                    setS(prev => ({ ...prev, channels: prev.channels.map((c, j) => j === i ? v : c) }));
+                  }} />
+                <button className="btn bre bic"
+                  disabled={s.channels.filter(Boolean).length <= 1}
+                  title={s.channels.filter(Boolean).length <= 1 ? 'Deve esserci almeno un canale' : ''}
+                  onClick={() =>
+                    setS(prev => ({ ...prev, channels: prev.channels.filter((_, j) => j !== i) }))
+                  }>×</button>
+              </div>
+            ))}
+            <button className="btn bp bsm" style={{ marginTop: 4, width: '100%' }}
+              onClick={() => setS(prev => ({ ...prev, channels: [...prev.channels, ''] }))}>+ Aggiungi canale</button>
+            <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 8, lineHeight: 1.5 }}>
+              Ogni canale ha impostazioni, template e layout separati.<br />
+              Usa il switcher canale nella schermata principale per passare da un canale all'altro.
+            </div>
+          </>
         )}
-        {s.channels.map((ch, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
-            <input className="inp" value={ch} placeholder="@username oppure -1001234567890"
-              onChange={e => {
-                const v = e.target.value;
-                setS(prev => ({ ...prev, channels: prev.channels.map((c, j) => j === i ? v : c) }));
-              }} />
-            <button className="btn bre bic"
-              disabled={s.channels.filter(Boolean).length <= 1}
-              title={s.channels.filter(Boolean).length <= 1 ? 'Deve esserci almeno un canale' : ''}
-              onClick={() =>
-                setS(prev => ({ ...prev, channels: prev.channels.filter((_, j) => j !== i) }))
-              }>×</button>
-          </div>
-        ))}
-        <button className="btn bp bsm" style={{ marginTop: 4, width: '100%' }}
-          onClick={() => setS(prev => ({ ...prev, channels: [...prev.channels, ''] }))}>+ Aggiungi canale</button>
-        <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 8, lineHeight: 1.5 }}>
-          Ogni canale ha impostazioni, template e layout separati.<br />
-          Usa il switcher canale nella schermata principale per passare da un canale all'altro.
-        </div>
       </div>
 
       {/* Salva (Admin) */}
