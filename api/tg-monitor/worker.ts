@@ -184,7 +184,14 @@ async function startUser(userId: string) {
   if (!session) return;
 
   const channelRows = await sql<{ channel: string; auto_publish: boolean; dest_channel: string | null }[]>`
-    SELECT channel, COALESCE(auto_publish, false) AS auto_publish, dest_channel FROM tg_monitor_channels WHERE user_id = ${userId} AND active = true
+    SELECT mc.channel, COALESCE(mc.auto_publish, false) AS auto_publish,
+      CASE
+        WHEN mc.user_id = ${userId} THEN mc.dest_channel
+        ELSE split_part(mc.user_id, ':', 2)
+      END AS dest_channel
+    FROM tg_monitor_channels mc
+    WHERE (mc.user_id = ${userId} OR mc.user_id LIKE ${userId + ':%'})
+      AND mc.active = true
   `;
   if (!channelRows.length) return;
 

@@ -1664,7 +1664,8 @@ function SettingsMenuItem({ icon, label, sub, onClick }: { icon: string; label: 
 }
 
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { settings, setSettings, templates } = useApp();
+  const { settings, setSettings, templates, activeProfileId } = useApp();
+  const isSecondaryProfile = activeProfileId.includes(':');
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState('');
@@ -1746,23 +1747,35 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
               {s.amazon.affiliateTag && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ {s.amazon.affiliateTag}</div>}
             </div>
 
+            {isSecondaryProfile && (
+              <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#a5b4fc' }}>
+                🔗 Marketplace, versione API e credenziali ereditate dal profilo principale
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div className="fld" style={{ margin: 0 }}>
                 <label className="lbl">Marketplace</label>
-                <select className="sel" value={s.amazon.marketplace} onChange={e => setAmazon('marketplace', e.target.value)}>
-                  {MARKETPLACES.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                {isSecondaryProfile
+                  ? <div className="inp" style={{ opacity: 0.5, cursor: 'not-allowed', userSelect: 'none' }}>{s.amazon.marketplace || '—'}</div>
+                  : <select className="sel" value={s.amazon.marketplace} onChange={e => setAmazon('marketplace', e.target.value)}>
+                      {MARKETPLACES.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                }
               </div>
               <div className="fld" style={{ margin: 0 }}>
                 <label className="lbl">Versione API</label>
-                <select className="sel" value={s.amazon.version} onChange={e => setAmazon('version', e.target.value)}>
-                  <option value="2.1">2.1 – Nord Am.</option>
-                  <option value="2.2">2.2 – Europa</option>
-                  <option value="2.3">2.3 – Far East</option>
-                  <option value="3.1">3.1 – LWA Nord Am.</option>
-                  <option value="3.2">3.2 – LWA Europa</option>
-                  <option value="3.3">3.3 – LWA Far East</option>
-                </select>
+                {isSecondaryProfile
+                  ? <div className="inp" style={{ opacity: 0.5, cursor: 'not-allowed', userSelect: 'none' }}>{s.amazon.version || '—'}</div>
+                  : <select className="sel" value={s.amazon.version} onChange={e => setAmazon('version', e.target.value)}>
+                      <option value="2.1">2.1 – Nord Am.</option>
+                      <option value="2.2">2.2 – Europa</option>
+                      <option value="2.3">2.3 – Far East</option>
+                      <option value="3.1">3.1 – LWA Nord Am.</option>
+                      <option value="3.2">3.2 – LWA Europa</option>
+                      <option value="3.3">3.3 – LWA Far East</option>
+                    </select>
+                }
               </div>
             </div>
 
@@ -1770,21 +1783,39 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: 1, marginBottom: 8 }}>CREDENZIALI API</div>
             <div className="fld">
               <label className="lbl">Credential ID</label>
-              <input className="inp" type="password" value={s.amazon.credentialId}
-                onChange={e => setAmazon('credentialId', e.target.value)}
-                placeholder="amzn1.application-oa2-client...." />
-              {s.amazon.credentialId
-                ? <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Personale ({s.amazon.credentialId.length} car.)</div>
-                : <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3 }}>Vuoto → usa credenziali di sistema</div>}
+              {isSecondaryProfile
+                ? <>
+                    <input className="inp" type="password" value={s.amazon.credentialId} readOnly
+                      style={{ opacity: 0.5, cursor: 'not-allowed' }} placeholder="—" />
+                    {s.amazon.credentialId && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Dal profilo principale ({s.amazon.credentialId.length} car.)</div>}
+                  </>
+                : <>
+                    <input className="inp" type="password" value={s.amazon.credentialId}
+                      onChange={e => setAmazon('credentialId', e.target.value)}
+                      placeholder="amzn1.application-oa2-client...." />
+                    {s.amazon.credentialId
+                      ? <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Personale ({s.amazon.credentialId.length} car.)</div>
+                      : <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3 }}>Vuoto → usa credenziali di sistema</div>}
+                  </>
+              }
             </div>
             <div className="fld">
               <label className="lbl">Credential Secret</label>
-              <input className="inp" type="password" value={s.amazon.credentialSecret}
-                onChange={e => setAmazon('credentialSecret', e.target.value)}
-                placeholder="amzn1.oa2-cs.v1...." />
-              {s.amazon.credentialSecret
-                ? <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Personale ({s.amazon.credentialSecret.length} car.)</div>
-                : <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3 }}>Vuoto → usa credenziali di sistema</div>}
+              {isSecondaryProfile
+                ? <>
+                    <input className="inp" type="password" value={s.amazon.credentialSecret} readOnly
+                      style={{ opacity: 0.5, cursor: 'not-allowed' }} placeholder="—" />
+                    {s.amazon.credentialSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Dal profilo principale ({s.amazon.credentialSecret.length} car.)</div>}
+                  </>
+                : <>
+                    <input className="inp" type="password" value={s.amazon.credentialSecret}
+                      onChange={e => setAmazon('credentialSecret', e.target.value)}
+                      placeholder="amzn1.oa2-cs.v1...." />
+                    {s.amazon.credentialSecret
+                      ? <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Personale ({s.amazon.credentialSecret.length} car.)</div>
+                      : <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3 }}>Vuoto → usa credenziali di sistema</div>}
+                  </>
+              }
             </div>
           </div>
         )}
@@ -1811,17 +1842,42 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         {openAli && (
           <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 14px 8px' }}>
             <ToggleRow label="Attiva AliExpress" value={s.aliexpress.enabled} onChange={v => setAli('enabled', v)} />
+
+            {isSecondaryProfile && (
+              <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#a5b4fc' }}>
+                🔗 App Key e Secret ereditate dal profilo principale
+              </div>
+            )}
+
             <div className="fld">
               <label className="lbl">App Key</label>
-              <input className="inp" value={s.aliexpress.appKey}
-                onChange={e => setAli('appKey', e.target.value)} placeholder="123456789" />
-              {s.aliexpress.appKey && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ {s.aliexpress.appKey}</div>}
+              {isSecondaryProfile
+                ? <>
+                    <input className="inp" value={s.aliexpress.appKey} readOnly
+                      style={{ opacity: 0.5, cursor: 'not-allowed' }} placeholder="—" />
+                    {s.aliexpress.appKey && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Dal profilo principale</div>}
+                  </>
+                : <>
+                    <input className="inp" value={s.aliexpress.appKey}
+                      onChange={e => setAli('appKey', e.target.value)} placeholder="123456789" />
+                    {s.aliexpress.appKey && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ {s.aliexpress.appKey}</div>}
+                  </>
+              }
             </div>
             <div className="fld">
               <label className="lbl">App Secret</label>
-              <input className="inp" type="password" value={s.aliexpress.appSecret}
-                onChange={e => setAli('appSecret', e.target.value)} placeholder="••••••••••••••••" />
-              {s.aliexpress.appSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Inserito ({s.aliexpress.appSecret.length} car.)</div>}
+              {isSecondaryProfile
+                ? <>
+                    <input className="inp" type="password" value={s.aliexpress.appSecret} readOnly
+                      style={{ opacity: 0.5, cursor: 'not-allowed' }} placeholder="—" />
+                    {s.aliexpress.appSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Dal profilo principale ({s.aliexpress.appSecret.length} car.)</div>}
+                  </>
+                : <>
+                    <input className="inp" type="password" value={s.aliexpress.appSecret}
+                      onChange={e => setAli('appSecret', e.target.value)} placeholder="••••••••••••••••" />
+                    {s.aliexpress.appSecret && <div style={{ fontSize: 11, color: '#4ade80', marginTop: 3 }}>✓ Inserito ({s.aliexpress.appSecret.length} car.)</div>}
+                  </>
+              }
             </div>
             <div className="fld">
               <label className="lbl">Tracking ID</label>
