@@ -60,8 +60,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const shared = extractSharedCreds(primData);
         merged = {
           ...data,
-          amazon: { ...data.amazon, ...shared.amazon },
-          aliexpress: { ...data.aliexpress, ...shared.aliexpress },
+          amazon: {
+            enabled: data.amazon?.enabled ?? primData.amazon?.enabled ?? false,
+            ...data.amazon,
+            ...shared.amazon,
+          },
+          aliexpress: {
+            enabled: data.aliexpress?.enabled ?? primData.aliexpress?.enabled ?? false,
+            ...data.aliexpress,
+            ...shared.aliexpress,
+          },
         };
       }
     }
