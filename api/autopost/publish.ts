@@ -1423,14 +1423,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
         : (CSYM[String(cfg.amazon?.currency ?? 'EUR').toUpperCase()] ?? '€');
 
-      // Se il canale ha un template assegnato, carica quello; altrimenti usa il migliore disponibile
+      // Se il canale ha un template assegnato, carica quello.
+      // Fallback: template di channels[0] se disponibile, altrimenti il più vecchio (created_at ASC)
+      // — evita di prendere un template secondario appena aggiornato (updated_at più recente).
+      const fallbackTplId = channelTemplates[channels[0]] ?? '';
       const [pubTpl] = channelTemplateId
         ? await sql`SELECT id, config FROM templates WHERE id = ${channelTemplateId} AND user_id = ${userId} LIMIT 1`.catch(() => [null])
-        : await sql`
-            SELECT id, config FROM templates WHERE user_id = ${userId}
-              AND tipo NOT IN ('historical_low')
-            ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
-          `.catch(() => [null]);
+        : fallbackTplId
+          ? await sql`SELECT id, config FROM templates WHERE id = ${fallbackTplId} AND user_id = ${userId} LIMIT 1`.catch(() => [null])
+          : await sql`
+              SELECT id, config FROM templates WHERE user_id = ${userId}
+                AND tipo NOT IN ('historical_low')
+              ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1
+            `.catch(() => [null]);
       console.log(`[autopost] template lookup: channelTemplateId=${channelTemplateId || 'auto'} → pubTpl=${pubTpl?.id ?? 'non trovato'}`);
 
       if (pubTpl) {

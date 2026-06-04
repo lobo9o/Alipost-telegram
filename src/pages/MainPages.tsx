@@ -1424,7 +1424,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
 // ============================================================
 export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const {
-    createdPosts, queue, setQueue, layouts, keyboards, templates, tags,
+    createdPosts, queue, setQueue, layouts, keyboards, templates, tags, settings,
     newPostMode: mode, setNewPostMode: setMode,
     newPostItems, setNewPostItems,
     newPostEditingMultiId, setNewPostEditingMultiId,
@@ -1536,7 +1536,12 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const creaPost = async () => {
     setErr('');
     try {
-      const defaultNormalTpl = templates[0]?.id ?? 'tpl1';
+      // Usa il template assegnato al canale principale (channels[0]) se disponibile,
+      // altrimenti il primo template normal — evita di prendere un template di un canale secondario
+      // che potrebbe avere updated_at più recente dopo una modifica.
+      const defaultChannelId = settings.channels?.filter(Boolean)?.[0] ?? '';
+      const defaultChannelTplId = defaultChannelId ? (settings.channelTemplates?.[defaultChannelId] ?? '') : '';
+      const defaultNormalTpl = defaultChannelTplId || templates[0]?.id || 'tpl1';
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
       const defaultAliLay = layouts.find(l => l.tipo === 'aliexpress')?.id ?? defaultNormalLay;
       const defaultMultiLay = layouts.find(l => l.tipo === 'multi')?.id ?? 'l3';
