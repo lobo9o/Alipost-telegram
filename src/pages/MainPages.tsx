@@ -12,30 +12,23 @@ import { getProductEmoji, shortenTitle } from '../lib/titleFormat';
 // ── Channel Switcher ──────────────────────────────────────────────────────────
 function ChannelSwitcher() {
   const { allChannels, activeProfileId, setActiveProfileId } = useApp();
-  const [photoCache, setPhotoCache] = useState<Record<string, { photoUrl: string | null; title: string }>>({});
+  const [infoCache, setInfoCache] = useState<Record<string, { photoUrl: string | null; title: string }>>({});
 
-  // Ricava il baseUserId dal localStorage (stesso di AppContext)
   const getBaseUserId = (): string => {
-    try {
-      const initDataUnsafe = (window as any).Telegram?.WebApp?.initDataUnsafe;
-      return String(initDataUnsafe?.user?.id ?? '');
-    } catch { return ''; }
+    try { return String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id ?? ''); } catch { return ''; }
   };
-
   const baseUserId = getBaseUserId();
-  // Il canale attivo: se profilo primario prendi channels[0], altrimenti la parte dopo ':'
+  const channels = allChannels.filter(Boolean);
   const activeChannel = activeProfileId.includes(':')
     ? activeProfileId.split(':').slice(1).join(':')
-    : (allChannels[0] ?? '');
-
-  const channels = allChannels.filter(Boolean);
+    : (channels[0] ?? '');
 
   useEffect(() => {
     channels.forEach(ch => {
-      if (photoCache[ch] !== undefined) return;
+      if (infoCache[ch] !== undefined) return;
       channelInfoApi.get(ch)
-        .then(info => setPhotoCache(prev => ({ ...prev, [ch]: info })))
-        .catch(() => setPhotoCache(prev => ({ ...prev, [ch]: { photoUrl: null, title: ch } })));
+        .then(info => setInfoCache(prev => ({ ...prev, [ch]: info })))
+        .catch(() => setInfoCache(prev => ({ ...prev, [ch]: { photoUrl: null, title: ch } })));
     });
   }, [channels.join(',')]); // dipendenza derivata, join è stabile
 
@@ -44,41 +37,48 @@ function ChannelSwitcher() {
   const switchToNext = () => {
     const idx = channels.indexOf(activeChannel);
     const next = channels[(idx + 1) % channels.length];
-    const newProfile = next === channels[0] && !channels[0].includes(':')
-      ? baseUserId
-      : `${baseUserId}:${next}`;
+    const newProfile = (next === channels[0]) ? baseUserId : `${baseUserId}:${next}`;
     setActiveProfileId(newProfile);
   };
 
-  const info = photoCache[activeChannel];
-  const initials = info?.title
-    ? info.title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
-    : activeChannel.replace(/[^0-9]/g, '').slice(-2);
+  const info = infoCache[activeChannel];
+  const title = info?.title ?? '';
+  const initials = title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || '?';
+  const shortName = title
+    ? (title.length > 14 ? title.slice(0, 13) + '…' : title)
+    : activeChannel.slice(-8);
 
   return (
     <div
       onClick={switchToNext}
-      title={`Canale: ${info?.title ?? activeChannel}\nClicca per cambiare`}
+      title="Clicca per cambiare canale"
       style={{
-        marginLeft: 'auto', cursor: 'pointer', position: 'relative',
-        width: 36, height: 36, borderRadius: '50%',
-        overflow: 'hidden', flexShrink: 0,
-        border: '2px solid var(--a1)',
-        background: 'var(--bg2)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        marginLeft: 'auto', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '5px 10px 5px 5px',
+        background: 'var(--bg2)', borderRadius: 20,
+        border: '1px solid var(--br)',
+        flexShrink: 0, userSelect: 'none',
       }}
     >
-      {info?.photoUrl ? (
-        <img src={info.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-      ) : (
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--a1)' }}>{initials}</span>
-      )}
-      {/* Indicatore di cambio (dot in basso a destra) */}
+      {/* Avatar */}
       <div style={{
-        position: 'absolute', bottom: 1, right: 1,
-        width: 8, height: 8, borderRadius: '50%',
-        background: 'var(--a3)', border: '1px solid var(--bg)',
-      }} />
+        width: 30, height: 30, borderRadius: '50%',
+        overflow: 'hidden', flexShrink: 0,
+        background: 'var(--a1-dim, #1a2e4a)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 11, fontWeight: 700, color: 'var(--a1)',
+      }}>
+        {info?.photoUrl
+          ? <img src={info.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : initials
+        }
+      </div>
+      {/* Nome + hint cambio */}
+      <div style={{ lineHeight: 1.2 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--t1)' }}>{shortName}</div>
+        <div style={{ fontSize: 10, color: 'var(--t3)' }}>↻ cambia</div>
+      </div>
     </div>
   );
 }
@@ -429,11 +429,11 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
             <div style={{ fontSize: 11, color: 'var(--t2)' }}>Gestione post affiliati</div>
           </div>
           {settings.attivo && <div className="hbdg">AUTO ON</div>}
-          <ChannelSwitcher />
         </div>
-        <div className="hero-stats">
+        <div className="hero-stats" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="stat"><div className="sn" style={{ color: 'var(--a3)' }}>{stats.inCoda}</div><div className="sl">In coda</div></div>
           <div className="stat"><div className="sn" style={{ color: 'var(--gr2)' }}>{stats.pub}</div><div className="sl">Pubblicati</div></div>
+          <ChannelSwitcher />
         </div>
       </div>
       <div className="menu-grid">
