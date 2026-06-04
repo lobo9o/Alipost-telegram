@@ -943,11 +943,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
 
   // Ogni processo gestisce solo i propri utenti: dev (_dev) non pubblica per stable e viceversa
+  // I profili canale usano il formato "userId:channelId" (senza underscore), quindi il filtro
+  // !uid.includes('_') li include correttamente in stable.
   const userSuffix = process.env.USER_SUFFIX || '';
   const allSettingsRows = await sql`SELECT user_id, data FROM settings WHERE user_id IS NOT NULL`;
   const settingsRows = (allSettingsRows as any[]).filter(row => {
     const uid = String(row.user_id);
-    return userSuffix ? uid.endsWith(userSuffix) : !uid.includes('_');
+    // Estrae la parte "base" del profilo (prima del ':') per il controllo dev/stable
+    const baseUid = uid.includes(':') ? uid.split(':')[0] : uid;
+    return userSuffix ? baseUid.endsWith(userSuffix) : !baseUid.includes('_');
   });
 
   const published: string[] = [];
@@ -1402,46 +1406,25 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
-    // ── Determina il canale in anticipo — serve per il lookup del template ──────
-    const earlyChannel = channelOverride
-      ? channels[0]
-      : (queueItem?.dest_channel as string | null | undefined) || channels[0];
-    const channelTemplates = (cfg.channelTemplates ?? {}) as Record<string, string>;
-    const channelTemplateId = channelTemplates[earlyChannel] ?? '';
-    console.log(`[autopost] canale=${earlyChannel} channelTemplateId=${channelTemplateId || '(nessuno)'} allChannelTemplates=${JSON.stringify(channelTemplates)}`);
-
     // ── Genera immagine dal template al momento della pubblicazione ───────────
-    // Si applica ai post singoli senza generatedImage (es. da tg-monitor, o auto-ricerca
-    // senza template configurato al momento della creazione).
-    // Per i multi-post la composita viene generata più avanti con generateMultiImageServer.
-    // Rigenera se: nessuna immagine pre-generata, OPPURE il canale ha un template specifico
-    // (l'immagine pre-generata potrebbe essere stata creata con il template del canale sbagliato).
-    if (!isMulti && (!post.generatedImage || !!channelTemplateId) && post.image && String(post.image).startsWith('http')
+    // Ogni profilo utente ha i propri template — si usa il primo template disponibile.
+    if (!isMulti && !post.generatedImage && post.image && String(post.image).startsWith('http')
         && Number(post.discountedPrice ?? 0) > 0) {
       const CSYM: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
       const currSym = post.platform === 'aliexpress'
         ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
         : (CSYM[String(cfg.amazon?.currency ?? 'EUR').toUpperCase()] ?? '€');
 
-      // Se il canale ha un template assegnato, carica quello.
-      // Fallback: template di channels[0] se disponibile, altrimenti il più vecchio (created_at ASC)
-      // — evita di prendere un template secondario appena aggiornato (updated_at più recente).
-      const fallbackTplId = channelTemplates[channels[0]] ?? '';
-      const [pubTpl] = channelTemplateId
-        ? await sql`SELECT id, config FROM templates WHERE id = ${channelTemplateId} AND user_id = ${userId} LIMIT 1`.catch(() => [null])
-        : fallbackTplId
-          ? await sql`SELECT id, config FROM templates WHERE id = ${fallbackTplId} AND user_id = ${userId} LIMIT 1`.catch(() => [null])
-          : await sql`
-              SELECT id, config FROM templates WHERE user_id = ${userId}
-                AND tipo NOT IN ('historical_low')
-              ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1
-            `.catch(() => [null]);
-      console.log(`[autopost] template lookup: channelTemplateId=${channelTemplateId || 'auto'} → pubTpl=${pubTpl?.id ?? 'non trovato'}`);
+      const [pubTpl] = await sql`
+        SELECT id, config FROM templates WHERE user_id = ${userId}
+          AND tipo NOT IN ('historical_low')
+        ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1
+      `.catch(() => [null]);
+      console.log(`[autopost] template lookup userId=${userId} → pubTpl=${pubTpl?.id ?? 'non trovato'}`);
 
       if (pubTpl) {
         const pubCfg = parseTemplateCfg(pubTpl);
         if (pubCfg) {
-          console.log(`[autopost] template ${pubTpl.id}${channelTemplateId ? ' (specifico canale)' : ''} prezzo.fontFamily=${pubCfg.prezzo?.fontFamily} bgColor=${pubCfg.bgColor ?? '(no)'} overlay.enabled=${pubCfg.overlay?.enabled ?? false} overlay.src=${pubCfg.overlay?.src ? pubCfg.overlay.src.slice(0, 60) : '(no)'}`);
           const genImg = await generateTemplateImageServer(pubCfg, String(post.image), String(post.platform ?? 'amazon'), {
             prezzo:           `${currSym}${Number(post.discountedPrice).toFixed(2)}`,
             prezzoPrecedente: `${currSym}${Number(post.originalPrice).toFixed(2)}`,
@@ -1449,7 +1432,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           }).catch((e: any) => { console.error(`[autopost] ❌ generateTemplateImageServer fallita template=${pubTpl.id}:`, e?.message ?? e); return null; });
           if (genImg) {
             post = { ...post, generatedImage: genImg };
-            console.log(`[autopost] ✅ immagine generata con template ${pubTpl.id} (${channelTemplateId ? 'canale' : 'default'})`);
+            console.log(`[autopost] ✅ immagine generata con template ${pubTpl.id}`);
           } else {
             console.warn(`[autopost] ⚠️ immagine NON generata, uso URL prodotto`);
           }
@@ -1819,12 +1802,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           if (pub.image && String(pub.image).startsWith('http')) {
             let baseForTerm: string | Buffer = String(pub.image);
             try {
-              const pubChatId = String(pub.chatId ?? channels[0] ?? '');
-              const termChannelTemplates = (cfg.channelTemplates ?? {}) as Record<string, string>;
-              const termChannelTplId = (termChannelTemplates[pubChatId] ?? '') as string;
-              const [termTpl] = termChannelTplId
-                ? await sql`SELECT id, config FROM templates WHERE id = ${termChannelTplId} AND user_id = ${userId} LIMIT 1`.catch(() => [null])
-                : await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST LIMIT 1`.catch(() => [null]);
+              const [termTpl] = await sql`
+                SELECT id, config FROM templates WHERE user_id = ${userId}
+                  AND tipo NOT IN ('historical_low')
+                ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1
+              `.catch(() => [null]);
               if (termTpl) {
                 const termTplCfg = parseTemplateCfg(termTpl);
                 if (termTplCfg) {

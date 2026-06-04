@@ -1904,45 +1904,24 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           </div>
         )}
         {s.channels.map((ch, i) => (
-          <div key={i} style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
-              <input className="inp" value={ch} placeholder="@username oppure -1001234567890"
-                onChange={e => {
-                  const v = e.target.value; const oldCh = s.channels[i];
-                  setS(prev => {
-                    const ct = { ...(prev.channelTemplates ?? {}) };
-                    if (oldCh && oldCh in ct) { ct[v] = ct[oldCh]; delete ct[oldCh]; }
-                    return { ...prev, channels: prev.channels.map((c, j) => j === i ? v : c), channelTemplates: ct };
-                  });
-                }} />
-              <button className="btn bre bic" onClick={() => setS(prev => {
-                const ct = { ...(prev.channelTemplates ?? {}) }; delete ct[ch];
-                return { ...prev, channels: prev.channels.filter((_, j) => j !== i), channelTemplates: ct };
-              })}>×</button>
-            </div>
-            {ch && templates.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 28 }}>
-                <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>🖼️ Template:</span>
-                <select className="sel" style={{ flex: 1, fontSize: 12 }}
-                  value={s.channelTemplates?.[ch] ?? ''}
-                  onChange={e => {
-                    const tplId = e.target.value;
-                    setS(prev => {
-                      const ct = { ...(prev.channelTemplates ?? {}) };
-                      if (tplId) ct[ch] = tplId; else delete ct[ch];
-                      return { ...prev, channelTemplates: ct };
-                    });
-                  }}>
-                  <option value="">— Default (template del post) —</option>
-                  {templates.map(t => <option key={t.id} value={t.id}>{t.name || `Template (${t.id.slice(-6)})`}</option>)}
-                </select>
-              </div>
-            )}
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--t3)', minWidth: 20 }}>{i + 1}.</div>
+            <input className="inp" value={ch} placeholder="@username oppure -1001234567890"
+              onChange={e => {
+                const v = e.target.value;
+                setS(prev => ({ ...prev, channels: prev.channels.map((c, j) => j === i ? v : c) }));
+              }} />
+            <button className="btn bre bic" onClick={() =>
+              setS(prev => ({ ...prev, channels: prev.channels.filter((_, j) => j !== i) }))
+            }>×</button>
           </div>
         ))}
         <button className="btn bp bsm" style={{ marginTop: 4, width: '100%' }}
           onClick={() => setS(prev => ({ ...prev, channels: [...prev.channels, ''] }))}>+ Aggiungi canale</button>
+        <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 8, lineHeight: 1.5 }}>
+          Ogni canale ha impostazioni, template e layout separati.<br />
+          Usa il switcher canale nella schermata principale per passare da un canale all'altro.
+        </div>
       </div>
 
       {/* Salva (Admin) */}

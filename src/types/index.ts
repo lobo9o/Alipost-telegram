@@ -288,7 +288,6 @@ export interface AppSettings {
   interv: number;
   attivo: boolean;
   channels: string[];
-  channelTemplates?: Record<string, string>;
   notifThreshold?: number; // sconto minimo % per pubblicare con notifica; undefined=sempre silenzioso
   amazon: AmazonSettings;
   aliexpress: AliExpressSettings;
@@ -319,6 +318,10 @@ export interface AppContextType extends AppState {
   stats: { inCoda: number; sched: number; pub: number };
   publishedCount: number;
   templateFromDB: React.MutableRefObject<boolean>;
+  // profilo canale attivo
+  activeProfileId: string;
+  setActiveProfileId: (id: string) => void;
+  allChannels: string[]; // tutti i canali configurati nel profilo primario
   // stato persistente "Nuovo Post"
   newPostMode: 'single' | 'multi';
   setNewPostMode: React.Dispatch<React.SetStateAction<'single' | 'multi'>>;

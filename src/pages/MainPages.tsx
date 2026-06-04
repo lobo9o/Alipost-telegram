@@ -5,9 +5,83 @@ import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanne
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
-import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, DealProduct } from '../lib/api';
+import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, channelInfoApi, DealProduct } from '../lib/api';
 import { generatePostImage, generateMultiPostImage, generateTerminataImage, generateMultiTerminataImage, applyCurrPos, applyDecimalSep, applySconto } from '../utils/imageCompose';
 import { getProductEmoji, shortenTitle } from '../lib/titleFormat';
+
+// ── Channel Switcher ──────────────────────────────────────────────────────────
+function ChannelSwitcher() {
+  const { allChannels, activeProfileId, setActiveProfileId } = useApp();
+  const [photoCache, setPhotoCache] = useState<Record<string, { photoUrl: string | null; title: string }>>({});
+
+  // Ricava il baseUserId dal localStorage (stesso di AppContext)
+  const getBaseUserId = (): string => {
+    try {
+      const initDataUnsafe = (window as any).Telegram?.WebApp?.initDataUnsafe;
+      return String(initDataUnsafe?.user?.id ?? '');
+    } catch { return ''; }
+  };
+
+  const baseUserId = getBaseUserId();
+  // Il canale attivo: se profilo primario prendi channels[0], altrimenti la parte dopo ':'
+  const activeChannel = activeProfileId.includes(':')
+    ? activeProfileId.split(':').slice(1).join(':')
+    : (allChannels[0] ?? '');
+
+  const channels = allChannels.filter(Boolean);
+
+  useEffect(() => {
+    channels.forEach(ch => {
+      if (photoCache[ch] !== undefined) return;
+      channelInfoApi.get(ch)
+        .then(info => setPhotoCache(prev => ({ ...prev, [ch]: info })))
+        .catch(() => setPhotoCache(prev => ({ ...prev, [ch]: { photoUrl: null, title: ch } })));
+    });
+  }, [channels.join(',')]); // dipendenza derivata, join è stabile
+
+  if (channels.length < 2) return null;
+
+  const switchToNext = () => {
+    const idx = channels.indexOf(activeChannel);
+    const next = channels[(idx + 1) % channels.length];
+    const newProfile = next === channels[0] && !channels[0].includes(':')
+      ? baseUserId
+      : `${baseUserId}:${next}`;
+    setActiveProfileId(newProfile);
+  };
+
+  const info = photoCache[activeChannel];
+  const initials = info?.title
+    ? info.title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
+    : activeChannel.replace(/[^0-9]/g, '').slice(-2);
+
+  return (
+    <div
+      onClick={switchToNext}
+      title={`Canale: ${info?.title ?? activeChannel}\nClicca per cambiare`}
+      style={{
+        marginLeft: 'auto', cursor: 'pointer', position: 'relative',
+        width: 36, height: 36, borderRadius: '50%',
+        overflow: 'hidden', flexShrink: 0,
+        border: '2px solid var(--a1)',
+        background: 'var(--bg2)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {info?.photoUrl ? (
+        <img src={info.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--a1)' }}>{initials}</span>
+      )}
+      {/* Indicatore di cambio (dot in basso a destra) */}
+      <div style={{
+        position: 'absolute', bottom: 1, right: 1,
+        width: 8, height: 8, borderRadius: '50%',
+        background: 'var(--a3)', border: '1px solid var(--bg)',
+      }} />
+    </div>
+  );
+}
 function CustomTextEditor({ initialValue, onSave, rows = 2 }: { initialValue: string; onSave: (v: string) => void; rows?: number }) {
   const [val, setVal] = useState(initialValue);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -330,7 +404,12 @@ function PostListItem({ post, isActive, onEdit, onDelete, onQueue, onPublish }: 
 // DASHBOARD
 // ============================================================
 export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
-  const { stats, settings, createdPosts } = useApp();
+  const { stats, settings, createdPosts, activeProfileId, allChannels } = useApp();
+
+  // Nome canale attivo per mostrarlo nell'header
+  const activeChannel = activeProfileId.includes(':')
+    ? activeProfileId.split(':').slice(1).join(':')
+    : (allChannels[0] ?? '');
   const items = [
     { id: 'search', ic: '🔍', lb: 'Cerca Offerte', sub: 'Amazon & AliExpress', c: 'var(--bl)' },
     { id: 'newpost', ic: '✏️', lb: 'Nuovo Post', sub: createdPosts.length > 0 ? `${createdPosts.length} bozze in attesa` : 'singolo / multiplo', c: 'var(--a1)' },
@@ -349,7 +428,8 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
             <div className="brand">PostDeal<span>Bot</span></div>
             <div style={{ fontSize: 11, color: 'var(--t2)' }}>Gestione post affiliati</div>
           </div>
-          {settings.attivo && <div className="hbdg" style={{ marginLeft: 'auto' }}>AUTO ON</div>}
+          {settings.attivo && <div className="hbdg">AUTO ON</div>}
+          <ChannelSwitcher />
         </div>
         <div className="hero-stats">
           <div className="stat"><div className="sn" style={{ color: 'var(--a3)' }}>{stats.inCoda}</div><div className="sl">In coda</div></div>
@@ -1536,12 +1616,7 @@ export function NewPostPage({ nav }: { nav: (p: NavPage) => void }) {
   const creaPost = async () => {
     setErr('');
     try {
-      // Usa il template assegnato al canale principale (channels[0]) se disponibile,
-      // altrimenti il primo template normal — evita di prendere un template di un canale secondario
-      // che potrebbe avere updated_at più recente dopo una modifica.
-      const defaultChannelId = settings.channels?.filter(Boolean)?.[0] ?? '';
-      const defaultChannelTplId = defaultChannelId ? (settings.channelTemplates?.[defaultChannelId] ?? '') : '';
-      const defaultNormalTpl = defaultChannelTplId || templates[0]?.id || 'tpl1';
+      const defaultNormalTpl = templates[0]?.id || 'tpl1';
       const defaultNormalLay = layouts.find(l => l.tipo === 'normal')?.id ?? 'l1';
       const defaultAliLay = layouts.find(l => l.tipo === 'aliexpress')?.id ?? defaultNormalLay;
       const defaultMultiLay = layouts.find(l => l.tipo === 'multi')?.id ?? 'l3';
@@ -2362,8 +2437,6 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     const item = queue.find(x => x.id === id);
     if (!item) { setPublishErr('Elemento coda non trovato'); return; }
     const channelOverride = itemChannels[id] || undefined;
-    const effectiveChannel = channelOverride ?? settings.channels.filter(Boolean)[0] ?? '';
-    const channelTemplateId = effectiveChannel ? (settings.channelTemplates?.[effectiveChannel] ?? '') : '';
     const rawPost = item.posts[0];
     if (!rawPost || typeof rawPost !== 'object' || Array.isArray(rawPost)) {
       setPublishErr('Post non valido'); return;
@@ -2465,12 +2538,10 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       }
 
       // ── Post singolo ───────────────────────────────────────────────────────
-      const channelTemplate = channelTemplateId ? templates.find(t => t.id === channelTemplateId) : null;
-      const effectiveTemplate = channelTemplate ?? template;
+      const effectiveTemplate = template;
       if (effectiveTemplate) {
         try {
-          // Se c'è un template specifico del canale, ignora la pre-generata (diverso template)
-          generatedImage = (!channelTemplate ? pregenImages.current[id] : undefined) ?? await generatePostImage(
+          generatedImage = pregenImages.current[id] ?? await generatePostImage(
             effectiveTemplate, post.image, post.isHistoricalLow, post.platform, {
               prezzo: `€${Number(post.discountedPrice).toFixed(2)}`,
               prezzoPrecedente: `€${Number(post.originalPrice).toFixed(2)}`,
@@ -2559,12 +2630,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const isMultiPost = item?.tipo === 'multi';
   const p = item?.posts[0] as CreatedPost | undefined;
   const queueItemChannel = item ? (itemChannels[item.id] ?? '') : '';
-  const queueChannelTplId = queueItemChannel ? (settings.channelTemplates?.[queueItemChannel] ?? '') : '';
-  const template = (() => {
-    if (!p) return undefined;
-    const chTpl = queueChannelTplId ? templates.find(t => t.id === queueChannelTplId) : null;
-    return chTpl ?? templates.find(t => t.id === p.templateId);
-  })();
+  const template = p ? templates.find(t => t.id === p.templateId) : undefined;
   const layout = p ? layouts.find(l => l.id === p.layoutId) : undefined;
   const qCurrency = p?.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
   const previewText = layout && p

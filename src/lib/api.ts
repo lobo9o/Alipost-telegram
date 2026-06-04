@@ -7,11 +7,15 @@ function getTgInitData(): string {
   return (window as any).Telegram?.WebApp?.initData ?? '';
 }
 
+let _activeProfileId: string | null = null;
+export function setApiProfileId(id: string | null) { _activeProfileId = id; }
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
   const initData = getTgInitData();
   if (initData) headers['x-tg-init-data'] = initData;
+  if (_activeProfileId) headers['x-profile-id'] = _activeProfileId;
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -247,6 +251,12 @@ export const emojiIdsApi = {
   fromPack: (pack_name: string) => req<{ imported: number; total_in_pack: number; pack_title: string; emoji: EmojiEntry[] }>('POST', '/api/emoji-ids', { action: 'from_pack', pack_name }),
   add: (emoji_char: string, custom_emoji_id: string) => req<{ ok: boolean }>('POST', '/api/emoji-ids', { emoji_char, custom_emoji_id }),
   remove: (emoji_char: string) => req<{ ok: boolean }>('DELETE', '/api/emoji-ids', { emoji_char }),
+};
+
+// ── Channel Info (foto + nome canale) ────────────────────────────────────────
+export interface ChannelInfo { title: string; photoUrl: string | null; username?: string; }
+export const channelInfoApi = {
+  get: (channelId: string) => req<ChannelInfo>('GET', `/api/channel-info?channelId=${encodeURIComponent(channelId)}`),
 };
 
 // ── Telegram Monitor ─────────────────────────────────────────────────────────

@@ -516,38 +516,47 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   setTimeout(() => urlSeen.delete(urlDedupKey), 5 * 60 * 1000);
 
   console.log(`[tg-monitor] ${userId} — processMessage ENTER: autoPublish=${autoPublish} destChannel=${destChannel ?? 'null'} urls=[${urls.join(', ').slice(0, 120)}]`);
-  // Se autopost è disabilitato nelle impostazioni globali, non salvare nulla
-  const [settingsRow] = await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${userId}`;
+
+  // Se esiste un profilo canale (userId:destChannel) usa quello, altrimenti usa il base userId
+  const profileId = destChannel
+    ? await (async () => {
+        const pid = `${userId}:${destChannel}`;
+        const [pr] = await sql<{ user_id: string }[]>`SELECT user_id FROM settings WHERE user_id = ${pid} LIMIT 1`.catch(() => []);
+        return pr ? pid : userId;
+      })()
+    : userId;
+
+  // Se autopost è disabilitato nel profilo, non salvare nulla
+  const [settingsRow] = await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${profileId}`;
   const cfgRaw = settingsRow?.data ?? {};
   const cfg = typeof cfgRaw === 'string' ? JSON.parse(cfgRaw) : cfgRaw as Record<string, any>;
   if (!cfg.attivo && autoPublish) {
-    console.log(`[tg-monitor] ${userId} — autopost disabilitato e canale su "pubblica subito", skip`);
+    console.log(`[tg-monitor] ${profileId} — autopost disabilitato e canale su "pubblica subito", skip`);
     return;
   }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'x-internal-user-id': userId,
+    'x-internal-user-id': profileId,
   };
   if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
 
-  const { getLayoutAndKeyboard, templateId } = await getUserLayouts(userId);
+  const { getLayoutAndKeyboard, templateId } = await getUserLayouts(profileId);
   const isMulti = urls.length > 1;
 
   // Processa tutti i link in parallelo
-  const products = (await Promise.all(urls.map(u => fetchProduct(userId, u, headers)))).filter(Boolean);
+  const products = (await Promise.all(urls.map(u => fetchProduct(profileId, u, headers)))).filter(Boolean);
   if (!products.length) return;
 
   const productIds = products.map((p: any) => (p.asin ?? p.productId ?? '').toString()).filter(Boolean);
 
   // ── Dedup in-memory per-canale (atomico nel single-thread Node.js) ───────
-  // Chiave "productId:destChannel" → canali diversi possono pubblicare lo stesso prodotto.
   if (productIds.length > 0) {
-    if (!recentlyProcessedProducts.has(userId)) recentlyProcessedProducts.set(userId, new Set());
-    const userSeen = recentlyProcessedProducts.get(userId)!;
+    if (!recentlyProcessedProducts.has(profileId)) recentlyProcessedProducts.set(profileId, new Set());
+    const userSeen = recentlyProcessedProducts.get(profileId)!;
     const chKey = (id: string) => `${id}:${destChannel ?? ''}`;
     if (productIds.some(id => userSeen.has(chKey(id)))) {
-      console.log(`[tg-monitor] ${userId} — dedup in-memory skip: ${productIds.join(',')} ch=${destChannel ?? 'default'}`);
+      console.log(`[tg-monitor] ${profileId} — dedup in-memory skip: ${productIds.join(',')} ch=${destChannel ?? 'default'}`);
       return;
     }
     productIds.forEach(id => {
@@ -557,12 +566,12 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   }
 
   // ── Dedup DB per-canale (backup post-riavvio PM2) ─────────────────────────
-  if (productIds.length > 0 && await wasRecentlyQueuedDB(userId, productIds, destChannel)) {
-    console.log(`[tg-monitor] ${userId} — dedup DB skip: ${productIds.join(',')} ch=${destChannel ?? 'default'}`);
+  if (productIds.length > 0 && await wasRecentlyQueuedDB(profileId, productIds, destChannel)) {
+    console.log(`[tg-monitor] ${profileId} — dedup DB skip: ${productIds.join(',')} ch=${destChannel ?? 'default'}`);
     return;
   }
 
-  console.log(`[tg-monitor] ${userId} — ${isMulti ? 'post multiplo' : 'post singolo'} con ${products.length}/${urls.length} prodotti`);
+  console.log(`[tg-monitor] ${profileId} — ${isMulti ? 'post multiplo' : 'post singolo'} con ${products.length}/${urls.length} prodotti`);
 
   // Estrai coupon e prezzo dal testo del messaggio originale
   const { couponCode: textCoupon, textPrice, textOriginalPrice, textCountry } = extractCouponFromText(messageText);

@@ -1,13 +1,21 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { AppContextType, QueueItem, PublishedPost, TextLayout, KeyboardLayout, Template, AppSettings, Tag, CreatedPost, makeDefaultTemplate, LinkItem, NewPostItem } from '../types';
 import {
   INITIAL_TAGS, INITIAL_LAYOUTS, INITIAL_KEYBOARDS, INITIAL_TEMPLATES, INITIAL_SETTINGS,
 } from '../data/mock';
-import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, autopostApi, publishedApi } from '../lib/api';
+import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, autopostApi, publishedApi, setApiProfileId } from '../lib/api';
 
 const AppCtx = createContext<AppContextType | null>(null);
 
 const IS_DEV = process.env.NODE_ENV === 'development';
+
+function getBaseUserId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const initDataUnsafe = (window as any).Telegram?.WebApp?.initDataUnsafe;
+    return String(initDataUnsafe?.user?.id ?? '');
+  } catch { return ''; }
+}
 
 async function tryFetch<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   if (IS_DEV) return fallback;
@@ -29,7 +37,6 @@ function mergeSettings(fetched: unknown): AppSettings {
     interv: typeof r.interv === 'number' ? r.interv : INITIAL_SETTINGS.interv,
     attivo: typeof r.attivo === 'boolean' ? r.attivo : INITIAL_SETTINGS.attivo,
     channels: Array.isArray(r.channels) ? r.channels as string[] : INITIAL_SETTINGS.channels,
-    channelTemplates: (r.channelTemplates && typeof r.channelTemplates === 'object' && !Array.isArray(r.channelTemplates)) ? r.channelTemplates as Record<string, string> : {},
     notifThreshold: typeof r.notifThreshold === 'number' ? r.notifThreshold : undefined,
     amazon: {
       enabled: typeof am.enabled === 'boolean' ? am.enabled : INITIAL_SETTINGS.amazon.enabled,
@@ -96,6 +103,20 @@ function mergeSettings(fetched: unknown): AppSettings {
   };
 }
 
+async function loadProfileData(profileId: string) {
+  const tmplPromise = templatesApi.list().catch(() => null as Template[] | null);
+  const [q, t, l, kb, s, pub, tmplResult] = await Promise.all([
+    tryFetch(autopostApi.list, []),
+    tryFetch(tagsApi.list, INITIAL_TAGS),
+    tryFetch(layoutsApi.list, INITIAL_LAYOUTS),
+    tryFetch(keyboardsApi.list, INITIAL_KEYBOARDS),
+    tryFetch(settingsApi.get, {} as AppSettings),
+    tryFetch(publishedApi.listToday, []),
+    tmplPromise,
+  ]);
+  return { q, t, l, kb, s, pub, tmplResult };
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [createdPosts, setCreatedPosts] = useState<CreatedPost[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -110,116 +131,153 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   const [publishedCount, setPublishedCount] = useState(0);
   const [loaded, setLoaded] = useState(IS_DEV);
-  const templateFromDB = useRef(IS_DEV); // true = template caricato dal DB, sicuro da salvare
+  const templateFromDB = useRef(IS_DEV);
 
-  useEffect(() => {
-    if (IS_DEV) return;
-    // I template vengono caricati separatamente con null come sentinella d'errore:
-    // se l'API fallisce (es. dopo restart) non settiamo templateFromDB=true e blocchiamo il salvataggio,
-    // evitando che i valori di default sovrascrivano le impostazioni reali nel DB.
-    const tmplPromise = templatesApi.list().catch(() => null as Template[] | null);
+  // ── Profilo attivo ──────────────────────────────────────────────────────────
+  // allChannels: lista canali del profilo primario (per il switcher)
+  const [allChannels, setAllChannels] = useState<string[]>([]);
+  const [activeProfileId, setActiveProfileIdState] = useState<string>(() => {
+    try { return localStorage.getItem('activeProfileId') ?? ''; } catch { return ''; }
+  });
 
-    Promise.all([
-      tryFetch(autopostApi.list, []),
-      tryFetch(tagsApi.list, INITIAL_TAGS),
-      tryFetch(layoutsApi.list, INITIAL_LAYOUTS),
-      tryFetch(keyboardsApi.list, INITIAL_KEYBOARDS),
-      tryFetch(settingsApi.get, {} as AppSettings),
-      tryFetch(publishedApi.listToday, []),
-      tmplPromise,
-    ]).then(([q, t, l, kb, s, pub, tmplResult]) => {
-      setQueue((q as QueueItem[]).filter(x => x.status === 'draft'));
-      // Merge: i tag di sistema da INITIAL_TAGS sono sempre presenti, i tag DB sovrascrivono per id
-      {
-        const dbById = new Map((t as Tag[]).map((x: Tag) => [x.id, x]));
-        const dbByName = new Map((t as Tag[]).map((x: Tag) => [x.name, x]));
-        // Parti dai tag di sistema (INITIAL_TAGS), aggiorna con versione DB se esiste
-        const systemMerged = INITIAL_TAGS.map(d => dbById.get(d.id) ?? dbByName.get(d.name) ?? d);
-        // Aggiungi i tag custom presenti solo nel DB (non in INITIAL_TAGS)
-        const extra = (t as Tag[]).filter((x: Tag) => !INITIAL_TAGS.some(d => d.id === x.id || d.name === x.name));
-        setTags([...systemMerged, ...extra]);
-      }
-      // Merge DB layouts: controlla per nome+tipo (non per id) così non crea duplicati
-      // quando il server genera UUID invece degli id fissi dell'app
-      {
-        const key = (x: TextLayout) => `${x.nome}__${x.tipo}`;
-        const dbByKey = new Map((l as TextLayout[]).map((x: TextLayout) => [key(x), x]));
-        // Pulizia duplicati: per ogni nome+tipo tieni solo il più vecchio, cancella gli altri
-        const seen = new Map<string, string>(); // key → id da tenere
-        for (const x of (l as TextLayout[])) {
-          const k = key(x);
-          if (!seen.has(k)) { seen.set(k, x.id); }
-          else { layoutsApi.delete(x.id).catch(() => {}); }
-        }
-        const merged = INITIAL_LAYOUTS.map(d => dbByKey.get(key(d)) ?? d);
-        const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => key(d) === key(x)) && seen.get(key(x)) === x.id);
-        setLayouts([...merged, ...extra]);
-        INITIAL_LAYOUTS.forEach(d => { if (!dbByKey.has(key(d))) layoutsApi.create(d).catch(() => {}); });
-      }
-      // Merge keyboards: stessa logica (per nome)
-      {
-        const dbByNome = new Map((kb as KeyboardLayout[]).map((x: KeyboardLayout) => [x.nome, x]));
-        // Pulizia duplicati
-        const seenKb = new Map<string, string>();
-        for (const x of (kb as KeyboardLayout[])) {
-          if (!seenKb.has(x.nome)) { seenKb.set(x.nome, x.id); }
-          else { keyboardsApi.delete(x.id).catch(() => {}); }
-        }
-        const merged = INITIAL_KEYBOARDS.map(d => dbByNome.get(d.nome) ?? d);
-        const extra = (kb as KeyboardLayout[]).filter((x: KeyboardLayout) => !INITIAL_KEYBOARDS.some(d => d.nome === x.nome) && seenKb.get(x.nome) === x.id);
-        setKeyboards([...merged, ...extra]);
-        INITIAL_KEYBOARDS.forEach(d => { if (!dbByNome.has(d.nome)) keyboardsApi.create(d).catch(() => {}); });
-      }
-      // tmplResult === null → API fallita: templateFromDB resta false, nessun salvataggio
-      // tmplResult !== null → dato reale dal DB → abilita salvataggio
-      const tmpl = tmplResult as Template[] | null;
-      if (tmpl !== null) {
-        if (tmpl.length > 0) {
-          const loaded = tmpl.map(t => {
-            const base = { ...makeDefaultTemplate(t.id), ...t };
-            if ((t as any).store && !t.storeAmazon) base.storeAmazon = (t as any).store;
-            if ((t as any).store && !t.storeAliexpress) base.storeAliexpress = (t as any).store;
-            return base;
-          });
-          setTemplates(loaded);
-          templateFromDB.current = true;
-        } else {
-          // Nessun template nel DB: crea e usa l'id assegnato dal server (UUID)
-          const def = makeDefaultTemplate('tpl1');
-          setTemplates([def]);
-          templatesApi.create(def).then(created => {
-            setTemplates([{ ...makeDefaultTemplate(created.id), ...created }]);
-            templateFromDB.current = true;
-          }).catch(() => {});
-          // templateFromDB.current resta false finché create non risponde
-        }
-      }
-      // else: API fallita → templateFromDB resta false, il template di default in stato è solo visivo
-      const rawS = s as AppSettings & { _publishedCount?: number };
-      setPublishedCount(rawS._publishedCount ?? 0);
-      const mergedS = mergeSettings(rawS);
-      // Pulisce channelTemplates che puntano a template non presenti nel DB
-      if (tmpl !== null && tmpl.length > 0) {
-        const validIds = new Set((tmpl as Template[]).map(t => t.id));
-        const ct = mergedS.channelTemplates ?? {};
-        const cleaned: Record<string, string> = {};
-        let changed = false;
-        for (const [ch, tplId] of Object.entries(ct)) {
-          if (validIds.has(tplId)) cleaned[ch] = tplId;
-          else changed = true;
-        }
-        if (changed) {
-          mergedS.channelTemplates = cleaned;
-          settingsApi.save(mergedS).catch(() => {});
-        }
-      }
-      setSettings(mergedS);
-      if (pub.length > 0) setPublished(pub as PublishedPost[]);
-      setLoaded(true);
-    });
+  const setActiveProfileId = useCallback((id: string) => {
+    try { localStorage.setItem('activeProfileId', id); } catch {}
+    setApiProfileId(id || null);
+    setActiveProfileIdState(id);
   }, []);
 
-  // Polling coda ogni 60s — rimuove i post pubblicati dal cron senza dover ricaricare l'app
+  // Inizializza header API al mount
+  useEffect(() => {
+    if (activeProfileId) setApiProfileId(activeProfileId);
+  }, []); // solo al mount
+
+  // ── Carica dati profilo ─────────────────────────────────────────────────────
+  const applyData = useCallback((
+    q: any, t: any, l: any, kb: any, s: any, pub: any, tmplResult: any, isPrimary: boolean
+  ) => {
+    setQueue((q as QueueItem[]).filter((x: QueueItem) => x.status === 'draft'));
+
+    if (isPrimary) {
+      // Merge: i tag di sistema da INITIAL_TAGS sono sempre presenti
+      const dbById = new Map((t as Tag[]).map((x: Tag) => [x.id, x]));
+      const dbByName = new Map((t as Tag[]).map((x: Tag) => [x.name, x]));
+      const systemMerged = INITIAL_TAGS.map(d => dbById.get(d.id) ?? dbByName.get(d.name) ?? d);
+      const extra = (t as Tag[]).filter((x: Tag) => !INITIAL_TAGS.some(d => d.id === x.id || d.name === x.name));
+      setTags([...systemMerged, ...extra]);
+    }
+
+    // Merge layouts
+    {
+      const key = (x: TextLayout) => `${x.nome}__${x.tipo}`;
+      const dbByKey = new Map((l as TextLayout[]).map((x: TextLayout) => [key(x), x]));
+      const seen = new Map<string, string>();
+      for (const x of (l as TextLayout[])) {
+        const k = key(x);
+        if (!seen.has(k)) { seen.set(k, x.id); }
+        else { layoutsApi.delete(x.id).catch(() => {}); }
+      }
+      const merged = INITIAL_LAYOUTS.map(d => dbByKey.get(key(d)) ?? d);
+      const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => key(d) === key(x)) && seen.get(key(x)) === x.id);
+      setLayouts([...merged, ...extra]);
+      INITIAL_LAYOUTS.forEach(d => { if (!dbByKey.has(key(d))) layoutsApi.create(d).catch(() => {}); });
+    }
+
+    if (isPrimary) {
+      // Merge keyboards
+      const dbByNome = new Map((kb as KeyboardLayout[]).map((x: KeyboardLayout) => [x.nome, x]));
+      const seenKb = new Map<string, string>();
+      for (const x of (kb as KeyboardLayout[])) {
+        if (!seenKb.has(x.nome)) { seenKb.set(x.nome, x.id); }
+        else { keyboardsApi.delete(x.id).catch(() => {}); }
+      }
+      const merged = INITIAL_KEYBOARDS.map(d => dbByNome.get(d.nome) ?? d);
+      const extra = (kb as KeyboardLayout[]).filter((x: KeyboardLayout) => !INITIAL_KEYBOARDS.some(d => d.nome === x.nome) && seenKb.get(x.nome) === x.id);
+      setKeyboards([...merged, ...extra]);
+      INITIAL_KEYBOARDS.forEach(d => { if (!dbByNome.has(d.nome)) keyboardsApi.create(d).catch(() => {}); });
+    }
+
+    // Template
+    const tmpl = tmplResult as Template[] | null;
+    if (tmpl !== null) {
+      if (tmpl.length > 0) {
+        const loaded = tmpl.map(t => {
+          const base = { ...makeDefaultTemplate(t.id), ...t };
+          if ((t as any).store && !t.storeAmazon) base.storeAmazon = (t as any).store;
+          if ((t as any).store && !t.storeAliexpress) base.storeAliexpress = (t as any).store;
+          return base;
+        });
+        setTemplates(loaded);
+        templateFromDB.current = true;
+      } else {
+        const def = makeDefaultTemplate('tpl1');
+        setTemplates([def]);
+        templatesApi.create(def).then(created => {
+          setTemplates([{ ...makeDefaultTemplate(created.id), ...created }]);
+          templateFromDB.current = true;
+        }).catch(() => {});
+      }
+    }
+
+    const rawS = s as AppSettings & { _publishedCount?: number };
+    setPublishedCount(rawS._publishedCount ?? 0);
+    const mergedS = mergeSettings(rawS);
+    setSettings(mergedS);
+
+    if (isPrimary) {
+      setAllChannels(mergedS.channels.filter(Boolean));
+    }
+
+    if (pub.length > 0) setPublished(pub as PublishedPost[]);
+  }, []);
+
+  // Caricamento iniziale
+  useEffect(() => {
+    if (IS_DEV) return;
+    templateFromDB.current = false;
+    loadProfileData(activeProfileId).then(({ q, t, l, kb, s, pub, tmplResult }) => {
+      // Per il profilo primario leggiamo anche i channels per allChannels
+      const isPrimary = !activeProfileId.includes(':');
+      applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
+      if (!isPrimary) {
+        // carica i channels del profilo primario per il switcher
+        const base = activeProfileId.split(':')[0];
+        setApiProfileId(null);
+        settingsApi.get().then(ps => {
+          setAllChannels(((ps as any)?.channels ?? []).filter(Boolean));
+          setApiProfileId(activeProfileId);
+        }).catch(() => {
+          setApiProfileId(activeProfileId);
+        });
+      }
+      setLoaded(true);
+    });
+  }, []); // solo al mount
+
+  // Ricarica dati quando cambia profilo attivo (dopo il mount iniziale)
+  const isFirstMount = useRef(true);
+  useEffect(() => {
+    if (IS_DEV) return;
+    if (isFirstMount.current) { isFirstMount.current = false; return; }
+    setLoaded(false);
+    templateFromDB.current = false;
+    setApiProfileId(activeProfileId || null);
+    loadProfileData(activeProfileId).then(({ q, t, l, kb, s, pub, tmplResult }) => {
+      const isPrimary = !activeProfileId.includes(':');
+      applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
+      if (!isPrimary) {
+        setApiProfileId(null);
+        settingsApi.get().then(ps => {
+          setAllChannels(((ps as any)?.channels ?? []).filter(Boolean));
+          setApiProfileId(activeProfileId);
+        }).catch(() => {
+          setApiProfileId(activeProfileId);
+        });
+      }
+      setLoaded(true);
+    });
+  }, [activeProfileId, applyData]);
+
+  // Polling coda ogni 60s
   useEffect(() => {
     if (IS_DEV) return;
     const id = setInterval(() => {
@@ -269,6 +327,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       stats,
       publishedCount,
       templateFromDB,
+      activeProfileId,
+      setActiveProfileId,
+      allChannels,
       newPostMode, setNewPostMode,
       newPostItems, setNewPostItems,
       newPostEditingMultiId, setNewPostEditingMultiId,
