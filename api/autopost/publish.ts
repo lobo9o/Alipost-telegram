@@ -1820,7 +1820,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             let baseForTerm: string | Buffer = String(pub.image);
             try {
               const pubChatId = String(pub.chatId ?? channels[0] ?? '');
-              const termChannelTplId = (channelTemplates[pubChatId] ?? '') as string;
+              const termChannelTemplates = (cfg.channelTemplates ?? {}) as Record<string, string>;
+              const termChannelTplId = (termChannelTemplates[pubChatId] ?? '') as string;
               const [termTpl] = termChannelTplId
                 ? await sql`SELECT id, config FROM templates WHERE id = ${termChannelTplId} AND user_id = ${userId} LIMIT 1`.catch(() => [null])
                 : await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST LIMIT 1`.catch(() => [null]);
