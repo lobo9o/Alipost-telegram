@@ -104,18 +104,12 @@ function mergeSettings(fetched: unknown): AppSettings {
 }
 
 async function loadProfileData(profileId: string) {
-  const isSecondary = profileId.includes(':');
-  const primaryId   = isSecondary ? profileId.split(':')[0] : profileId;
-
-  // Template/layout/tag/keyboard: usa sempre il profilo primario (dati condivisi)
-  if (isSecondary) setApiProfileId(primaryId);
+  // Ogni profilo (primario e secondario) ha i propri dati separati.
+  // Le credenziali Amazon/AliExpress condivise vengono iniettate server-side.
   const tmplPromise = templatesApi.list().catch(() => null as Template[] | null);
   const tPromise    = tryFetch(tagsApi.list, INITIAL_TAGS);
   const lPromise    = tryFetch(layoutsApi.list, INITIAL_LAYOUTS);
   const kbPromise   = tryFetch(keyboardsApi.list, INITIAL_KEYBOARDS);
-
-  // Settings/coda/pubblicati: usa il profilo attivo (secondario se applicabile)
-  if (isSecondary) setApiProfileId(profileId);
   const qPromise    = tryFetch(autopostApi.list, []);
   const sPromise    = tryFetch(settingsApi.get, {} as AppSettings);
   const pubPromise  = tryFetch(publishedApi.listToday, []);
@@ -166,8 +160,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ) => {
     setQueue((q as QueueItem[]).filter((x: QueueItem) => x.status === 'draft'));
 
-    if (isPrimary) {
-      // Merge: i tag di sistema da INITIAL_TAGS sono sempre presenti
+    {
+      // Merge: i tag di sistema da INITIAL_TAGS sono sempre presenti per ogni profilo
       const dbById = new Map((t as Tag[]).map((x: Tag) => [x.id, x]));
       const dbByName = new Map((t as Tag[]).map((x: Tag) => [x.name, x]));
       const systemMerged = INITIAL_TAGS.map(d => dbById.get(d.id) ?? dbByName.get(d.name) ?? d);
@@ -183,18 +177,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       for (const x of (l as TextLayout[])) {
         const k = key(x);
         if (!seen.has(k)) { seen.set(k, x.id); }
-        else if (isPrimary) { layoutsApi.delete(x.id).catch(() => {}); }
+        else { layoutsApi.delete(x.id).catch(() => {}); }
       }
       const merged = INITIAL_LAYOUTS.map(d => dbByKey.get(key(d)) ?? d);
       const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => key(d) === key(x)) && seen.get(key(x)) === x.id);
       setLayouts([...merged, ...extra]);
-      if (isPrimary) {
-        INITIAL_LAYOUTS.forEach(d => { if (!dbByKey.has(key(d))) layoutsApi.create(d).catch(() => {}); });
-      }
+      INITIAL_LAYOUTS.forEach(d => { if (!dbByKey.has(key(d))) layoutsApi.create(d).catch(() => {}); });
     }
 
-    if (isPrimary) {
-      // Merge keyboards
+    {
+      // Merge keyboards — ogni profilo ha le proprie
       const dbByNome = new Map((kb as KeyboardLayout[]).map((x: KeyboardLayout) => [x.nome, x]));
       const seenKb = new Map<string, string>();
       for (const x of (kb as KeyboardLayout[])) {
@@ -219,8 +211,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
         setTemplates(loaded);
         templateFromDB.current = true;
-      } else if (isPrimary) {
-        // Solo per profilo primario: crea template di default
+      } else {
+        // Nessun template: crea il default per questo profilo
         const def = makeDefaultTemplate('tpl1');
         setTemplates([def]);
         templatesApi.create(def).then(created => {
