@@ -82,7 +82,23 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const [countRow] = await sql`
       SELECT COUNT(*)::int AS cnt FROM published_posts WHERE user_id = ${userId}
     `.catch(() => [{ cnt: 0 }]);
-    res.json({ ...merged, _publishedCount: countRow?.cnt ?? 0 });
+
+    // Per profili secondari: inietta i canali del primario direttamente nella risposta
+    // così AppContext non deve fare un secondo fetch per il ChannelSwitcher
+    let primaryChannels: string[] | undefined;
+    if (isSecondary && primaryId) {
+      const [pRow] = await sql`SELECT data FROM settings WHERE user_id = ${primaryId}`.catch(() => [null]);
+      if (pRow) {
+        const pData = (typeof pRow.data === 'string' ? JSON.parse(pRow.data) : pRow.data) as Record<string, any>;
+        primaryChannels = Array.isArray(pData.channels) ? pData.channels.filter(Boolean) : [];
+      }
+    }
+
+    res.json({
+      ...merged,
+      _publishedCount: countRow?.cnt ?? 0,
+      ...(primaryChannels !== undefined ? { _primaryChannels: primaryChannels } : {}),
+    });
     return;
   }
 

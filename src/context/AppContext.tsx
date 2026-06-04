@@ -235,19 +235,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (IS_DEV) return;
     templateFromDB.current = false;
     loadProfileData(activeProfileId).then(({ q, t, l, kb, s, pub, tmplResult }) => {
-      // Per il profilo primario leggiamo anche i channels per allChannels
       const isPrimary = !activeProfileId.includes(':');
       applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
+      // Per profili secondari: _primaryChannels arriva già nella risposta settings
       if (!isPrimary) {
-        // carica i channels del profilo primario per il switcher
-        const base = activeProfileId.split(':')[0];
-        setApiProfileId(null);
-        settingsApi.get().then(ps => {
-          setAllChannels(((ps as any)?.channels ?? []).filter(Boolean));
-          setApiProfileId(activeProfileId);
-        }).catch(() => {
-          setApiProfileId(activeProfileId);
-        });
+        const pc = (s as any)?._primaryChannels;
+        if (Array.isArray(pc) && pc.length > 0) {
+          setAllChannels(pc.filter(Boolean));
+        }
       }
       setLoaded(true);
     });
@@ -265,13 +260,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const isPrimary = !activeProfileId.includes(':');
       applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
       if (!isPrimary) {
-        setApiProfileId(null);
-        settingsApi.get().then(ps => {
-          setAllChannels(((ps as any)?.channels ?? []).filter(Boolean));
-          setApiProfileId(activeProfileId);
-        }).catch(() => {
-          setApiProfileId(activeProfileId);
-        });
+        const pc = (s as any)?._primaryChannels;
+        if (Array.isArray(pc) && pc.length > 0) {
+          setAllChannels(pc.filter(Boolean));
+        }
       }
       setLoaded(true);
     });
