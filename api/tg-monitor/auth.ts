@@ -22,12 +22,15 @@ export default withErrorHandler(async (req, res) => {
   const userId = requireUserId(req, res);
   if (!userId) return;
 
+  // La sessione Telegram è condivisa tra tutti i profili dello stesso account
+  const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+
   const { action } = req.body ?? {};
 
   // ── Status ──────────────────────────────────────────────────
   if (req.method === 'GET') {
     const [row] = await sql<{ status: string; phone: string | null }[]>`
-      SELECT status, phone FROM tg_sessions WHERE user_id = ${userId}
+      SELECT status, phone FROM tg_sessions WHERE user_id = ${baseUserId}
     `;
     return res.json(row ?? { status: 'none', phone: null });
   }
@@ -39,7 +42,7 @@ export default withErrorHandler(async (req, res) => {
   // ── Sign Out ─────────────────────────────────────────────────
   if (action === 'signOut') {
     const [row] = await sql<{ session_string: string }[]>`
-      SELECT session_string FROM tg_sessions WHERE user_id = ${userId}
+      SELECT session_string FROM tg_sessions WHERE user_id = ${baseUserId}
     `;
     if (row?.session_string) {
       try {
@@ -52,11 +55,10 @@ export default withErrorHandler(async (req, res) => {
         await client.disconnect();
       } catch { /* ignora errori di logout */ }
     }
-    await sql`DELETE FROM tg_sessions WHERE user_id = ${userId}`;
-    pendingAuth.delete(userId);
-    // Notifica worker
+    await sql`DELETE FROM tg_sessions WHERE user_id = ${baseUserId}`;
+    pendingAuth.delete(baseUserId);
     const { reloadUser } = await import('./worker.js');
-    reloadUser(userId);
+    reloadUser(baseUserId);
     return res.json({ ok: true });
   }
 
@@ -80,7 +82,7 @@ export default withErrorHandler(async (req, res) => {
       settings: new Api.CodeSettings({}),
     }));
 
-    pendingAuth.set(userId, {
+    pendingAuth.set(baseUserId, {
       client,
       phoneCodeHash: (result as any).phoneCodeHash,
       phone,
@@ -94,7 +96,7 @@ export default withErrorHandler(async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Codice mancante' });
 
-    const pending = pendingAuth.get(userId);
+    const pending = pendingAuth.get(baseUserId);
     if (!pending) return res.status(400).json({ error: 'Sessione di login scaduta, riprova con il numero' });
 
     const { client, phoneCodeHash, phone } = pending;
@@ -113,18 +115,18 @@ export default withErrorHandler(async (req, res) => {
     }
 
     const sessionString = (client.session as StringSession).save() as string;
-    pendingAuth.delete(userId);
+    pendingAuth.delete(baseUserId);
 
     await sql`
       INSERT INTO tg_sessions (id, user_id, phone, session_string, status)
-      VALUES (${crypto.randomUUID()}, ${userId}, ${phone}, ${sessionString}, 'active')
+      VALUES (${crypto.randomUUID()}, ${baseUserId}, ${phone}, ${sessionString}, 'active')
       ON CONFLICT (user_id) DO UPDATE SET phone = EXCLUDED.phone, session_string = EXCLUDED.session_string, status = 'active'
     `;
 
     await client.disconnect();
 
     const { reloadUser } = await import('./worker.js');
-    reloadUser(userId);
+    reloadUser(baseUserId);
 
     return res.json({ ok: true });
   }
@@ -134,7 +136,7 @@ export default withErrorHandler(async (req, res) => {
     const { password } = req.body;
     if (!password) return res.status(400).json({ error: 'Password 2FA mancante' });
 
-    const pending = pendingAuth.get(userId);
+    const pending = pendingAuth.get(baseUserId);
     if (!pending) return res.status(400).json({ error: 'Sessione scaduta, riprova' });
 
     const { client, phone } = pending;
@@ -145,18 +147,18 @@ export default withErrorHandler(async (req, res) => {
     await client.invoke(new Api.auth.CheckPassword({ password: inputCheckPassword }));
 
     const sessionString = (client.session as StringSession).save() as string;
-    pendingAuth.delete(userId);
+    pendingAuth.delete(baseUserId);
 
     await sql`
       INSERT INTO tg_sessions (id, user_id, phone, session_string, status)
-      VALUES (${crypto.randomUUID()}, ${userId}, ${phone}, ${sessionString}, 'active')
+      VALUES (${crypto.randomUUID()}, ${baseUserId}, ${phone}, ${sessionString}, 'active')
       ON CONFLICT (user_id) DO UPDATE SET phone = EXCLUDED.phone, session_string = EXCLUDED.session_string, status = 'active'
     `;
 
     await client.disconnect();
 
     const { reloadUser } = await import('./worker.js');
-    reloadUser(userId);
+    reloadUser(baseUserId);
 
     return res.json({ ok: true });
   }
