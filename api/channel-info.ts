@@ -7,15 +7,20 @@ const CACHE_TTL = 60 * 60 * 1000;
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['GET'], req, res)) return;
-  const userId = requireUserId(req, res);
-  if (!userId) return;
 
   const channelId = (req.query.channelId as string | undefined)?.trim();
   if (!channelId) { res.status(400).json({ error: 'channelId required' }); return; }
 
   const isPhotoRequest = req.query.photo === '1';
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
+  // Le richieste foto arrivano come <img src> senza headers — non richiedono auth.
+  // Le richieste JSON (info canale) richiedono auth normale.
+  if (!isPhotoRequest) {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+  }
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) {
     if (isPhotoRequest) { res.status(404).end(); return; }
     res.json({ title: '', photoUrl: null });
@@ -61,6 +66,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   if (isPhotoRequest) {
+    // Proxy immagine: scarica server-side e restituisce i bytes (bot token mai esposto al browser)
     if (!entry.fileUrl) { res.status(404).end(); return; }
     try {
       const imgRes = await fetch(entry.fileUrl);

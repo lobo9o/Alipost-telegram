@@ -49,11 +49,8 @@ function ChannelSwitcher() {
   const displayName = (!isNumericId && rawTitle) ? rawTitle : activeChannel;
   const shortName = displayName.length > 15 ? displayName.slice(0, 14) + '…' : displayName;
 
-  // Avatar: foto se disponibile, altrimenti prime 2 lettere del nome o icona canale
+  // Avatar: foto se disponibile, altrimenti icona 📢
   const hasPhoto = !!info?.photoUrl;
-  const letterFallback = (!isNumericId && rawTitle)
-    ? rawTitle.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || rawTitle.slice(0, 2)
-    : '📢';
 
   return (
     <div
@@ -64,27 +61,34 @@ function ChannelSwitcher() {
         cursor: 'pointer', userSelect: 'none',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        gap: 4, padding: '6px 10px',
-        position: 'relative', overflow: 'hidden',
+        gap: 4, padding: '6px 8px',
       }}
     >
-      {/* Avatar circolare — stesse dimensioni di un'icona prominente */}
+      {/* Avatar circolare grande */}
       <div style={{
-        width: 36, height: 36, borderRadius: '50%',
+        width: 46, height: 46, borderRadius: '50%',
         overflow: 'hidden', flexShrink: 0,
         background: 'var(--bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: hasPhoto ? undefined : (letterFallback.length === 1 ? 18 : 13),
-        fontWeight: 700, color: 'var(--a1)',
+        fontSize: 22,
         border: '2px solid var(--a1)',
+        boxSizing: 'border-box',
       }}>
         {hasPhoto
-          ? <img src={info!.photoUrl!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          : letterFallback
+          ? <img
+              src={info!.photoUrl!}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              onError={e => {
+                const el = e.target as HTMLImageElement;
+                el.style.display = 'none';
+                el.parentElement!.textContent = '📢';
+              }}
+            />
+          : '📢'
         }
       </div>
-      {/* Label sotto — stile .sl */}
-      <div style={{ fontSize: 10, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '.5px', lineHeight: 1, textAlign: 'center', maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ fontSize: 10, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '.5px', lineHeight: 1 }}>
         ↻ canale
       </div>
     </div>
