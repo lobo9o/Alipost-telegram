@@ -969,9 +969,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const oraF   = cfg.oraF   ?? '22:00';
     const interv = Math.max(1, Number(cfg.interv ?? 60));
     const channelOverride = process.env.CHANNEL_OVERRIDE || '';
+    // Profili secondari: userId = "primaryId:channelId" — se channels non salvato usa il channelId dall'ID
+    const channelFromId2 = userId.includes(':') ? userId.split(':')[1] : null;
+    const cfgChannels2 = Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
     const channels: string[] = channelOverride
       ? [channelOverride]
-      : Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
+      : cfgChannels2.length > 0 ? cfgChannels2 : channelFromId2 ? [channelFromId2] : [];
 
     if (!channels.length) { skipped.push(`${userId}: no channels`); continue; }
 

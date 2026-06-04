@@ -446,9 +446,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
 
   const envChannelOverride = process.env.CHANNEL_OVERRIDE || '';
+  // Profili secondari: userId = "primaryId:channelId" — se channels non salvato usa il channelId dall'ID
+  const channelFromId = userId.includes(':') ? userId.split(':')[1] : null;
+  const cfgChannels = Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
   const channels: string[] = envChannelOverride
     ? [envChannelOverride]
-    : Array.isArray(cfg.channels) ? cfg.channels.filter(Boolean) : [];
+    : cfgChannels.length > 0 ? cfgChannels : channelFromId ? [channelFromId] : [];
   console.log('[publish] channels from settings:', channels, '| bodyChannel:', bodyChannel);
   if (!channels.length) {
     res.status(400).json({ error: 'Nessun canale Telegram configurato. Vai in Impostazioni → Canali Telegram.' });
