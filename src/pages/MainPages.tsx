@@ -12,7 +12,7 @@ import { getProductEmoji, shortenTitle } from '../lib/titleFormat';
 // ── Channel Switcher ──────────────────────────────────────────────────────────
 function ChannelSwitcher() {
   const { allChannels, activeProfileId, setActiveProfileId } = useApp();
-  const [infoCache, setInfoCache] = useState<Record<string, { photoUrl: string | null; title: string }>>({});
+  const [infoCache, setInfoCache] = useState<Record<string, { photoUrl: string | null; title: string } | null>>({});
 
   const getBaseUserId = (): string => {
     try { return String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id ?? ''); } catch { return ''; }
@@ -25,10 +25,11 @@ function ChannelSwitcher() {
 
   useEffect(() => {
     channels.forEach(ch => {
-      if (infoCache[ch] !== undefined) return;
+      if (infoCache[ch] !== undefined) return; // già in cache (anche null = già tentato)
+      setInfoCache(prev => ({ ...prev, [ch]: null })); // segna "in corso"
       channelInfoApi.get(ch)
         .then(info => setInfoCache(prev => ({ ...prev, [ch]: info })))
-        .catch(() => setInfoCache(prev => ({ ...prev, [ch]: { photoUrl: null, title: ch } })));
+        .catch(() => setInfoCache(prev => ({ ...prev, [ch]: { photoUrl: null, title: '' } })));
     });
   }, [channels.join(',')]); // dipendenza derivata, join è stabile
 
@@ -42,42 +43,49 @@ function ChannelSwitcher() {
   };
 
   const info = infoCache[activeChannel];
-  const title = info?.title ?? '';
-  const initials = title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || '?';
-  const shortName = title
-    ? (title.length > 14 ? title.slice(0, 13) + '…' : title)
-    : activeChannel.slice(-8);
+  // Usa il nome del canale solo se è una stringa non-numerica (non l'ID)
+  const rawTitle = info?.title ?? '';
+  const isNumericId = /^-?\d+$/.test(rawTitle.trim());
+  const displayName = (!isNumericId && rawTitle) ? rawTitle : activeChannel;
+  const shortName = displayName.length > 15 ? displayName.slice(0, 14) + '…' : displayName;
+
+  // Avatar: foto se disponibile, altrimenti prime 2 lettere del nome o icona canale
+  const hasPhoto = !!info?.photoUrl;
+  const letterFallback = (!isNumericId && rawTitle)
+    ? rawTitle.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || rawTitle.slice(0, 2)
+    : '📢';
 
   return (
     <div
       onClick={switchToNext}
       title="Clicca per cambiare canale"
+      className="stat"
       style={{
-        marginLeft: 'auto', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '5px 10px 5px 5px',
-        background: 'var(--bg2)', borderRadius: 20,
-        border: '1px solid var(--br)',
-        flexShrink: 0, userSelect: 'none',
+        cursor: 'pointer', userSelect: 'none',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 4, padding: '6px 10px',
+        position: 'relative', overflow: 'hidden',
       }}
     >
-      {/* Avatar */}
+      {/* Avatar circolare — stesse dimensioni di un'icona prominente */}
       <div style={{
-        width: 30, height: 30, borderRadius: '50%',
+        width: 36, height: 36, borderRadius: '50%',
         overflow: 'hidden', flexShrink: 0,
-        background: 'var(--a1-dim, #1a2e4a)',
+        background: 'var(--bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 11, fontWeight: 700, color: 'var(--a1)',
+        fontSize: hasPhoto ? undefined : (letterFallback.length === 1 ? 18 : 13),
+        fontWeight: 700, color: 'var(--a1)',
+        border: '2px solid var(--a1)',
       }}>
-        {info?.photoUrl
-          ? <img src={info.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : initials
+        {hasPhoto
+          ? <img src={info!.photoUrl!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          : letterFallback
         }
       </div>
-      {/* Nome + hint cambio */}
-      <div style={{ lineHeight: 1.2 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--t1)' }}>{shortName}</div>
-        <div style={{ fontSize: 10, color: 'var(--t3)' }}>↻ cambia</div>
+      {/* Label sotto — stile .sl */}
+      <div style={{ fontSize: 10, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '.5px', lineHeight: 1, textAlign: 'center', maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        ↻ canale
       </div>
     </div>
   );
@@ -430,7 +438,7 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
           </div>
           {settings.attivo && <div className="hbdg">AUTO ON</div>}
         </div>
-        <div className="hero-stats" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="hero-stats">
           <div className="stat"><div className="sn" style={{ color: 'var(--a3)' }}>{stats.inCoda}</div><div className="sl">In coda</div></div>
           <div className="stat"><div className="sn" style={{ color: 'var(--gr2)' }}>{stats.pub}</div><div className="sl">Pubblicati</div></div>
           <ChannelSwitcher />
