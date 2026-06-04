@@ -250,11 +250,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const isPrimary = !activeProfileId.includes(':');
       applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
       if (!isPrimary) {
-        const pc = (s as any)?._primaryChannels;
-        if (Array.isArray(pc) && pc.length > 0) {
+        const pc = (s as any)?._primaryChannels as string[] | undefined;
+        const channelId = activeProfileId.split(':')[1];
+        if (Array.isArray(pc) && pc.length > 0 && pc.includes(channelId)) {
           setAllChannels(pc.filter(Boolean));
         } else {
-          // Nessun canale primario trovato: torna al profilo principale
+          // Canale secondario non trovato tra i canali del primario: torna al principale
           const base = activeProfileId.split(':')[0];
           setActiveProfileId(base);
         }
@@ -275,8 +276,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const isPrimary = !activeProfileId.includes(':');
       applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
       if (!isPrimary) {
-        const pc = (s as any)?._primaryChannels;
-        if (Array.isArray(pc) && pc.length > 0) {
+        const pc = (s as any)?._primaryChannels as string[] | undefined;
+        const channelId = activeProfileId.split(':')[1];
+        if (Array.isArray(pc) && pc.length > 0 && pc.includes(channelId)) {
           setAllChannels(pc.filter(Boolean));
         } else {
           const base = activeProfileId.split(':')[0];
