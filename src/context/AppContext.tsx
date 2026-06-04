@@ -104,15 +104,24 @@ function mergeSettings(fetched: unknown): AppSettings {
 }
 
 async function loadProfileData(profileId: string) {
+  const isSecondary = profileId.includes(':');
+  const primaryId   = isSecondary ? profileId.split(':')[0] : profileId;
+
+  // Template/layout/tag/keyboard: usa sempre il profilo primario (dati condivisi)
+  if (isSecondary) setApiProfileId(primaryId);
   const tmplPromise = templatesApi.list().catch(() => null as Template[] | null);
+  const tPromise    = tryFetch(tagsApi.list, INITIAL_TAGS);
+  const lPromise    = tryFetch(layoutsApi.list, INITIAL_LAYOUTS);
+  const kbPromise   = tryFetch(keyboardsApi.list, INITIAL_KEYBOARDS);
+
+  // Settings/coda/pubblicati: usa il profilo attivo (secondario se applicabile)
+  if (isSecondary) setApiProfileId(profileId);
+  const qPromise    = tryFetch(autopostApi.list, []);
+  const sPromise    = tryFetch(settingsApi.get, {} as AppSettings);
+  const pubPromise  = tryFetch(publishedApi.listToday, []);
+
   const [q, t, l, kb, s, pub, tmplResult] = await Promise.all([
-    tryFetch(autopostApi.list, []),
-    tryFetch(tagsApi.list, INITIAL_TAGS),
-    tryFetch(layoutsApi.list, INITIAL_LAYOUTS),
-    tryFetch(keyboardsApi.list, INITIAL_KEYBOARDS),
-    tryFetch(settingsApi.get, {} as AppSettings),
-    tryFetch(publishedApi.listToday, []),
-    tmplPromise,
+    qPromise, tPromise, lPromise, kbPromise, sPromise, pubPromise, tmplPromise,
   ]);
   return { q, t, l, kb, s, pub, tmplResult };
 }
@@ -174,12 +183,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       for (const x of (l as TextLayout[])) {
         const k = key(x);
         if (!seen.has(k)) { seen.set(k, x.id); }
-        else { layoutsApi.delete(x.id).catch(() => {}); }
+        else if (isPrimary) { layoutsApi.delete(x.id).catch(() => {}); }
       }
       const merged = INITIAL_LAYOUTS.map(d => dbByKey.get(key(d)) ?? d);
       const extra = (l as TextLayout[]).filter((x: TextLayout) => !INITIAL_LAYOUTS.some(d => key(d) === key(x)) && seen.get(key(x)) === x.id);
       setLayouts([...merged, ...extra]);
-      INITIAL_LAYOUTS.forEach(d => { if (!dbByKey.has(key(d))) layoutsApi.create(d).catch(() => {}); });
+      if (isPrimary) {
+        INITIAL_LAYOUTS.forEach(d => { if (!dbByKey.has(key(d))) layoutsApi.create(d).catch(() => {}); });
+      }
     }
 
     if (isPrimary) {
@@ -208,7 +219,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
         setTemplates(loaded);
         templateFromDB.current = true;
-      } else {
+      } else if (isPrimary) {
+        // Solo per profilo primario: crea template di default
         const def = makeDefaultTemplate('tpl1');
         setTemplates([def]);
         templatesApi.create(def).then(created => {
