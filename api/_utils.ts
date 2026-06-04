@@ -256,8 +256,6 @@ export function requireUserId(req: VercelRequest, res: VercelResponse): string |
 
   const userId = getUserId(req);
   if (!userId) {
-    const hasInitData = !!(req.headers['x-tg-init-data'] as string | undefined);
-    console.log(`[auth] 401 ${req.method} ${req.url} hasInitData=${hasInitData}`);
     res.status(401).json({ error: 'Apri l\'app tramite Telegram' });
     return null;
   }
