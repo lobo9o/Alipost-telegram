@@ -46,6 +46,7 @@ async function main() {
     emojiIdsHandler,
     tgMonitorAuthHandler,
     tgMonitorChannelsHandler,
+    channelInfoHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -66,6 +67,7 @@ async function main() {
     loadHandler('api/emoji-ids/index.ts'),
     loadHandler('api/tg-monitor/auth.ts'),
     loadHandler('api/tg-monitor/channels.ts'),
+    loadHandler('api/channel-info.ts'),
   ]);
 
   const app = express();
@@ -113,6 +115,7 @@ async function main() {
   app.all('/api/tg-monitor/auth', tgMonitorAuthHandler);
   app.all('/api/tg-monitor/channels', tgMonitorChannelsHandler);
   app.all('/api/tg-monitor/channels/:id', withId(tgMonitorChannelsHandler));
+  app.all('/api/channel-info', channelInfoHandler);
 
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
