@@ -33,9 +33,11 @@ function ChannelSwitcher() {
     });
   }, [channels.join(',')]); // dipendenza derivata, join è stabile
 
-  if (channels.length < 2) return null;
+  if (channels.length < 1) return null;
 
+  const canSwitch = channels.length >= 2;
   const switchToNext = () => {
+    if (!canSwitch) return;
     const idx = channels.indexOf(activeChannel);
     const next = channels[(idx + 1) % channels.length];
     const newProfile = (next === channels[0]) ? baseUserId : `${baseUserId}:${next}`;
@@ -55,10 +57,10 @@ function ChannelSwitcher() {
   return (
     <div
       onClick={switchToNext}
-      title="Clicca per cambiare canale"
+      title={canSwitch ? 'Clicca per cambiare canale' : ''}
       className="stat"
       style={{
-        cursor: 'pointer', userSelect: 'none',
+        cursor: canSwitch ? 'pointer' : 'default', userSelect: 'none',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
         gap: 4, padding: '6px 8px',
@@ -88,9 +90,11 @@ function ChannelSwitcher() {
           : '📢'
         }
       </div>
-      <div style={{ fontSize: 10, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '.5px', lineHeight: 1 }}>
-        ↻ canale
-      </div>
+      {canSwitch && (
+        <div style={{ fontSize: 10, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '.5px', lineHeight: 1 }}>
+          ↻ canale
+        </div>
+      )}
     </div>
   );
 }

@@ -1932,9 +1932,12 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
                 const v = e.target.value;
                 setS(prev => ({ ...prev, channels: prev.channels.map((c, j) => j === i ? v : c) }));
               }} />
-            <button className="btn bre bic" onClick={() =>
-              setS(prev => ({ ...prev, channels: prev.channels.filter((_, j) => j !== i) }))
-            }>×</button>
+            <button className="btn bre bic"
+              disabled={s.channels.filter(Boolean).length <= 1}
+              title={s.channels.filter(Boolean).length <= 1 ? 'Deve esserci almeno un canale' : ''}
+              onClick={() =>
+                setS(prev => ({ ...prev, channels: prev.channels.filter((_, j) => j !== i) }))
+              }>×</button>
           </div>
         ))}
         <button className="btn bp bsm" style={{ marginTop: 4, width: '100%' }}

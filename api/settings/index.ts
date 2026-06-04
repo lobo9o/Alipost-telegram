@@ -61,12 +61,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         merged = {
           ...data,
           amazon: {
-            enabled: data.amazon?.enabled ?? primData.amazon?.enabled ?? false,
-            ...data.amazon,
-            ...shared.amazon,
+            enabled: primData.amazon?.enabled ?? false, // default dal primario
+            ...data.amazon,                             // secondario può sovrascrivere
+            ...shared.amazon,                           // credenziali sempre dal primario
           },
           aliexpress: {
-            enabled: data.aliexpress?.enabled ?? primData.aliexpress?.enabled ?? false,
+            enabled: primData.aliexpress?.enabled ?? false,
             ...data.aliexpress,
             ...shared.aliexpress,
           },
