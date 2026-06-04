@@ -144,23 +144,28 @@ function extractKeywords(title: string): Set<string> {
 
 
 // Genera immagine terminata server-side: grayscale + testo overlay (usa sharp)
+// imageSource: URL prodotto (string) oppure buffer già pronto (es. immagine template generata)
 async function generateTerminataImageServer(
-  imageUrl: string,
+  imageSource: string | Buffer,
   config: Record<string, any>,
 ): Promise<Buffer> {
   const sharpMod = await import('sharp').catch(() => null) as any;
   if (!sharpMod) throw new Error('sharp non installato — esegui: npm install sharp');
   const sharp = (sharpMod.default ?? sharpMod) as any;
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10_000);
   let imgBuf: Buffer;
-  try {
-    const r = await fetch(imageUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' } });
-    clearTimeout(timer);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    imgBuf = Buffer.from(await r.arrayBuffer());
-  } catch (e) { clearTimeout(timer); throw e; }
+  if (Buffer.isBuffer(imageSource)) {
+    imgBuf = imageSource;
+  } else {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    try {
+      const r = await fetch(imageSource, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' } });
+      clearTimeout(timer);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      imgBuf = Buffer.from(await r.arrayBuffer());
+    } catch (e) { clearTimeout(timer); throw e; }
+  }
 
   const SIZE = 1024;
 
@@ -1803,9 +1808,41 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
 
           // Genera immagine terminata (grayscale + overlay)
+          // Prima prova a ricostruire l'immagine con il template del canale (come in publish),
+          // poi applica grayscale+overlay su quella. Fallback: URL prodotto grezzo.
           let termImg: Buffer | null = null;
           if (pub.image && String(pub.image).startsWith('http')) {
-            termImg = await generateTerminataImageServer(String(pub.image), termCfg).catch((e: any) => {
+            let baseForTerm: string | Buffer = String(pub.image);
+            try {
+              const pubChatId = String(pub.chatId ?? channels[0] ?? '');
+              const termChannelTplId = (channelTemplates[pubChatId] ?? '') as string;
+              const [termTpl] = termChannelTplId
+                ? await sql`SELECT id, config FROM templates WHERE id = ${termChannelTplId} AND user_id = ${userId} LIMIT 1`.catch(() => [null])
+                : await sql`SELECT id, config FROM templates WHERE user_id = ${userId} AND tipo NOT IN ('historical_low') ORDER BY (tipo = 'normal') DESC, updated_at DESC NULLS LAST LIMIT 1`.catch(() => [null]);
+              if (termTpl) {
+                const termTplCfg = parseTemplateCfg(termTpl);
+                if (termTplCfg) {
+                  const CSYM2: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
+                  const cs2 = pub.platform === 'aliexpress'
+                    ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
+                    : (CSYM2[String(cfg.amazon?.currency ?? 'EUR').toUpperCase()] ?? '€');
+                  const tplBuf = await generateTemplateImageServer(termTplCfg, String(pub.image), String(pub.platform ?? 'amazon'), {
+                    prezzo:           `${cs2}${Number(pub.discountedPrice).toFixed(2)}`,
+                    prezzoPrecedente: `${cs2}${Number(pub.originalPrice).toFixed(2)}`,
+                    sconto:           `-${Number(pub.discountPercent)}%`,
+                  }).catch(() => null);
+                  if (tplBuf) {
+                    // tplBuf è base64 data URL → converti in Buffer
+                    const b64 = String(tplBuf).replace(/^data:image\/\w+;base64,/, '');
+                    baseForTerm = Buffer.from(b64, 'base64');
+                    console.log(`[autopost] terminata: uso template ${termTpl.id} per base image`);
+                  }
+                }
+              }
+            } catch (e: any) {
+              console.warn('[autopost] terminata: fallback a image URL grezzo —', e?.message ?? e);
+            }
+            termImg = await generateTerminataImageServer(baseForTerm, termCfg).catch((e: any) => {
               console.warn('[autopost] terminata img:', e?.message ?? e);
               return null;
             });
