@@ -800,6 +800,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     const tpl = templates[0];
     const aliCurr = aliCurrencySym(settings.aliexpress?.targetCountry ?? 'IT');
     const addedItems: QueueItem[] = [];
+    let expiredCount = 0;
     for (const pid of Array.from(selectedIds)) {
       const p = results.find(r => r.productId === pid);
       if (!p) continue;
@@ -842,12 +843,15 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
           ? { ...qItem, posts: [{ ...post, isHistoricalLow: true, layoutId: sp.layoutId ?? post.layoutId }] }
           : qItem;
         addedItems.push(mergedItem);
-      } catch {}
+      } catch (e: any) {
+        if (e?.message?.includes('scadut') || e?.message?.includes('Offerta')) expiredCount++;
+      }
     }
     if (addedItems.length) setQueue(prev => [...prev, ...addedItems]);
     setSelectedIds(new Set());
     setAdding(false);
-    showFb(`✅ ${addedItems.length} prodotto${addedItems.length === 1 ? '' : 'i'} aggiunto${addedItems.length === 1 ? '' : 'i'} in coda`);
+    const expiredPart = expiredCount > 0 ? `, ${expiredCount} offerta${expiredCount === 1 ? '' : 'e'} scaduta${expiredCount === 1 ? '' : 'e'}` : '';
+    showFb(`✅ ${addedItems.length} prodotto${addedItems.length === 1 ? '' : 'i'} aggiunto${addedItems.length === 1 ? '' : 'i'} in coda${expiredPart}`);
   };
 
   const saveFilters = async () => {
@@ -959,6 +963,7 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
     const defaultAmazonLayout = layouts.find(l => l.tipo === 'amazon')?.id ?? layouts.find(l => l.tipo === 'normal')?.id ?? layouts.find(l => l.tipo === 'historical_low')?.id ?? '';
     const tpl = templates[0];
     const addedItems: QueueItem[] = [];
+    let expiredCount = 0;
     for (const pid of Array.from(amzSelectedIds)) {
       const p = amzResults.find(r => r.productId === pid);
       if (!p) continue;
@@ -988,12 +993,15 @@ export function SearchPage({ nav }: { nav: (p: NavPage) => void }) {
           ? { ...qItem, posts: [{ ...post, isHistoricalLow: true, layoutId: sp.layoutId ?? post.layoutId }] }
           : qItem;
         addedItems.push(mergedItem);
-      } catch {}
+      } catch (e: any) {
+        if (e?.message?.includes('scadut') || e?.message?.includes('Offerta')) expiredCount++;
+      }
     }
     if (addedItems.length) setQueue(prev => [...prev, ...addedItems]);
     setAmzSelectedIds(new Set());
     setAmzAdding(false);
-    showFb(`✅ ${addedItems.length} prodotto${addedItems.length === 1 ? '' : 'i'} aggiunto${addedItems.length === 1 ? '' : 'i'} in coda`);
+    const expiredPartAmz = expiredCount > 0 ? `, ${expiredCount} offerta${expiredCount === 1 ? '' : 'e'} scaduta${expiredCount === 1 ? '' : 'e'}` : '';
+    showFb(`✅ ${addedItems.length} prodotto${addedItems.length === 1 ? '' : 'i'} aggiunto${addedItems.length === 1 ? '' : 'i'} in coda${expiredPartAmz}`);
   };
 
   const saveFiltersAmazon = async () => {
