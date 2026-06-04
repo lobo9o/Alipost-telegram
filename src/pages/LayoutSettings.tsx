@@ -1130,23 +1130,6 @@ function TemplateSection() {
 
   return (
     <>
-      {/* Selettore template */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px 6px', overflowX: 'auto', borderBottom: '1px solid var(--bd)' }}>
-        {templates.map(t => (
-          <div key={t.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0, gap: 1 }}>
-            <button
-              className={`btn bsm ${tpl.id === t.id ? 'bp' : 'bgh'}`}
-              style={{ borderRadius: tpl.id === t.id && templates.length > 1 ? '8px 0 0 8px' : 8, padding: '4px 10px', fontSize: 12 }}
-              onClick={() => setSelectedTplId(t.id)}
-            >{t.name || 'Template'}</button>
-            {templates.length > 1 && (
-              <button onClick={() => deleteTpl(t.id)}
-                style={{ height: 28, padding: '0 6px', fontSize: 12, background: tpl.id === t.id ? 'var(--a1)' : 'var(--bg3)', color: tpl.id === t.id ? 'rgba(255,255,255,0.7)' : 'var(--t3)', border: '1px solid var(--bd)', borderLeft: 'none', borderRadius: '0 8px 8px 0', cursor: 'pointer', lineHeight: 1 }}>×</button>
-            )}
-          </div>
-        ))}
-        <button className="btn bgh bsm" style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px', borderRadius: 8 }} onClick={createTpl}>+ Nuovo</button>
-      </div>
       {/* Nome template attivo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px 2px' }}>
         <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>Nome:</span>
