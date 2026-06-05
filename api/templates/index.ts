@@ -19,6 +19,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!allowMethods(['GET', 'POST'], req, res)) return;
   const userId = requireUserId(req, res);
   if (!userId) return;
+  // I template sono condivisi tra tutti i profili dello stesso utente base
+  const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
 
   await ensureUpdatedAt();
 
@@ -27,7 +29,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // Poi canvasW NOT NULL → preferisce template con dimensioni configurate
     // Poi created_at DESC → tra pari, il più recente
     const rows = await sql`
-      SELECT id, config FROM templates WHERE user_id = ${userId}
+      SELECT id, config FROM templates WHERE user_id = ${baseUserId}
       ORDER BY updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC
     `;
     if ((rows as any[]).length === 0) { res.json([]); return; }
@@ -39,7 +41,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         cfg.storeAmazon = cfg.store;
         cfg.storeAliexpress = cfg.store;
         const { id: _id, ...configToSave } = cfg;
-        await sql`UPDATE templates SET config = ${sql.json(configToSave)}, updated_at = NOW() WHERE id = ${r.id} AND user_id = ${userId}`.catch(() => {});
+        await sql`UPDATE templates SET config = ${sql.json(configToSave)}, updated_at = NOW() WHERE id = ${r.id} AND user_id = ${baseUserId}`.catch(() => {});
       }
       result.push(cfg);
     }
@@ -52,7 +54,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const newId = (clientId && typeof clientId === 'string' && clientId.trim()) ? clientId.trim() : null;
   const [row] = await sql`
     INSERT INTO templates (id, user_id, nome, tipo, config)
-    VALUES (COALESCE(${newId}, gen_random_uuid()::text), ${userId}, 'Template', 'normal', ${sql.json(config)})
+    VALUES (COALESCE(${newId}, gen_random_uuid()::text), ${baseUserId}, 'Template', 'normal', ${sql.json(config)})
     RETURNING id, config
   `;
   res.status(201).json(parseConfig((row as any).config, (row as any).id));

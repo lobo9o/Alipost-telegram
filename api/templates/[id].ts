@@ -11,10 +11,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!allowMethods(['PUT', 'DELETE'], req, res)) return;
   const userId = requireUserId(req, res);
   if (!userId) return;
+  // I template sono condivisi tra tutti i profili dello stesso utente base
+  const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
   const { id } = req.query as { id: string };
 
   if (req.method === 'DELETE') {
-    await sql`DELETE FROM templates WHERE id = ${id} AND user_id = ${userId}`;
+    await sql`DELETE FROM templates WHERE id = ${id} AND user_id = ${baseUserId}`;
     res.json({ ok: true });
     return;
   }
@@ -23,7 +25,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const { id: _id, ...config } = req.body ?? {};
   const [row] = await sql`
     UPDATE templates SET config = ${sql.json(config)}, updated_at = NOW()
-    WHERE id = ${id} AND user_id = ${userId}
+    WHERE id = ${id} AND user_id = ${baseUserId}
     RETURNING id, config
   `;
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
