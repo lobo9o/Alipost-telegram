@@ -94,6 +94,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       primaryChannels = Array.isArray(merged.channels) ? (merged as any).channels.filter(Boolean) : [];
     }
 
+    console.log(`[settings GET] userId=${userId} _primaryChannels=${JSON.stringify(primaryChannels)}`);
     res.json({
       ...merged,
       _publishedCount: countRow?.cnt ?? 0,
