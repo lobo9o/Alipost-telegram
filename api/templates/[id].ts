@@ -21,10 +21,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     return;
   }
 
-  // PUT — update config column (accetta sia baseUserId che userId completo per compatibilità)
+  // PUT — aggiorna config; mantiene il template associato al profilo esatto (userId, non baseUserId)
   const { id: _id, ...config } = req.body ?? {};
   let [row] = await sql`
-    UPDATE templates SET config = ${sql.json(config)}, user_id = ${baseUserId}, updated_at = NOW()
+    UPDATE templates SET config = ${sql.json(config)}, user_id = ${userId}, updated_at = NOW()
     WHERE id = ${id} AND (user_id = ${baseUserId} OR user_id = ${userId})
     RETURNING id, config
   `;

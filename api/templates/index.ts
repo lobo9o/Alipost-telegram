@@ -7,7 +7,6 @@ function parseConfig(raw: unknown, id: string) {
   return { id, ...cfg };
 }
 
-// Lazy migration — eseguita una volta per processo
 let migrated = false;
 async function ensureUpdatedAt() {
   if (migrated) return;
@@ -15,9 +14,9 @@ async function ensureUpdatedAt() {
   migrated = true;
 }
 
-async function loadRows(baseUserId: string) {
+async function loadRows(userId: string) {
   return sql`
-    SELECT id, config FROM templates WHERE user_id = ${baseUserId}
+    SELECT id, config FROM templates WHERE user_id = ${userId}
     ORDER BY updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC
   `;
 }
@@ -26,18 +25,25 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!allowMethods(['GET', 'POST'], req, res)) return;
   const userId = requireUserId(req, res);
   if (!userId) return;
-  // I template sono condivisi tra tutti i profili dello stesso utente base
+  // baseUserId = parte prima dei ":" (profilo principale)
   const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
 
   await ensureUpdatedAt();
 
   if (req.method === 'GET') {
-    let rows = await loadRows(baseUserId);
+    // Ogni profilo canale ha i propri template indipendenti
+    let rows = await loadRows(userId);
 
-    // Migrazione: template creati col vecchio user_id completo (baseId:channelId) → sposta a baseId
     if ((rows as any[]).length === 0 && userId !== baseUserId) {
-      await sql`UPDATE templates SET user_id = ${baseUserId} WHERE user_id = ${userId}`.catch(() => {});
-      rows = await loadRows(baseUserId);
+      // Prima apertura di un profilo canale: crea copie indipendenti dai template base
+      const baseRows = await sql`SELECT config FROM templates WHERE user_id = ${baseUserId}` as any[];
+      for (const r of baseRows) {
+        await sql`
+          INSERT INTO templates (id, user_id, nome, tipo, config, updated_at)
+          VALUES (gen_random_uuid()::text, ${userId}, 'Template', 'normal', ${r.config}, NOW())
+        `.catch(() => {});
+      }
+      if (baseRows.length > 0) rows = await loadRows(userId);
     }
 
     if ((rows as any[]).length === 0) { res.json([]); return; }
@@ -49,7 +55,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         cfg.storeAmazon = cfg.store;
         cfg.storeAliexpress = cfg.store;
         const { id: _id, ...configToSave } = cfg;
-        await sql`UPDATE templates SET config = ${sql.json(configToSave)}, updated_at = NOW() WHERE id = ${r.id} AND user_id = ${baseUserId}`.catch(() => {});
+        await sql`UPDATE templates SET config = ${sql.json(configToSave)}, updated_at = NOW() WHERE id = ${r.id} AND user_id = ${userId}`.catch(() => {});
       }
       result.push(cfg);
     }
@@ -62,8 +68,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const newId = (clientId && typeof clientId === 'string' && clientId.trim()) ? clientId.trim() : null;
   const [row] = await sql`
     INSERT INTO templates (id, user_id, nome, tipo, config)
-    VALUES (COALESCE(${newId}, gen_random_uuid()::text), ${baseUserId}, 'Template', 'normal', ${sql.json(config)})
-    ON CONFLICT (id) DO UPDATE SET user_id = ${baseUserId}, config = EXCLUDED.config, updated_at = NOW()
+    VALUES (COALESCE(${newId}, gen_random_uuid()::text), ${userId}, 'Template', 'normal', ${sql.json(config)})
+    ON CONFLICT (id) DO UPDATE SET user_id = ${userId}, config = EXCLUDED.config, updated_at = NOW()
     RETURNING id, config
   `;
   res.status(201).json(parseConfig((row as any).config, (row as any).id));
