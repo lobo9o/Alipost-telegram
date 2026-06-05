@@ -16,16 +16,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const { id } = req.query as { id: string };
 
   if (req.method === 'DELETE') {
-    await sql`DELETE FROM templates WHERE id = ${id} AND user_id = ${baseUserId}`;
+    await sql`DELETE FROM templates WHERE id = ${id} AND (user_id = ${baseUserId} OR user_id = ${userId})`;
     res.json({ ok: true });
     return;
   }
 
-  // PUT — update config column
+  // PUT — update config column (accetta sia baseUserId che userId completo per compatibilità)
   const { id: _id, ...config } = req.body ?? {};
-  const [row] = await sql`
-    UPDATE templates SET config = ${sql.json(config)}, updated_at = NOW()
-    WHERE id = ${id} AND user_id = ${baseUserId}
+  let [row] = await sql`
+    UPDATE templates SET config = ${sql.json(config)}, user_id = ${baseUserId}, updated_at = NOW()
+    WHERE id = ${id} AND (user_id = ${baseUserId} OR user_id = ${userId})
     RETURNING id, config
   `;
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
