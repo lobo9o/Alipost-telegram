@@ -1051,9 +1051,9 @@ function TemplateSection() {
     latestTplRef.current = t;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      templatesApi.update(t.id, t).catch(e => {
-        if (String(e?.message).includes('Not found')) templatesApi.create(t).catch(() => {});
-      });
+      // Non usare create come fallback: se il profilo è cambiato durante il debounce
+      // il template verrebbe ricreato sotto il profilo sbagliato
+      templatesApi.update(t.id, t).catch(() => {});
     }, 800);
   };
 
@@ -1066,6 +1066,7 @@ function TemplateSection() {
       const initData = (window as any).Telegram?.WebApp?.initData ?? '';
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (initData) headers['x-tg-init-data'] = initData;
+      try { const pid = localStorage.getItem('activeProfileId'); if (pid) headers['x-profile-id'] = pid; } catch {}
       fetch(`/api/templates/${t.id}`, { method: 'PUT', headers, body: JSON.stringify(t), keepalive: true }).catch(() => {});
     };
     document.addEventListener('visibilitychange', handleHide);
