@@ -268,7 +268,7 @@ function PostCard({ postId, onDelete, onQueue, onPublish }: {
   const post = createdPosts.find(p => p.id === postId);
   if (!post) return null;
 
-  const currentTemplate = templates.find(t => t.id === post.templateId);
+  const currentTemplate = templates.find(t => t.id === post.templateId) ?? templates[0];
   const currentLayout = layouts.find(l => l.id === post.layoutId);
   const currency = post.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
   const previewText = currentLayout ? resolvePostTags(currentLayout.contenuto, post, tags, currency) : '—';
@@ -2680,7 +2680,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const isMultiPost = item?.tipo === 'multi';
   const p = item?.posts[0] as CreatedPost | undefined;
   const queueItemChannel = item ? (itemChannels[item.id] ?? '') : '';
-  const template = p ? templates.find(t => t.id === p.templateId) : undefined;
+  const template = p ? (templates.find(t => t.id === p.templateId) ?? templates[0]) : undefined;
   const layout = p ? layouts.find(l => l.id === p.layoutId) : undefined;
   const qCurrency = p?.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
   const previewText = layout && p
