@@ -32,8 +32,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   if (req.method === 'GET') {
     // Ogni profilo canale ha i propri template indipendenti
+    const rawProfileId = req.headers['x-profile-id'];
     let rows = await loadRows(userId);
-    console.log(`[templates GET] userId=${userId} found=${(rows as any[]).length} ids=${(rows as any[]).map((r: any) => r.id).join(',')}`);
+    console.log(`[templates GET] userId=${userId} x-profile-id=${rawProfileId} found=${(rows as any[]).length} ids=${(rows as any[]).map((r: any) => r.id).join(',')}`);
 
     if ((rows as any[]).length === 0 && userId !== baseUserId) {
       // Prima apertura di un profilo canale: crea copie indipendenti dai template base
