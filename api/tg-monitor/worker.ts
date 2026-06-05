@@ -455,8 +455,9 @@ async function getUserLayouts(userId: string) {
   const layouts = await sql<{ id: string; tipo: string; active: boolean; keyboard_id: string | null }[]>`
     SELECT id, tipo, active, keyboard_id FROM layouts WHERE user_id = ${userId} ORDER BY created_at ASC
   `;
+  const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
   const templates = await sql<{ id: string }[]>`
-    SELECT id FROM templates WHERE user_id = ${userId}
+    SELECT id FROM templates WHERE user_id = ${baseUserId} OR user_id = ${userId}
     ORDER BY updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
   `;
   const templateId = templates[0]?.id ?? '';

@@ -198,11 +198,39 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
         { el: template.testoCustom,     text: post.customText },
       ] as const).map(({ el, text }, i) => {
         if (!el.enabled || !text) return null;
-        const displayFs = el.fontSize * fontScale;
         const decScale = (el as any).decimalFontScale != null && (el as any).decimalFontScale < 1 ? (el as any).decimalFontScale : 1;
         const decMatch = decScale < 1 ? text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/) : null;
-        const renderedText = decMatch
-          ? <>{decMatch[1]}<span style={{ fontSize: `${displayFs * decScale}px`, verticalAlign: 'bottom' }}>{decMatch[2]}</span>{decMatch[3]}</>
+        const boxW = (el as any).boxW as number | undefined;
+        const boxH = (el as any).boxH as number | undefined;
+        const commonStyle: React.CSSProperties = {
+          fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
+          color: el.color,
+          textDecoration: (el as any).strikethrough ? `line-through ${(el as any).strikethroughColor || el.color}` : 'none',
+          pointerEvents: 'none',
+          WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * fontScale}px ${el.strokeColor}` : undefined,
+        };
+        if (boxW && boxH) {
+          // Nuovo sistema: riquadro centrato, font-size approssimato dall'altezza del box
+          const boxHpx = (boxH / 100) * containerH;
+          const approxFs = Math.round(boxHpx * 0.82);
+          const content = decMatch
+            ? <>{decMatch[1]}<span style={{ fontSize: `${approxFs * decScale}px`, verticalAlign: 'bottom' }}>{decMatch[2]}{decMatch[3]}</span></>
+            : text;
+          return (
+            <div key={i} style={{
+              position: 'absolute', left: `${el.x}%`, top: `${el.y}%`,
+              width: `${boxW}%`, height: `${boxH}%`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden', lineHeight: 1,
+              fontSize: `${approxFs}px`, whiteSpace: 'nowrap',
+              ...commonStyle,
+            }}>{content}</div>
+          );
+        }
+        // Legacy: fontSize + textAnchor
+        const displayFs = el.fontSize * fontScale;
+        const content = decMatch
+          ? <>{decMatch[1]}<span style={{ fontSize: `${displayFs * decScale}px`, verticalAlign: 'bottom' }}>{decMatch[2]}{decMatch[3]}</span></>
           : text;
         return (
           <div key={i} style={{
@@ -212,14 +240,9 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
               : el.textAnchor === 'center'
                 ? { left: `${el.x}%`, top: `${el.y}%`, transform: 'translateX(-50%)' }
                 : { left: `${el.x}%`, top: `${el.y}%` }),
-            fontSize: `${displayFs}px`,
-            lineHeight: 1,
-            fontFamily: el.fontFamily, fontWeight: el.bold ? 700 : 400,
-            color: el.color,
-            textDecoration: (el as any).strikethrough ? `line-through ${(el as any).strikethroughColor || el.color}` : 'none',
-            whiteSpace: 'nowrap', pointerEvents: 'none',
-            WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * fontScale}px ${el.strokeColor}` : undefined,
-          }}>{renderedText}</div>
+            fontSize: `${displayFs}px`, lineHeight: 1,
+            whiteSpace: 'nowrap', ...commonStyle,
+          }}>{content}</div>
         );
       })}
 
