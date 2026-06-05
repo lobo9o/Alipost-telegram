@@ -74,13 +74,14 @@ async function main() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
 
-  // Preflight OPTIONS globale — necessario per WebView Telegram che manda preflight CORS
-  app.options('*', (_req: any, res: any) => {
+  // CORS globale — header su tutte le risposte + preflight OPTIONS
+  app.use((_req: any, res: any, next: any) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-tg-init-data, Authorization, x-internal-user-id');
-    res.status(204).end();
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-tg-init-data, Authorization, x-internal-user-id, x-profile-id');
+    next();
   });
+  app.options('*', (_req: any, res: any) => { res.status(204).end(); });
 
   // index.html: no-cache (forza ricaricamento dopo deploy)
   // static assets (js/css con hash): cache lunga
