@@ -2263,6 +2263,9 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   // Cache immagini pre-generate: key = queue item id, value = base64 jpeg
   const pregenImages = React.useRef<Record<string, string>>({});
 
+  // Svuota il cache quando i template cambiano (salvataggio template): forza rigenera col nuovo template
+  React.useEffect(() => { pregenImages.current = {}; }, [templates]);
+
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
   const regenerate = async (itemId: string) => {
@@ -2565,7 +2568,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       const effectiveTemplate = template;
       if (effectiveTemplate) {
         try {
-          generatedImage = pregenImages.current[id] ?? await generatePostImage(
+          generatedImage = await generatePostImage(
             effectiveTemplate, post.image, post.isHistoricalLow, post.platform, {
               prezzo: `€${Number(post.discountedPrice).toFixed(2)}`,
               prezzoPrecedente: `€${Number(post.originalPrice).toFixed(2)}`,
