@@ -505,12 +505,13 @@ function FitTextBox({ el, text, containerW, containerH, isActive, showBox }: {
       </>)
     : text;
 
+  const justifyContent = el.textAnchor === 'right' ? 'flex-end' : el.textAnchor === 'left' ? 'flex-start' : 'center';
   return (
     <div style={{
       position: 'absolute',
       left: `${el.x}%`, top: `${el.y}%`,
       width: `${el.boxW ?? 40}%`, height: `${el.boxH ?? 12}%`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      display: 'flex', alignItems: 'center', justifyContent,
       overflow: 'hidden',
       boxSizing: 'border-box',
       border: showBox
@@ -866,6 +867,18 @@ function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, show
           style={{ flex: 2, accentColor: 'var(--a1)' }}
           onChange={e => onUpdate({ boxH: Number(e.target.value) })} />
         <span style={{ fontSize: 11, color: 'var(--t2)', width: 32, textAlign: 'right' }}>{el.boxH ?? 12}%</span>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <div className="lbl">ANCORAGGIO TESTO</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['left', 'center', 'right'] as const).map(a => (
+            <button key={a} className={`btn bsm ${(el.textAnchor ?? 'center') === a ? 'bp' : 'bgh'}`}
+              style={{ flex: 1 }} onClick={() => onUpdate({ textAnchor: a })}>
+              {a === 'left' ? '⬅ Sin.' : a === 'center' ? '⇔ Centro' : 'Des. ➡'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {showCurrencyPos && (

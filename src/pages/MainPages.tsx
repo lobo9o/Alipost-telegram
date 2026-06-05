@@ -210,9 +210,9 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
           WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * fontScale}px ${el.strokeColor}` : undefined,
         };
         if (boxW && boxH) {
-          // Nuovo sistema: riquadro centrato, font-size approssimato dall'altezza del box
           const boxHpx = (boxH / 100) * containerH;
           const approxFs = Math.round(boxHpx * 0.82);
+          const jc = el.textAnchor === 'right' ? 'flex-end' : el.textAnchor === 'left' ? 'flex-start' : 'center';
           const content = decMatch
             ? <>{decMatch[1]}<span style={{ fontSize: `${approxFs * decScale}px`, verticalAlign: 'bottom' }}>{decMatch[2]}{decMatch[3]}</span></>
             : text;
@@ -220,7 +220,7 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
             <div key={i} style={{
               position: 'absolute', left: `${el.x}%`, top: `${el.y}%`,
               width: `${boxW}%`, height: `${boxH}%`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              display: 'flex', alignItems: 'center', justifyContent: jc,
               overflow: 'hidden', lineHeight: 1,
               fontSize: `${approxFs}px`, whiteSpace: 'nowrap',
               ...commonStyle,

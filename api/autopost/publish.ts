@@ -424,7 +424,7 @@ async function generateTemplateImageServer(
             const sw = parts.suffix ? ctx.measureText(parts.suffix).width : 0;
             totalW = mw + dw + sw;
           }
-          const sx = boxX + (boxWpx - totalW) / 2;
+          const sx = (el as any).textAnchor === 'left' ? boxX : (el as any).textAnchor === 'right' ? boxX + boxWpx - totalW : boxX + (boxWpx - totalW) / 2;
 
           if (!parts) {
             ctx.font = fontStr(fs);

@@ -96,7 +96,7 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, can
       const sw = parts.suffix ? ctx.measureText(parts.suffix).width : 0;
       totalW = mw + dw + sw;
     }
-    const sx = boxX + (boxWpx - totalW) / 2;
+    const sx = el.textAnchor === 'left' ? boxX : el.textAnchor === 'right' ? boxX + boxWpx - totalW : boxX + (boxWpx - totalW) / 2;
 
     if (!parts) {
       ctx.font = fontStr(fs);
