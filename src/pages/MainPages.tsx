@@ -2354,7 +2354,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     if (!currentItem) return;
     const currentPost = currentItem.posts[0] as CreatedPost | undefined;
     if (!currentPost) return;
-    const tpl = templates.find(t => t.id === currentPost.templateId);
+    const tpl = templates.find(t => t.id === currentPost.templateId) ?? templates[0];
     if (!tpl || pregenImages.current[currentItem.id]) return;
 
     generatePostImage(tpl, currentPost.image, currentPost.isHistoricalLow, currentPost.platform, {
@@ -2962,6 +2962,10 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
                     ))}
                   </div>
               }
+            </div>
+          ) : p?.generatedImage ? (
+            <div style={{ margin: '0 16px 12px', borderRadius: 10, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.35)' }}>
+              <img src={p.generatedImage} alt="preview" style={{ width: '100%', display: 'block' }} />
             </div>
           ) : (
             <TemplateImagePreview post={p} template={template} />
