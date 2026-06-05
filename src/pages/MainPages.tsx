@@ -2339,7 +2339,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       prezzoPrecedente: `€${Number(currentPost.originalPrice).toFixed(2)}`,
       sconto: `-${currentPost.discountPercent}%`,
       testoCustom: currentPost.customText,
-    }).then(img => { pregenImages.current[currentItem.id] = img; }).catch(() => {});
+    }).then(img => { pregenImages.current[currentItem.id] = img; updateQueuePost(currentItem.id, { generatedImage: img }); }).catch(() => {});
   }, [safeIdx, queue, templates]);
 
   // Divide un post multiplo: rimuove i selezionati, rigenera l'originale, crea nuovi post
