@@ -2234,8 +2234,11 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   // Aggiorna stato locale + persiste nel DB (senza rigenerare immagine)
   const saveQueueField = (item: QueueItem, changes: Partial<CreatedPost>) => {
     updateQueuePost(item.id, changes);
-    const updatedPost = { ...(item.posts[0] as CreatedPost), ...changes };
-    autopostApi.update(item.id, { posts: [updatedPost], status: item.status }).catch(() => {});
+    // Per multi-post: aggiorna il campo su posts[0] (condiviso) ma mantiene TUTTI i post nel DB
+    const postsToSave = item.tipo === 'multi'
+      ? (item.posts as CreatedPost[]).map((p, i) => i === 0 ? { ...p, ...changes } : p)
+      : [{ ...(item.posts[0] as CreatedPost), ...changes }];
+    autopostApi.update(item.id, { posts: postsToSave, status: item.status }).catch(() => {});
   };
 
   // Aggiorna un singolo prodotto dentro un post multiplo + persiste nel DB
