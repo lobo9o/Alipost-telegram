@@ -243,13 +243,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
       if (!isPrimary) {
         const pc = (s as any)?._primaryChannels as string[] | undefined;
-        const channelId = activeProfileId.split(':')[1];
-        if (Array.isArray(pc) && pc.length > 0 && pc.includes(channelId)) {
+        // Aggiorna la lista canali se disponibile, ma NON fare fallback al primario:
+        // il check pc.includes(channelId) può fallire per dati stale e causerebbe
+        // il reset silenzioso del profilo secondario al primario
+        if (Array.isArray(pc) && pc.length > 0) {
           setAllChannels(pc.filter(Boolean));
-        } else {
-          // Canale secondario non trovato tra i canali del primario: torna al principale
-          const base = activeProfileId.split(':')[0];
-          setActiveProfileId(base);
         }
       }
       setLoaded(true);
@@ -269,12 +267,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       applyData(q, t, l, kb, s, pub, tmplResult, isPrimary);
       if (!isPrimary) {
         const pc = (s as any)?._primaryChannels as string[] | undefined;
-        const channelId = activeProfileId.split(':')[1];
-        if (Array.isArray(pc) && pc.length > 0 && pc.includes(channelId)) {
+        if (Array.isArray(pc) && pc.length > 0) {
           setAllChannels(pc.filter(Boolean));
-        } else {
-          const base = activeProfileId.split(':')[0];
-          setActiveProfileId(base);
         }
       }
       setLoaded(true);
