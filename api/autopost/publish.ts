@@ -648,7 +648,8 @@ async function generateTemplateImageServer(
         const estW = parts
           ? Math.round(parts.main.length * fs * 0.60 + parts.dec.length * fsDec * 0.60 + (parts.suffix?.length ?? 0) * fs * 0.60)
           : Math.round(combinedText.length * fs * 0.60);
-        const cx = boxX + Math.round((boxWpx - estW) / 2);
+        const anchor = el.textAnchor === 'left' ? 'left' : el.textAnchor === 'right' ? 'right' : 'center';
+        const cx = anchor === 'left' ? boxX : anchor === 'right' ? boxX + boxWpx - estW : boxX + Math.round((boxWpx - estW) / 2);
         // baseline alfabetica a midY + 0.36*fs → centro visivo delle maiuscole a midY
         // evita dominant-baseline (non supportato da librsvg vecchio su Pi)
         const midY = boxY + Math.round(boxHpx / 2);
