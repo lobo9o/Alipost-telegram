@@ -644,17 +644,18 @@ async function generateTemplateImageServer(
           fs = Math.max(fs, 6);
         }
         const fsDec = Math.round(fs * scale);
-        // centra orizzontalmente: stima larghezza
+        // stima larghezza solo per la linea barrata
         const estW = parts
           ? Math.round(parts.main.length * fs * 0.60 + parts.dec.length * fsDec * 0.60 + (parts.suffix?.length ?? 0) * fs * 0.60)
           : Math.round(combinedText.length * fs * 0.60);
-        const anchor = el.textAnchor === 'left' ? 'left' : el.textAnchor === 'right' ? 'right' : 'center';
-        const cx = anchor === 'left' ? boxX : anchor === 'right' ? boxX + boxWpx - estW : boxX + Math.round((boxWpx - estW) / 2);
+        // Usa text-anchor nativo SVG: pixel-perfect senza stima
+        const svgAnchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'left' ? 'start' : 'middle';
+        const svgX = el.textAnchor === 'right' ? boxX + boxWpx : el.textAnchor === 'left' ? boxX : boxX + Math.round(boxWpx / 2);
         // baseline alfabetica a midY + 0.36*fs → centro visivo delle maiuscole a midY
         // evita dominant-baseline (non supportato da librsvg vecchio su Pi)
         const midY = boxY + Math.round(boxHpx / 2);
         const svgBaseY = midY + Math.round(fs * 0.36);
-        const common = `x="${cx}" y="${svgBaseY}" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="start"${lsAttr}`;
+        const common = `x="${svgX}" y="${svgBaseY}" font-family="${family}, Open Sans, Impact, Arial Black, sans-serif" font-size="${fs}" font-weight="${el.bold ? 'bold' : 'normal'}" text-anchor="${svgAnchor}"${lsAttr}`;
         if (!parts) {
           const safe = safeStr(text);
           if (el.strokeEnabled && Number(el.strokeWidth) > 0) {
@@ -674,7 +675,9 @@ async function generateTemplateImageServer(
         if (el.strikethrough) {
           const strkColor = String(el.strikethroughColor || el.color || '#ffffff');
           const lw = Math.max(1, Math.round(fs * 0.06));
-          svgEls.push(`<line x1="${cx}" y1="${midY}" x2="${cx + estW}" y2="${midY}" stroke="${strkColor}" stroke-width="${lw}" stroke-linecap="round"/>`);
+          // posizione linea basata su stima (senza canvas non si può misurare la larghezza reale)
+          const lineX1 = el.textAnchor === 'right' ? boxX + boxWpx - estW : el.textAnchor === 'left' ? boxX : boxX + Math.round((boxWpx - estW) / 2);
+          svgEls.push(`<line x1="${lineX1}" y1="${midY}" x2="${lineX1 + estW}" y2="${midY}" stroke="${strkColor}" stroke-width="${lw}" stroke-linecap="round"/>`);
         }
         return;
       }
