@@ -7,10 +7,12 @@ const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|
 
 function extractCouponFromText(text: string): { couponCode: string; textPrice: number; textOriginalPrice: number; textCountry: string } {
   // Coupon: "Coupon: ZSCADDR6" / "Coupon Sconto: SSIT12" / "✂️ Coupon➡️ H45Z8AJZ" / "codice: X" / "✂ ABCD1234"
-  // Permette una parola descrittiva opzionale (es. "Sconto") tra la keyword e il separatore+codice
+  // I codici coupon Amazon reali contengono sempre almeno una cifra (SSIT12, H45Z8AJZ, ZSCADDR6).
+  // Parole italiane comuni come "MINIMO", "STORICO" sono escluse automaticamente.
+  const COUPON_RE = /(?=.*\d)[A-Za-z0-9]{4,20}/; // deve avere almeno un numero
   const couponM =
-    text.match(/(?:coupon|codice|code|promo)(?:\s+(?:sconto|discount|promo|codice|code)\b)?\W{0,10}([A-Za-z0-9]{4,20})/i) ??
-    text.match(/[✂🎟]\s*(?:coupon|codice|code|promo)?(?:\s+(?:sconto|discount)\b)?\W{0,10}([A-Za-z0-9]{4,20})/iu);
+    text.match(new RegExp(`(?:coupon|codice|code|promo)(?:\\s+(?:sconto|discount|promo|codice|code)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'i')) ??
+    text.match(new RegExp(`[✂🎟]\\s*(?:coupon|codice|code|promo)?(?:\\s+(?:sconto|discount)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'iu'));
   const couponCode = couponM ? couponM[1].toUpperCase() : '';
 
   // Prezzi con € o $ sia dopo (12,99€) sia prima (€12.99 / $12.99)
