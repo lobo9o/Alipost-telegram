@@ -289,7 +289,6 @@ async function generateTemplateImageServer(
         try { if (existsSync(p)) { registerFont(p, { family: 'Impact' }); break; } } catch { /* ignore */ }
       }
 
-      console.log(`[tpl] fontsDir=${fontsDir}`);
       // Font personalizzati dalla cartella build/fonts
       const customFonts: Array<{ file: string; family: string; weight?: string; style?: string }> = [
         { file: 'arial.ttf',        family: 'Arial' },
@@ -310,9 +309,8 @@ async function generateTemplateImageServer(
       for (const f of customFonts) {
         try {
           const p = _join(fontsDir, f.file);
-          if (existsSync(p)) { registerFont(p, { family: f.family, ...(f.weight ? { weight: f.weight } : {}), ...(f.style ? { style: f.style } : {}) }); console.log(`[tpl] font OK: ${f.family}`); }
-          else console.log(`[tpl] font MANCANTE: ${p}`);
-        } catch (e: any) { console.log(`[tpl] font ERRORE ${f.family}: ${e.message}`); }
+          if (existsSync(p)) registerFont(p, { family: f.family, ...(f.weight ? { weight: f.weight } : {}), ...(f.style ? { style: f.style } : {}) });
+        } catch { /* ignora font mancante */ }
       }
 
       const canvasW = Number(template.canvasW) || 1024;
@@ -380,7 +378,7 @@ async function generateTemplateImageServer(
 
       const drawTextEl = (el: any, text: string, debugName?: string) => {
         if (!el?.enabled || !text?.trim()) return;
-        if (debugName) console.log(`[tpl] ${debugName}: font=${JSON.stringify(el.fontFamily)} color=${JSON.stringify(el.color)}`);
+        if (debugName) console.log(`[tpl] ${debugName}: color=${JSON.stringify(el.color)} strikethrough=${el.strikethrough}`);
         const fontStr = (size: number) => `${el.bold ? 'bold ' : ''}${size}px "${el.fontFamily || 'Impact'}", 'Open Sans', sans-serif`;
         const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
         const parts = scale < 1 ? splitAtDecimal(text) : null;
