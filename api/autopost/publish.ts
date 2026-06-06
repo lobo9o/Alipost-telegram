@@ -644,10 +644,11 @@ async function generateTemplateImageServer(
           fs = Math.max(fs, 6);
         }
         const fsDec = Math.round(fs * scale);
-        // stima larghezza solo per la linea barrata
+        // stima larghezza per la linea barrata: cifre e simboli valuta sono più stretti di 0.60
+        // (0.53 è più accurato per testi tipo "€48,93" rispetto al generico 0.60)
         const estW = parts
-          ? Math.round(parts.main.length * fs * 0.60 + parts.dec.length * fsDec * 0.60 + (parts.suffix?.length ?? 0) * fs * 0.60)
-          : Math.round(combinedText.length * fs * 0.60);
+          ? Math.round(parts.main.length * fs * 0.53 + parts.dec.length * fsDec * 0.53 + (parts.suffix?.length ?? 0) * fs * 0.53)
+          : Math.round(combinedText.length * fs * 0.53);
         // Usa text-anchor nativo SVG: pixel-perfect senza stima
         const svgAnchor = el.textAnchor === 'right' ? 'end' : el.textAnchor === 'left' ? 'start' : 'middle';
         const svgX = el.textAnchor === 'right' ? boxX + boxWpx : el.textAnchor === 'left' ? boxX : boxX + Math.round(boxWpx / 2);
