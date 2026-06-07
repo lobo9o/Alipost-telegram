@@ -271,48 +271,11 @@ async function generateTemplateImageServer(
   const canvasMod = await import('canvas').catch(() => null) as any;
   if (canvasMod) {
     try {
-      const { createCanvas, loadImage, registerFont } = canvasMod.default ?? canvasMod;
-      if (typeof registerFont !== 'function') console.warn('[tpl] registerFont non trovato nel modulo canvas — font personalizzati non registrati');
+      const { createCanvas, loadImage } = canvasMod.default ?? canvasMod;
 
-      const { existsSync } = await import('fs');
-      const { dirname: _dir, join: _join } = await import('path');
-      const { fileURLToPath: _ftu } = await import('url');
-      const __serverDir = _dir(_ftu(import.meta.url));
-      // Percorso dei font nella cartella build (copiati da public/fonts via npm run build)
-      const fontsDir = _join(__serverDir, '../../build/fonts');
-
-      const impactPaths = [
-        '/usr/share/fonts/truetype/msttcorefonts/Impact.ttf',
-        '/usr/share/fonts/truetype/impact.ttf',
-        '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
-      ];
-      for (const p of impactPaths) {
-        try { if (existsSync(p)) { registerFont(p, { family: 'Impact' }); break; } } catch { /* ignore */ }
-      }
-
-      // Font personalizzati dalla cartella build/fonts
-      const customFonts: Array<{ file: string; family: string; weight?: string; style?: string }> = [
-        { file: 'arial.ttf',        family: 'Arial' },
-        { file: 'Bangers.ttf',      family: 'Bangers' },
-        { file: 'ComixLoud.ttf',    family: 'Comix Loud' },
-        { file: 'Lobster.ttf',      family: 'Lobster' },
-        { file: 'Montserrat.ttf',   family: 'Montserrat' },
-        { file: 'MontserratBlackItalic.ttf',      family: 'Montserrat Black Italic',      weight: '900', style: 'italic' },
-        { file: 'MontserratExtraBoldItalic.ttf',  family: 'Montserrat ExtraBold Italic',   weight: '800', style: 'italic' },
-        { file: 'OpenSans.ttf',     family: 'Open Sans' },
-        { file: 'OpenSans.ttf',     family: 'Open Sans Bold', weight: 'bold' },
-        { file: 'TheBlacklist.ttf', family: 'The Blacklist' },
-        { file: 'Aero.ttf',             family: 'Aero' },
-        { file: 'Designer.otf',         family: 'Designer' },
-        { file: 'Digital7.ttf',         family: 'Digital 7' },
-        { file: 'BuiltTitlingLtIt.otf', family: 'Built Titling Lt It', style: 'italic' },
-      ];
-      for (const f of customFonts) {
-        try {
-          const p = _join(fontsDir, f.file);
-          if (existsSync(p)) registerFont(p, { family: f.family, ...(f.weight ? { weight: f.weight } : {}), ...(f.style ? { style: f.style } : {}) });
-        } catch { /* ignora font mancante */ }
-      }
+      // I font sono installati a livello di sistema via fc-cache (/usr/local/share/fonts/postdealbot/)
+      // NON chiamare registerFont(): sovrascrive i font di sistema con un rendering errato (sans-serif)
+      // anche quando il file .ttf è identico. I font di sistema (fontconfig) renderizzano correttamente.
 
       const canvasW = Number(template.canvasW) || 1024;
       const canvasH = Number(template.canvasH) || 1024;
