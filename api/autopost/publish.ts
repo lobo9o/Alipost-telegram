@@ -382,7 +382,7 @@ async function generateTemplateImageServer(
       const drawTextEl = (el: any, text: string, debugName?: string) => {
         if (!el?.enabled || !text?.trim()) return;
         if (debugName) console.log(`[tpl] ${debugName}: font=${JSON.stringify(el.fontFamily)} color=${JSON.stringify(el.color)}`);
-        const fontStr = (size: number) => `${el.bold ? 'bold ' : ''}${size}px "${el.fontFamily || 'Impact'}", 'Open Sans', sans-serif`;
+        const fontStr = (size: number) => `${el.bold ? 'bold ' : ''}${size}px '${el.fontFamily || 'Impact'}', 'Open Sans', sans-serif`;
         const scale = el.decimalFontScale != null && el.decimalFontScale < 1 ? el.decimalFontScale : 1;
         const parts = scale < 1 ? splitAtDecimal(text) : null;
 
