@@ -271,7 +271,8 @@ async function generateTemplateImageServer(
   const canvasMod = await import('canvas').catch(() => null) as any;
   if (canvasMod) {
     try {
-      const { createCanvas, loadImage, registerFont } = canvasMod;
+      const { createCanvas, loadImage, registerFont } = canvasMod.default ?? canvasMod;
+      if (typeof registerFont !== 'function') console.warn('[tpl] registerFont non trovato nel modulo canvas — font personalizzati non registrati');
 
       const { existsSync } = await import('fs');
       const { dirname: _dir, join: _join } = await import('path');
