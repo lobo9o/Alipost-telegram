@@ -15,10 +15,24 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
     text.match(new RegExp(`[✂🎟]\\s*(?:coupon|codice|code|promo)?(?:\\s+(?:sconto|discount)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'iu'));
   const couponCode = couponM ? couponM[1].toUpperCase() : '';
 
-  // Prezzi con € o $ sia dopo (12,99€) sia prima (€12.99 / $12.99)
-  const priceAfter = [...text.matchAll(/([\d]+[,.][\d]{2})\s*[€$]/g)].map(m => parseFloat(m[1].replace(',', '.')) || 0);
-  const priceBefore = [...text.matchAll(/[€$]\s*([\d]+[,.][\d]{2})/g)].map(m => parseFloat(m[1].replace(',', '.')) || 0);
-  const prices = [...priceAfter, ...priceBefore].filter(p => p > 0.5 && p < 10000);
+  // Prezzi con € o $ sia dopo (12,99€ / 1.234,56€) sia prima (€12.99 / $1,234.56)
+  // Gestisce separatore migliaia europeo (punto): 1.399,00€ → 1399.00
+  // e separatore migliaia anglosassone (virgola): 1,399.00€ → 1399.00
+  const PRICE_EU_RE  = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*[€$]/gu;  // 1.399,00€
+  const PRICE_INT_RE = /(\d{1,3}(?:,\d{3})*\.\d{2})\s*[€$]/gu;  // 1,399.00€
+  const PRICE_EU_PRE  = /[€$]\s*(\d{1,3}(?:\.\d{3})*,\d{2})/gu; // €1.399,00
+  const PRICE_INT_PRE = /[€$]\s*(\d{1,3}(?:,\d{3})*\.\d{2})/gu; // €1,399.00
+  const parseEU  = (s: string) => parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+  const parseINT = (s: string) => parseFloat(s.replace(/,/g, '')) || 0;
+  const priceAfter  = [
+    ...[...text.matchAll(PRICE_EU_RE)].map(m => parseEU(m[1])),
+    ...[...text.matchAll(PRICE_INT_RE)].map(m => parseINT(m[1])),
+  ];
+  const priceBefore = [
+    ...[...text.matchAll(PRICE_EU_PRE)].map(m => parseEU(m[1])),
+    ...[...text.matchAll(PRICE_INT_PRE)].map(m => parseINT(m[1])),
+  ];
+  const prices = [...priceAfter, ...priceBefore].filter(p => p > 0.5 && p < 100000);
 
   const textPrice = prices.length ? Math.min(...prices) : 0;
   const maxPrice  = prices.length >= 2 ? Math.max(...prices) : 0;
