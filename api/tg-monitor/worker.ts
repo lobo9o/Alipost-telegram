@@ -83,10 +83,33 @@ async function wasRecentlyQueuedDB(userId: string, productIds: string[], destCha
         console.log(`[tg-monitor] dedup DB draft: trovato ${hit} ma canale diverso draft_ch=${row.dest_channel ?? 'null'} target_ch=${destChannel ?? 'null'} → no block`);
       }
     }
-    // 2) Controlla già pubblicati nelle ultime 24h — solo per lo stesso canale di destinazione.
+    // 2) Controlla autopost_queue pubblicati di recente (status='published', ultime 24h).
+    // dest_channel in autopost_queue è lo stesso valore passato qui (es. @username o ID numerico),
+    // quindi il confronto funziona anche per canali con @username (a differenza di published_posts
+    // dove chat_id è sempre l'ID numerico e non coincide con @username).
+    const recentPublished = await sql<{ id: string; posts: unknown; created_at: string; dest_channel: string | null }[]>`
+      SELECT id, posts, created_at, dest_channel FROM autopost_queue
+      WHERE user_id = ${userId}
+        AND status = 'published'
+        AND created_at > NOW() - INTERVAL '24 hours'
+    `;
+    for (const row of recentPublished) {
+      const posts2: any[] = typeof (row as any).posts === 'string' ? JSON.parse((row as any).posts) : ((row as any).posts as any[]) ?? [];
+      const ids2 = posts2.map((p: any) => normalizeId(String(p.productId ?? p.asin ?? ''))).filter(Boolean);
+      const hit2 = targetIds.find(id => ids2.includes(id));
+      if (hit2) {
+        const sameChannel2 = destChannel === null || row.dest_channel === destChannel || row.dest_channel === null;
+        if (sameChannel2) {
+          console.log(`[tg-monitor] dedup DB published queue: bloccato ${hit2} ch=${row.dest_channel ?? 'null'} (${row.created_at})`);
+          return true;
+        }
+      }
+    }
+    // 3) Controlla già pubblicati nelle ultime 24h in published_posts — funziona se chat_id è numerico.
     // Se destChannel è null = non sappiamo il canale → blocca su tutto (comportamento conservativo).
-    // Se destChannel è valorizzato → blocca solo se già pubblicato su QUEL canale specifico.
-    const channelFilter = destChannel
+    // Se destChannel è @username → la query non filtra per canale (chat_id è numerico, non coincide).
+    const isNumericChannel = destChannel ? /^-?\d+$/.test(destChannel) : false;
+    const channelFilter = (destChannel && isNumericChannel)
       ? sql`AND chat_id = ${destChannel}`
       : sql``;
     const published = await sql<{ product_id: string; published_at: string }[]>`
