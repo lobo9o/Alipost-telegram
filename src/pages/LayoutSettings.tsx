@@ -819,6 +819,7 @@ const FONTS = [
   'Comix Loud',
   'Designer',
   'Digital 7',
+  'Gotham Rounded',
   'Impact',
   'Lobster',
   'Montserrat',
