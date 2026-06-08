@@ -288,17 +288,25 @@ async function generateTemplateImageServer(
       async function fetchImgBufC(url: string): Promise<Buffer | null> {
         try {
           const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 8000);
-          const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' } });
+          const t = setTimeout(() => ctrl.abort(), 12000);
+          const isAli = /alicdn\.com|aliexpress\.com/i.test(url);
+          const r = await fetch(url, {
+            signal: ctrl.signal,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              ...(isAli ? { 'Referer': 'https://www.aliexpress.com/' } : {}),
+            },
+          });
           clearTimeout(t);
-          if (!r.ok) return null;
+          if (!r.ok) { console.warn(`[tpl] fetchImgBuf HTTP ${r.status}: ${url.slice(0, 100)}`); return null; }
           return Buffer.from(await r.arrayBuffer());
-        } catch { return null; }
+        } catch (e: any) { console.warn(`[tpl] fetchImgBuf errore: ${e.message} | ${url.slice(0, 100)}`); return null; }
       }
 
       if (productImageUrl?.startsWith('http')) {
         try {
           const buf = await fetchImgBufC(productImageUrl);
+          if (!buf) console.warn(`[tpl] product immagine non scaricata: ${productImageUrl.slice(0, 100)}`);
           if (buf) {
             const img = await loadImage(buf);
             const el = template.product ?? { x: 5, y: 5, size: 90 };
@@ -527,12 +535,19 @@ async function generateTemplateImageServer(
     async function fetchImgBuf(url: string): Promise<Buffer | null> {
       try {
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 8000);
-        const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' } });
+        const t = setTimeout(() => ctrl.abort(), 12000);
+        const isAli = /alicdn\.com|aliexpress\.com/i.test(url);
+        const r = await fetch(url, {
+          signal: ctrl.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            ...(isAli ? { 'Referer': 'https://www.aliexpress.com/' } : {}),
+          },
+        });
         clearTimeout(t);
-        if (!r.ok) return null;
+        if (!r.ok) { console.warn(`[tpl] fetchImgBuf HTTP ${r.status}: ${url.slice(0, 100)}`); return null; }
         return Buffer.from(await r.arrayBuffer());
-      } catch { return null; }
+      } catch (e: any) { console.warn(`[tpl] fetchImgBuf errore: ${e.message} | ${url.slice(0, 100)}`); return null; }
     }
 
     async function bufFromSrc(src: string): Promise<Buffer | null> {
