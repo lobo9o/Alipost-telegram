@@ -3282,6 +3282,47 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
   const [multiEditMap, setMultiEditMap] = useState<MultiEditMap>({});
   const [editErr, setEditErr] = useState('');
   const [saving, setSaving] = useState(false);
+  const [republishing, setRepublishing] = useState<Set<string>>(new Set());
+
+  const republishNow = async (p: typeof published[0]) => {
+    setRepublishing(prev => new Set(prev).add(p.id));
+    try {
+      const pCurrency = p.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+      const pAsPost: CreatedPost = {
+        id: p.id, platform: p.platform as Platform, sourceUrl: p.sourceUrl, productId: p.productId,
+        title: p.title, image: p.image, emoji: p.emoji,
+        originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price),
+        discountPercent: p.discountPercent, customText: p.customText,
+        isHistoricalLow: p.isHistoricalLow, tagOverrides: p.tagOverrides,
+        templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
+      };
+      const pLayout = layouts.find(l => l.id === p.layoutId);
+      const pKb = keyboards.find(k => k.id === (pLayout?.keyboardId ?? 'kb1'));
+      const tmpl = templates[0];
+      let generatedImage: string | undefined;
+      if (tmpl && p.image?.startsWith('http')) {
+        try {
+          generatedImage = await generatePostImage(tmpl, p.image, p.isHistoricalLow, p.platform, {
+            prezzo: `${pCurrency}${Number(p.price).toFixed(2)}`,
+            prezzoPrecedente: `${pCurrency}${Number(p.originalPrice).toFixed(2)}`,
+            sconto: `-${p.discountPercent}%`,
+          });
+        } catch {}
+      }
+      await postsApi.publish(genId(), {
+        post: pAsPost,
+        layoutContenuto: pLayout?.contenuto,
+        keyboardContenuto: pKb?.contenuto,
+        generatedImage,
+        disableNotification: true,
+      });
+      alert('✅ Ri-pubblicato con successo!');
+    } catch (e) {
+      alert('Errore: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setRepublishing(prev => { const s = new Set(prev); s.delete(p.id); return s; });
+    }
+  };
 
   const reinsert = (p: typeof published[0]) => {
     const post: CreatedPost = {
@@ -3749,6 +3790,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                       <button className="btn bsm bgh" disabled={p.terminata} onClick={() => startEditSingle(p)}>✏️ Modifica</button>
                       <button className="btn bsm bgh" style={{ color: '#ef4444' }} disabled={p.terminata} onClick={() => markTerminataSingle(p)}>❌ Terminata</button>
                       <button className="btn bsm bbl" disabled={p.terminata} onClick={() => reinsert(p)}>↩️ Ri-accoda</button>
+                      <button className="btn bsm" style={{ background: '#1a3a2a', color: '#4ade80', border: '1px solid #2d5a40' }} disabled={republishing.has(p.id)} onClick={() => republishNow(p)}>{republishing.has(p.id) ? '⏳' : '🔄'} Ri-pubblica</button>
                     </div>
                   )}
                 </div>
