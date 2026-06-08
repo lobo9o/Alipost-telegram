@@ -315,8 +315,22 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         `.catch(() => {});
       }
 
-      // Aggiorna Telegram se c'è un caption
-      if (newCaption) {
+      // Aggiorna Telegram — se c'è newImage usa editMessageMedia (sostituisce foto + didascalia)
+      if (newImage && typeof newImage === 'string' && newImage.startsWith('data:')) {
+        const base64ep = newImage.replace(/^data:image\/\w+;base64,/, '');
+        const imgBufEp = Buffer.from(base64ep, 'base64');
+        const formEp = new FormData();
+        formEp.append('chat_id', chatId);
+        formEp.append('message_id', String(messageId));
+        const mediaObjEp: Record<string, string> = { type: 'photo', media: 'attach://photo' };
+        if (newCaption) { mediaObjEp.caption = String(newCaption).slice(0, 1024); mediaObjEp.parse_mode = 'HTML'; }
+        formEp.append('media', JSON.stringify(mediaObjEp));
+        formEp.append('photo', new Blob([imgBufEp], { type: 'image/jpeg' }), 'photo.jpg');
+        const tgRep = await fetch(`${tgBase2}/editMessageMedia`, { method: 'POST', body: formEp });
+        const tgDep = await tgRep.json() as { ok: boolean; description?: string };
+        if (!tgDep.ok) { res.status(500).json({ error: `Telegram: ${tgDep.description ?? 'errore'}` }); return; }
+      } else if (newCaption) {
+        // Solo testo
         const tgBody = { chat_id: chatId, message_id: messageId, caption: String(newCaption).slice(0, 1024), parse_mode: 'HTML' };
         let tgR = await fetch(`${tgBase2}/editMessageCaption`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tgBody) });
         let tgD = await tgR.json() as { ok: boolean; description?: string };

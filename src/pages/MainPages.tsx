@@ -3455,6 +3455,21 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
           templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1',
         } as CreatedPost;
         newCaption = layout ? resolvePostTags(layout.contenuto, updatedPost, tags, cur) : editFields.customText;
+
+        // Rigenera immagine con i dati aggiornati (sostituisce la foto su Telegram)
+        let newImage: string | undefined;
+        const tmplForSave = templates[0];
+        if (tmplForSave && p.image?.startsWith('http')) {
+          try {
+            newImage = await generatePostImage(tmplForSave, p.image, editFields.isHistoricalLow, p.platform, {
+              prezzo: `${cur}${discPrice.toFixed(2)}`,
+              prezzoPrecedente: `${cur}${origPrice.toFixed(2)}`,
+              sconto: `-${editFields.discountPercent}%`,
+              testoCustom: editFields.customText,
+            });
+          } catch { /* continua senza immagine */ }
+        }
+
         setPublished(prev => prev.map(x => x.id !== p.id ? x : {
           ...x, title: editFields.title, originalPrice: origPrice,
           price: discPrice.toFixed(2), discountPercent: editFields.discountPercent,
@@ -3463,7 +3478,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
           tagOverrides: editFields.tagOverrides,
         }));
         await publishedApi.editTelegram(p.id, {
-          action: 'editPublished', chatId: p.chatId, messageId: p.messageId, newCaption,
+          action: 'editPublished', chatId: p.chatId, messageId: p.messageId, newCaption, newImage,
           updatedFields: { title: editFields.title, originalPrice: origPrice, discountedPrice: discPrice, discountPercent: editFields.discountPercent, customText: editFields.customText, isHistoricalLow: editFields.isHistoricalLow },
         } as any);
       }
