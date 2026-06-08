@@ -368,8 +368,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           published_at AS "publishedAt"
         FROM published_posts
         WHERE user_id = ${userId}
-          AND published_at::date = CURRENT_DATE
         ORDER BY published_at DESC
+        LIMIT 100
       `;
       res.json(rows);
       return;

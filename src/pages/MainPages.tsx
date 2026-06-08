@@ -453,7 +453,7 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
     { id: 'search', ic: '🔍', lb: 'Cerca Offerte', sub: 'Amazon & AliExpress', c: 'var(--bl)' },
     { id: 'newpost', ic: '✏️', lb: 'Nuovo Post', sub: createdPosts.length > 0 ? `${createdPosts.length} bozze in attesa` : 'singolo / multiplo', c: 'var(--a1)' },
     { id: 'queue', ic: '🗓️', lb: 'Coda AutoPost', sub: `${stats.inCoda} in coda`, c: 'var(--or)' },
-    { id: 'published', ic: '✅', lb: 'Pubblicati', sub: `${stats.pub} oggi`, c: 'var(--gr)' },
+    { id: 'published', ic: '✅', lb: 'Pubblicati', sub: `ultimi ${stats.pub}`, c: 'var(--gr)' },
     { id: 'monitor', ic: '📡', lb: 'Monitor Canali', sub: 'copia link da altri canali', c: 'var(--a3)' },
     { id: 'layout', ic: '🎨', lb: 'Layout', sub: 'tag · testo · template', c: 'var(--a2)' },
     { id: 'settings', ic: '⚙️', lb: 'Impostazioni', sub: 'API · canali · orari', c: 'var(--t2)' },
@@ -3695,10 +3695,10 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
 
   return (
     <div className="pg">
-      <PageHeader title="Pubblicati oggi" onBack={() => nav('dash')} badge={`${published.length}`} badgeVariant="green" />
+      <PageHeader title="Ultimi pubblicati" onBack={() => nav('dash')} badge={`${published.length}`} badgeVariant="green" />
       <div style={{ height: 8 }} />
       {!published.length && (
-        <EmptyState icon="✅" text="Nessun post pubblicato oggi."
+        <EmptyState icon="✅" text="Nessun post pubblicato."
           action={<button className="btn bp" onClick={() => nav('queue')}>Vai alla coda</button>} />
       )}
       {published.map(p => {
@@ -3734,7 +3734,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                 <div style={{ padding: '10px 12px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                     <SourceBadge platform={p.platform} />
-                    <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span style={{ fontSize: 10, color: 'var(--t3)' }}>{(() => { const d = new Date(p.publishedAt); const today = new Date(); const isToday = d.toDateString() === today.toDateString(); return p.ts && isToday ? p.ts : isToday ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); })()}</span>
                     {p.isHistoricalLow && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700 }}>🏆 MIN</span>}
                     {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
                     {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
@@ -3770,7 +3770,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <SourceBadge platform={p.platform} />
                     <span style={{ fontSize: 10, color: 'var(--a1)', fontWeight: 700 }}>🗂️ MULTI ({p.multiItems?.length ?? 0})</span>
-                    <span style={{ fontSize: 10, color: 'var(--t3)' }}>{p.ts || new Date(p.publishedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span style={{ fontSize: 10, color: 'var(--t3)' }}>{(() => { const d = new Date(p.publishedAt); const today = new Date(); const isToday = d.toDateString() === today.toDateString(); return p.ts && isToday ? p.ts : isToday ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); })()}</span>
                     {p.terminata && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, background: '#2a0808', padding: '2px 7px', borderRadius: 10, border: '1px solid #5a1515' }}>❌ TERMINATA</span>}
                     {p.messageId > 0 && <span style={{ fontSize: 9, color: 'var(--gr2)', marginLeft: 'auto' }}>✓ ID:{p.messageId}</span>}
                   </div>
