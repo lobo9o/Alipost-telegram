@@ -1915,7 +1915,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               const [termTpl] = await sql`
                 SELECT id, config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId})
                   AND tipo NOT IN ('historical_low')
-                ORDER BY (tipo = 'normal') DESC, created_at ASC LIMIT 1
+                ORDER BY (user_id = ${userId}) DESC, (tipo = 'normal') DESC, updated_at DESC NULLS LAST, created_at DESC LIMIT 1
               `.catch(() => [null]);
               if (termTpl) {
                 const termTplCfg = parseTemplateCfg(termTpl);
