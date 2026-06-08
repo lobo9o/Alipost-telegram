@@ -289,7 +289,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const stats = {
     inCoda: queue.length,
     sched: queue.filter(x => x.status === 'scheduled').length,
-    pub: published.length,
+    pub: published.filter(p => { const d = new Date(p.publishedAt); const t = new Date(); return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate(); }).length,
   };
 
   if (!loaded) {
