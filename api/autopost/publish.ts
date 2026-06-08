@@ -306,15 +306,31 @@ async function generateTemplateImageServer(
       if (productImageUrl?.startsWith('http')) {
         try {
           const buf = await fetchImgBufC(productImageUrl);
-          if (!buf) console.warn(`[tpl] product immagine non scaricata: ${productImageUrl.slice(0, 100)}`);
-          if (buf) {
-            const img = await loadImage(buf);
-            const el = template.product ?? { x: 5, y: 5, size: 90 };
-            const x = (el.x / 100) * canvasW; const y = (el.y / 100) * canvasH;
-            const box = (el.size / 100) * canvasRef; // box quadrato
-            const ratio = Math.min(box / img.width, box / img.height);
-            const dw = img.width * ratio; const dh = img.height * ratio;
-            ctx.drawImage(img, x + (box - dw) / 2, y + (box - dh) / 2, dw, dh);
+          if (!buf) {
+            console.warn(`[tpl] product immagine non scaricata: ${productImageUrl.slice(0, 100)}`);
+          } else {
+            // Converti a JPEG con sharp prima di loadImage:
+            // node-canvas non decodifica WebP → img.width/height = 0 → drawImage no-op silenzioso
+            let loadBuf = buf;
+            const sharpMod2 = await import('sharp').catch(() => null) as any;
+            const sharp2 = sharpMod2?.default ?? sharpMod2;
+            if (sharp2) {
+              try {
+                loadBuf = await sharp2(buf).jpeg({ quality: 95 }).toBuffer();
+              } catch (se: any) { console.warn('[tpl] product sharp convert:', se.message); }
+            }
+            const img = await loadImage(loadBuf);
+            console.log(`[tpl] product image: ${img.width}x${img.height} url=${productImageUrl.slice(0, 60)}`);
+            if (img.width > 0 && img.height > 0) {
+              const el = template.product ?? { x: 5, y: 5, size: 90 };
+              const x = (el.x / 100) * canvasW; const y = (el.y / 100) * canvasH;
+              const box = (el.size / 100) * canvasRef; // box quadrato
+              const ratio = Math.min(box / img.width, box / img.height);
+              const dw = img.width * ratio; const dh = img.height * ratio;
+              ctx.drawImage(img, x + (box - dw) / 2, y + (box - dh) / 2, dw, dh);
+            } else {
+              console.warn(`[tpl] product image dimensioni zero — salto drawImage`);
+            }
           }
         } catch (e: any) { console.warn('[tpl] product:', e.message); }
       }
