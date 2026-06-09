@@ -611,7 +611,21 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   const isMulti = urls.length > 1;
 
   // Processa tutti i link in parallelo
-  const products = (await Promise.all(urls.map(u => fetchProduct(profileId, u, headers)))).filter(Boolean);
+  const rawProducts = (await Promise.all(urls.map(u => fetchProduct(profileId, u, headers)))).filter(Boolean);
+  if (!rawProducts.length) return;
+
+  // Deduplica per productId/ASIN: due URL diversi (es. amzlink.to + amazon.it/dp/ con ref= differente)
+  // possono risolvere allo stesso prodotto e causare post duplicati
+  const seenPids = new Set<string>();
+  const products = rawProducts.filter((p: any) => {
+    const pid = (p.asin ?? p.productId ?? '').toString();
+    if (!pid || seenPids.has(pid)) {
+      if (pid) console.log(`[tg-monitor] ${profileId} — dedup prodotto duplicato: ${pid}`);
+      return false;
+    }
+    seenPids.add(pid);
+    return true;
+  });
   if (!products.length) return;
 
   const productIds = products.map((p: any) => (p.asin ?? p.productId ?? '').toString()).filter(Boolean);
