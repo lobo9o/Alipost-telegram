@@ -659,6 +659,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const [settingsRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
   const rawData = settingsRow?.data ?? {};
   const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
+
+  // Profili secondari (userId:channelId): eredita le credenziali dal profilo base se mancanti
+  const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+  if (baseUserId !== userId && (!cfg.aliexpress?.appKey || !cfg.aliexpress?.appSecret || !cfg.amazon?.credentialId)) {
+    const [baseRow] = await sql`SELECT data FROM settings WHERE user_id = ${baseUserId}`.catch(() => [null]);
+    if (baseRow) {
+      const baseCfg = (typeof baseRow.data === 'string' ? JSON.parse(baseRow.data) : baseRow.data) as Record<string, any>;
+      if (!cfg.aliexpress?.appKey && baseCfg.aliexpress?.appKey) cfg.aliexpress = { ...baseCfg.aliexpress, ...cfg.aliexpress };
+      if (!cfg.amazon?.credentialId && baseCfg.amazon?.credentialId) cfg.amazon = { ...baseCfg.amazon, ...cfg.amazon };
+    }
+  }
+
   console.log('[product] cfg.amazon version:', cfg.amazon?.version, 'marketplace:', cfg.amazon?.marketplace);
 
   if (platform === 'amazon') {
