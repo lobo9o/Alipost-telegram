@@ -639,7 +639,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   if (textCoupon || textOriginalPrice || textCountry) console.log(`[tg-monitor] ${userId} — da testo: coupon="${textCoupon || '-'}" prezzoFinale=${textPrice || '-'} prezzoPrecedente=${textOriginalPrice || '-'} paese="${textCountry || '-'}"`);
 
   // Rileva errori di prezzo nel testo sorgente → imposta {custom}
-  const PRICE_ERROR_RE = /errore\s+di\s+prezzo|errore\s+prezzo|probabile\s+errore|price\s+error|errore!/i;
+  const PRICE_ERROR_RE = /errore\s+di\s+prezzo|errore\s+del\s+prezzo|errore\s+sul\s+prezzo|errore\s+nel\s+prezzo|errore\s+prezzo|prezzo\s+errato|prezzo\s+sbagliato|prezzo\s+anomalo|anomalia\s+(?:di\s+)?prezzo|probabile\s+errore|possibile\s+errore|sembra\s+(?:un\s+)?errore|forse\s+(?:un\s+)?errore|potrebbe\s+essere\s+(?:un\s+)?errore|glitch\s+(?:di\s+)?prezzo|prezzo\s+glitch|price\s+error|pricing\s+error|price\s+glitch|price\s+mistake|errore!/i;
   const detectedCustom = PRICE_ERROR_RE.test(messageText) ? '❌ERRORE DI PREZZO❌' : '';
   if (detectedCustom) console.log(`[tg-monitor] ${profileId} — rilevato errore di prezzo nel testo sorgente`);
 
