@@ -449,12 +449,17 @@ export async function generateTerminataImage(
   config: TerminataConfig,
   values: { prezzo?: string; prezzoPrecedente?: string; sconto?: string; testoCustom?: string } = {},
 ): Promise<string> {
+  // config.showXxx undefined → tratta come true (impostazione non ancora salvata = mostra)
+  const showPrezzo           = config.showPrezzo           !== false;
+  const showPrezzoPrecedente = config.showPrezzoPrecedente !== false;
+  const showSconto           = config.showSconto           !== false;
+
   // Crea una copia del template disabilitando i campi che non vanno mostrati sulla terminata
   const tmpl: Template = {
     ...template,
-    prezzo:           { ...template.prezzo,           enabled: template.prezzo.enabled           && config.showPrezzo },
-    prezzoPrecedente: { ...template.prezzoPrecedente, enabled: template.prezzoPrecedente.enabled && config.showPrezzoPrecedente },
-    sconto:           { ...template.sconto,           enabled: template.sconto.enabled           && config.showSconto },
+    prezzo:           { ...template.prezzo,           enabled: template.prezzo.enabled           && showPrezzo },
+    prezzoPrecedente: { ...template.prezzoPrecedente, enabled: template.prezzoPrecedente.enabled && showPrezzoPrecedente },
+    sconto:           { ...template.sconto,           enabled: template.sconto.enabled           && showSconto },
   };
 
   // Genera l'immagine completa del template (stesso rendering del publish normale)
@@ -467,6 +472,10 @@ export async function generateTerminataImage(
   canvas.width = canvasW;
   canvas.height = canvasH;
   const ctx = canvas.getContext('2d')!;
+
+  // Fill background prima di disegnare (evita bande nere/bianche in JPEG da canvas trasparente)
+  ctx.fillStyle = template.bgColor || '#ffffff';
+  ctx.fillRect(0, 0, canvasW, canvasH);
 
   // Disegna l'immagine base del template
   const baseImg = await loadImage(baseDataUrl);
@@ -489,11 +498,15 @@ export async function generateTerminataImage(
     const tx = (config.overlayTextX / 100) * canvasW;
     const ty = (config.overlayTextY / 100) * canvasH;
     const fontFamily = config.overlayTextFont || 'Impact';
-    await document.fonts.load(`bold ${fs * 2}px "${fontFamily}"`).catch(() => {});
+    // Carica il font principale + font emoji per garantire il rendering delle emoji
+    await Promise.all([
+      document.fonts.load(`bold ${fs * 2}px "${fontFamily}"`).catch(() => {}),
+      document.fonts.load(`bold ${fs * 2}px "Segoe UI Emoji"`).catch(() => {}),
+    ]);
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold ${fs}px "${fontFamily}", Impact, Arial Black`;
+    ctx.font = `bold ${fs}px "${fontFamily}", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Impact, Arial Black`;
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = fs * 0.08;
     ctx.lineJoin = 'round';
