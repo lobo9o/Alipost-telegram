@@ -2357,6 +2357,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
     if (!currentItem) return;
     const currentPost = currentItem.posts[0] as CreatedPost | undefined;
     if (!currentPost) return;
+    // Non pre-generare per i multi: la griglia composita viene generata al momento della pubblicazione
+    if (currentItem.tipo === 'multi') return;
     const tpl = templates.find(t => t.id === currentPost.templateId) ?? templates[0];
     if (!tpl || pregenImages.current[currentItem.id]) return;
 
@@ -2547,10 +2549,8 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         }
         const layoutKb = layout?.keyboardId ? keyboards.find(k => k.id === layout.keyboardId) : null;
         const multiKeyboard = layoutKb?.contenuto;
-        generatedImage = (post as any).generatedImage;
-        if (!generatedImage) {
-          generatedImage = await generateMultiPostImage(multiPosts.map(mp => mp.image)).catch(() => undefined);
-        }
+        // Rigenera sempre la griglia composita per i multi (non usare immagini singole pre-generate)
+        generatedImage = await generateMultiPostImage(multiPosts.map(mp => mp.image)).catch(() => undefined);
         const pubResult = await postsApi.publish(post.id, {
           post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard, generatedImage, disableNotification, channelOverride,
         });
