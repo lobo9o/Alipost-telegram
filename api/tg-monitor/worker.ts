@@ -22,15 +22,20 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
   const PRICE_INT_RE = /(\d{1,3}(?:,\d{3})*\.\d{2})\s*[€$]/gu;  // 1,399.00€
   const PRICE_EU_PRE  = /[€$]\s*(\d{1,3}(?:\.\d{3})*,\d{2})/gu; // €1.399,00
   const PRICE_INT_PRE = /[€$]\s*(\d{1,3}(?:,\d{3})*\.\d{2})/gu; // €1,399.00
+  // Prezzi interi senza decimali: 15€ — lookbehind evita di catturare "99" da "34,99€"
+  const PRICE_WHOLE_AF  = /(?<![,.])\b(\d{1,4})\s*[€$]/gu;
+  const PRICE_WHOLE_PRE = /[€$]\s*(\d{1,4})(?![,.\d])/gu;
   const parseEU  = (s: string) => parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
   const parseINT = (s: string) => parseFloat(s.replace(/,/g, '')) || 0;
   const priceAfter  = [
     ...[...text.matchAll(PRICE_EU_RE)].map(m => parseEU(m[1])),
     ...[...text.matchAll(PRICE_INT_RE)].map(m => parseINT(m[1])),
+    ...[...text.matchAll(PRICE_WHOLE_AF)].map(m => parseInt(m[1], 10)),
   ];
   const priceBefore = [
     ...[...text.matchAll(PRICE_EU_PRE)].map(m => parseEU(m[1])),
     ...[...text.matchAll(PRICE_INT_PRE)].map(m => parseINT(m[1])),
+    ...[...text.matchAll(PRICE_WHOLE_PRE)].map(m => parseInt(m[1], 10)),
   ];
   const prices = [...priceAfter, ...priceBefore].filter(p => p > 0.5 && p < 100000);
 
