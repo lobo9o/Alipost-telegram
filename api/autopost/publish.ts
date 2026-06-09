@@ -1826,23 +1826,46 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const chatId = String(tgData.result?.chat?.id ?? channel);
 
       // Salva in published_posts
+      const multiItemsForDB = isMulti
+        ? sql.json((postsArr as Record<string, any>[]).map(mp => ({
+            id: String(mp.id ?? ''),
+            title: String(mp.title ?? ''),
+            emoji: String(mp.emoji ?? '📦'),
+            image: String(mp.image ?? ''),
+            price: Number(mp.discountedPrice ?? 0).toFixed(2),
+            originalPrice: Number(mp.originalPrice ?? 0),
+            discountPercent: Number(mp.discountPercent ?? 0),
+            platform: String(mp.platform ?? 'amazon'),
+            sourceUrl: String(mp.sourceUrl ?? ''),
+            productId: String(mp.productId ?? ''),
+            customText: String(mp.customText ?? ''),
+            layoutId: String(mp.layoutId ?? ''),
+            isHistoricalLow: Boolean(mp.isHistoricalLow ?? false),
+            coupon: String(mp.coupon ?? ''),
+            terminata: false,
+            resolvedText: '',
+          })))
+        : null;
+      const pubEmoji = isMulti ? '🗂️' : (post.emoji ?? '');
+      const pubTitle = isMulti ? `Post multiplo (${postsArr.length} prodotti)` : (post.title ?? '');
       await sql`
         INSERT INTO published_posts (
           id, user_id, emoji, title, image,
           original_price, discounted_price, discount_percent,
           platform, source_url, product_id, custom_text,
-          layout_id, is_historical_low, is_multi, chat_id, message_id, published_at, last_checked_at
+          layout_id, is_historical_low, is_multi, multi_items, chat_id, message_id, published_at, last_checked_at
         ) VALUES (
-          ${post.id}, ${userId}, ${post.emoji ?? ''}, ${post.title ?? ''}, ${post.image ?? ''},
+          ${post.id}, ${userId}, ${pubEmoji}, ${pubTitle}, ${post.image ?? ''},
           ${post.originalPrice ?? 0}, ${post.discountedPrice ?? 0}, ${post.discountPercent ?? 0},
           ${post.platform ?? 'amazon'}, ${post.sourceUrl ?? ''}, ${post.productId ?? ''},
           ${post.customText ?? ''}, ${post.layoutId ?? ''}, ${post.isHistoricalLow ?? false},
-          ${isMulti}, ${chatId}, ${messageId}, now(), now()
+          ${isMulti}, ${multiItemsForDB}, ${chatId}, ${messageId}, now(), now()
         )
         ON CONFLICT (id) DO UPDATE SET
           chat_id = EXCLUDED.chat_id,
           message_id = EXCLUDED.message_id,
-          is_multi = EXCLUDED.is_multi
+          is_multi = EXCLUDED.is_multi,
+          multi_items = EXCLUDED.multi_items
       `.catch((e: any) => console.error('[autopost] published_posts insert error:', e?.message));
 
       // Registra prezzo in storico (fire-and-forget)

@@ -347,9 +347,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     await ensurePublishedTable();
 
     if (req.method === 'GET') {
-      // Mostra i post di tutti i profili (primario + secondari) dello stesso utente
-      const primaryId = userId.includes(':') ? userId.split(':')[0] : userId;
-      const prefixPattern = primaryId + ':%';
       const rows = await sql`
         SELECT
           id, emoji, title, image,
@@ -370,7 +367,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           multi_items AS "multiItems",
           published_at AS "publishedAt"
         FROM published_posts
-        WHERE user_id = ${primaryId} OR user_id LIKE ${prefixPattern}
+        WHERE user_id = ${userId}
         ORDER BY published_at DESC
         LIMIT 100
       `;
