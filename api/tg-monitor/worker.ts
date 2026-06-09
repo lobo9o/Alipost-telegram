@@ -394,12 +394,23 @@ async function startUser(userId: string) {
         if (entityUrl) urlSet.add(entityUrl);
       }
 
+      // URL nei bottoni inline (replyMarkup) — comune nei post AliExpress dei canali
+      const markup = msg.replyMarkup ?? msg.reply_markup;
+      const markupRows: any[] = markup?.rows ?? markup?.inline_keyboard ?? [];
+      for (const row of markupRows) {
+        const buttons: any[] = row.buttons ?? row ?? [];
+        for (const btn of buttons) {
+          const btnUrl: string = btn.url ?? '';
+          if (btnUrl) urlSet.add(btnUrl);
+        }
+      }
+
       // Filtra solo URL Amazon/AliExpress — reset lastIndex prima di ogni test()
       // perché la regex ha flag /g e lastIndex persiste tra chiamate .test() consecutive
       const urls = [...urlSet].filter(u => { PRODUCT_URL_RE.lastIndex = 0; return PRODUCT_URL_RE.test(u); });
 
       if (!urls.length) {
-        console.log(`[tg-monitor] ${userId} — nessun link prodotto trovato (entities: ${entities.length})`);
+        console.log(`[tg-monitor] ${userId} — nessun link prodotto trovato (entities: ${entities.length} markup rows: ${markupRows.length})`);
         return;
       }
       console.log(`[tg-monitor] ${userId} — trovati ${urls.length} link: ${urls.join(', ').slice(0, 120)}`);
@@ -442,6 +453,9 @@ async function startUser(userId: string) {
           const urlSet = new Set<string>();
           (text.match(PRODUCT_URL_RE) ?? []).forEach((u: string) => urlSet.add(u));
           ((msg as any).entities ?? []).forEach((ent: any) => { const u = ent.url ?? ent.href ?? ''; if (u) urlSet.add(u); });
+          const pollMarkup = (msg as any).replyMarkup ?? (msg as any).reply_markup;
+          const pollRows: any[] = pollMarkup?.rows ?? pollMarkup?.inline_keyboard ?? [];
+          for (const row of pollRows) { for (const btn of (row.buttons ?? row ?? [])) { const u = btn.url ?? ''; if (u) urlSet.add(u); } }
           const urls = [...urlSet].filter(u => { PRODUCT_URL_RE.lastIndex = 0; return PRODUCT_URL_RE.test(u); });
           if (!urls.length) continue;
           console.log(`[tg-monitor] ${userId} — poll trovati ${urls.length} link in msg ${info.core}/${msgId}`);
