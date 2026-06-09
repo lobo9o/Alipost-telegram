@@ -3876,9 +3876,16 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                     </div>
                   ))}
 
-                  {/* 5. Nessun dato disponibile per vecchi multi-post */}
+                  {/* 5. Fallback per vecchi multi-post senza multiItems */}
                   {!(p.multiItems?.length) && (
-                    <div style={{ fontSize: 11, color: 'var(--t3)', padding: '6px 0' }}>Dati prodotti non disponibili (post precedente)</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                      {p.image && p.image.startsWith('http') && (
+                        <img src={`/api/posts?img=${encodeURIComponent(p.image)}`} alt=""
+                          style={{ width: 48, height: 48, objectFit: 'contain', borderRadius: 6, flexShrink: 0 }}
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      )}
+                      <span style={{ fontSize: 11, color: 'var(--t3)' }}>Post multiplo (dati dettaglio non disponibili)</span>
+                    </div>
                   )}
                 </div>
               </>
