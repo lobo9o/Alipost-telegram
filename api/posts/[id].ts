@@ -3,6 +3,47 @@ import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { getProductEmoji } from '../_titleFormat.js';
 
+async function generateMultiImageServer(imageUrls: string[]): Promise<string | null> {
+  const validUrls = imageUrls.filter(u => u && String(u).startsWith('http'));
+  const n = validUrls.length;
+  if (n === 0) return null;
+  try {
+    const sharpMod = await import('sharp').catch(() => null) as any;
+    if (!sharpMod) return null;
+    const sharp = (sharpMod.default ?? sharpMod) as any;
+    const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
+    const rows = Math.ceil(n / cols);
+    const cellSize = Math.round(1024 / cols);
+    const canvasW = cellSize * cols;
+    const canvasH = cellSize * rows;
+    const PAD = 4;
+    const base = await sharp({ create: { width: canvasW, height: canvasH, channels: 3, background: { r: 255, g: 255, b: 255 } } }).png().toBuffer();
+    const composites: any[] = [];
+    for (let i = 0; i < validUrls.length; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const itemsInRow = Math.min(cols, validUrls.length - row * cols);
+      const rowOffsetX = Math.floor(((cols - itemsInRow) * cellSize) / 2);
+      const cellX = rowOffsetX + col * cellSize;
+      const cellY = row * cellSize;
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        const r = await fetch(validUrls[i], { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' } });
+        clearTimeout(t);
+        if (!r.ok) continue;
+        const buf = Buffer.from(await r.arrayBuffer());
+        const availW = cellSize - PAD * 2;
+        const availH = cellSize - PAD * 2;
+        const { data, info } = await sharp(buf).resize(availW, availH, { fit: 'inside' }).toBuffer({ resolveWithObject: true });
+        composites.push({ input: data, left: cellX + PAD + Math.round((availW - info.width) / 2), top: cellY + PAD + Math.round((availH - info.height) / 2) });
+      } catch { /* skip */ }
+    }
+    const result = await sharp(base).composite(composites).jpeg({ quality: 88 }).toBuffer();
+    return `data:image/jpeg;base64,${result.toString('base64')}`;
+  } catch { return null; }
+}
+
 const MARKETPLACE_DOMAINS: Record<string, string> = {
   IT: 'www.amazon.it', US: 'www.amazon.com', DE: 'www.amazon.de',
   FR: 'www.amazon.fr', ES: 'www.amazon.es', UK: 'www.amazon.co.uk',
@@ -447,7 +488,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   }
 
   // ── POST — publish to Telegram ───────────────────────────────
-  const { post, layoutContenuto, keyboardContenuto, generatedImage, disableNotification = true, channelOverride: bodyChannel } = req.body ?? {};
+  const { post, layoutContenuto, keyboardContenuto, disableNotification = true, channelOverride: bodyChannel, multiImageUrls } = req.body ?? {};
+  let { generatedImage } = req.body ?? {};
   console.log('[publish] disableNotification from body:', req.body?.disableNotification, '→ resolved:', disableNotification);
   if (!post) { res.status(400).json({ error: 'post required' }); return; }
 
@@ -507,6 +549,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
+
+  // Per multi post: genera composita server-side se multiImageUrls forniti e generatedImage mancante
+  if (Array.isArray(multiImageUrls) && multiImageUrls.length > 1 && (!generatedImage || !String(generatedImage).startsWith('data:'))) {
+    const composita = await generateMultiImageServer(multiImageUrls);
+    if (composita) {
+      generatedImage = composita;
+      console.log(`[publish] composita multi generata server-side (${multiImageUrls.length} img)`);
+    }
+  }
 
   const hasImage = post.image && post.image !== 'placeholder.jpg' && post.image.startsWith('http');
 

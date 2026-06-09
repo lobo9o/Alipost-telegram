@@ -2549,10 +2549,11 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         }
         const layoutKb = layout?.keyboardId ? keyboards.find(k => k.id === layout.keyboardId) : null;
         const multiKeyboard = layoutKb?.contenuto;
-        // Rigenera sempre la griglia composita per i multi (non usare immagini singole pre-generate)
-        generatedImage = await generateMultiPostImage(multiPosts.map(mp => mp.image)).catch(() => undefined);
+        // La composita viene generata server-side tramite multiImageUrls (più affidabile del canvas browser)
+        const multiImageUrls = multiPosts.map(mp => mp.image).filter(Boolean);
         const pubResult = await postsApi.publish(post.id, {
-          post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard, generatedImage, disableNotification, channelOverride,
+          post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard,
+          multiImageUrls, disableNotification, channelOverride,
         });
         autopostApi.delete(id).catch(() => {});
         const now = new Date().toISOString();
