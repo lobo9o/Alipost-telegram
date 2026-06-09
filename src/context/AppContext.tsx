@@ -292,6 +292,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pub: published.filter(p => { const d = new Date(p.publishedAt); const t = new Date(); return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate(); }).length,
   };
 
+  // Deve stare PRIMA di qualsiasi return condizionale (Rules of Hooks)
+  const reloadSettings = useCallback(async () => {
+    if (IS_DEV) return;
+    try {
+      const fresh = await settingsApi.get();
+      setSettings(mergeSettings(fresh));
+    } catch { /* ignora */ }
+  }, []);
+
   if (!loaded) {
     return (
       <div style={{
@@ -311,14 +320,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
-  const reloadSettings = useCallback(async () => {
-    if (IS_DEV) return;
-    try {
-      const fresh = await settingsApi.get();
-      setSettings(mergeSettings(fresh));
-    } catch { /* ignora errori di reload */ }
-  }, []);
 
   return (
     <AppCtx.Provider value={{
