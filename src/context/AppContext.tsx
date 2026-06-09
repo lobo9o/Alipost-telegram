@@ -312,6 +312,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const reloadSettings = useCallback(async () => {
+    if (IS_DEV) return;
+    try {
+      const fresh = await settingsApi.get();
+      setSettings(mergeSettings(fresh));
+    } catch { /* ignora errori di reload */ }
+  }, []);
+
   return (
     <AppCtx.Provider value={{
       createdPosts, setCreatedPosts,
@@ -321,7 +329,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       layouts, setLayouts,
       keyboards, setKeyboards,
       templates, setTemplates,
-      settings, setSettings,
+      settings, setSettings, reloadSettings,
       stats,
       publishedCount,
       templateFromDB,

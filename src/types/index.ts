@@ -318,6 +318,7 @@ export interface AppContextType extends AppState {
   setKeyboards: React.Dispatch<React.SetStateAction<KeyboardLayout[]>>;
   setTemplates: React.Dispatch<React.SetStateAction<Template[]>>;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
+  reloadSettings: () => Promise<void>;
   stats: { inCoda: number; sched: number; pub: number };
   publishedCount: number;
   templateFromDB: React.MutableRefObject<boolean>;

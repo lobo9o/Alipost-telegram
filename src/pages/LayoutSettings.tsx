@@ -1747,7 +1747,7 @@ function SettingsMenuItem({ icon, label, sub, onClick }: { icon: string; label: 
 }
 
 export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { settings, setSettings, templates, activeProfileId } = useApp();
+  const { settings, setSettings, reloadSettings, templates, activeProfileId } = useApp();
   const isSecondaryProfile = activeProfileId.includes(':');
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
@@ -1762,7 +1762,9 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
     setSaveErr('');
     try {
       await settingsApi.save(s);
-      setSettings(s);
+      // Ricarica dal backend per evitare che i dati salvati di un profilo
+      // contaminino la vista di un altro profilo tramite il context globale
+      await reloadSettings();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
