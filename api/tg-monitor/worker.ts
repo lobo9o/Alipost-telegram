@@ -672,6 +672,12 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
       finalOriginalPrice = textOriginalPrice;
     }
 
+    // Sicurezza: se i due prezzi sono uguali (o il precedente è minore), non mostrare "X invece di X"
+    if (finalOriginalPrice > 0 && finalOriginalPrice <= finalDiscountedPrice) {
+      console.log(`[tg-monitor] ${userId} — prezzo precedente (${finalOriginalPrice}) <= scontato (${finalDiscountedPrice}), azzerato per evitare "X invece di X"`);
+      finalOriginalPrice = 0;
+    }
+
     if (finalDiscountedPrice <= 0) {
       console.log(`[tg-monitor] ${userId} — skip: prodotto non disponibile (prezzo 0) — "${product.title?.slice(0, 50) ?? product.productId}"`);
       continue;
