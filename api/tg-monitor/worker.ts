@@ -638,6 +638,11 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   const { couponCode: textCoupon, textPrice, textOriginalPrice, textCountry } = extractCouponFromText(messageText);
   if (textCoupon || textOriginalPrice || textCountry) console.log(`[tg-monitor] ${userId} — da testo: coupon="${textCoupon || '-'}" prezzoFinale=${textPrice || '-'} prezzoPrecedente=${textOriginalPrice || '-'} paese="${textCountry || '-'}"`);
 
+  // Rileva errori di prezzo nel testo sorgente → imposta {custom}
+  const PRICE_ERROR_RE = /errore\s+di\s+prezzo|errore\s+prezzo|probabile\s+errore|price\s+error|errore!/i;
+  const detectedCustom = PRICE_ERROR_RE.test(messageText) ? '❌ERRORE DI PREZZO❌' : '';
+  if (detectedCustom) console.log(`[tg-monitor] ${profileId} — rilevato errore di prezzo nel testo sorgente`);
+
   // Costruisce e salva ogni post
   const savedPosts: any[] = [];
   for (const product of products) {
@@ -681,7 +686,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
       originalPrice:   finalOriginalPrice,
       discountedPrice: finalDiscountedPrice,
       discountPercent: finalDiscountPercent,
-      customText:      '',
+      customText:      detectedCustom,
       isHistoricalLow: product.isHistoricalLow ?? false,
       templateId,
       layoutId,
