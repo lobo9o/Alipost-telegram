@@ -363,7 +363,16 @@ async function startUser(userId: string) {
           try {
             const entity = await client.getEntity(ch) as any;
             addChannelIds(entity.id);
-            console.log(`[tg-monitor] ${userId} — risolto lazily "${ch}" → ${entity.id}`);
+            // Popola channelEntities e coreDestsMap così auto_publish funziona correttamente
+            const lazyCore = (() => { const s = String(entity.id).replace(/^-/, ''); return s.startsWith('100') && s.length >= 12 ? s.slice(3) : s; })();
+            const lazyDests = channelDestsMap.get(ch) ?? [{ auto_publish: false, dest_channel: null }];
+            const lazyMsgs = await client.getMessages(entity, { limit: 1 }).catch(() => [] as any[]);
+            const lazyLastId = (lazyMsgs as any[])[0]?.id ?? 0;
+            for (const { auto_publish: ap, dest_channel: dc } of lazyDests) {
+              channelEntities.push({ entity, core: lazyCore, lastMsgId: lazyLastId, autoPublish: ap, destChannel: dc });
+            }
+            coreDestsMap.set(lazyCore, lazyDests);
+            console.log(`[tg-monitor] ${userId} — risolto lazily "${ch}" → ${entity.id} autoPublish=${lazyDests[0].auto_publish}`);
             unresolvedChannels.splice(i, 1); // rimosso dalla lista pending
           } catch { /* ignora */ }
         }
