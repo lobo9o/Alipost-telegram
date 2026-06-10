@@ -281,29 +281,27 @@ async function startUser(userId: string) {
   const monitoredIds = new Set<string>();
   const unresolvedChannels: string[] = []; // canali username non risolti all'avvio
   const channelEntities: Array<{ entity: any; core: string; lastMsgId: number; autoPublish: boolean; destChannel: string | null }> = [];
-  // Mappa core → auto_publish per lookup rapido nel handler
-  const channelAutoPublish = new Map<string, boolean>();
-  const channelDestMap = new Map<string, string | null>();
+  // Mappa canale → lista destinazioni (gestisce lo stesso sorgente su più profili/canali dest)
+  const channelDestsMap = new Map<string, Array<{ auto_publish: boolean; dest_channel: string | null }>>();
   for (const { channel, auto_publish, dest_channel } of channelRows) {
-    channelAutoPublish.set(channel, auto_publish);
-    channelDestMap.set(channel, dest_channel ?? null);
+    const arr = channelDestsMap.get(channel) ?? [];
+    arr.push({ auto_publish, dest_channel: dest_channel ?? null });
+    channelDestsMap.set(channel, arr);
   }
-  // Mappa core numerico → auto_publish/dest per fallback quando la risoluzione entità fallisce
-  const coreAutoPublish = new Map<string, boolean>();
-  const coreDestMap = new Map<string, string | null>();
-  const processedMsgIds = new Set<string>(); // dedup push+polling
+  // Mappa core numerico → destinations per fallback quando la risoluzione entità fallisce
+  const coreDestsMap = new Map<string, Array<{ auto_publish: boolean; dest_channel: string | null }>>();
+  const processedMsgIds = new Set<string>(); // dedup push+polling (chiave: core:msgId:destChannel)
 
-  console.log(`[tg-monitor] ${userId} — canali da risolvere: ${channelRows.map(r => r.channel).join(', ')}`);
+  console.log(`[tg-monitor] ${userId} — canali da risolvere: ${[...channelDestsMap.keys()].join(', ')}`);
 
-  for (const { channel } of channelRows) {
+  // Risolvi ogni canale sorgente unico una sola volta, poi aggiungi un'entry per ogni destinazione
+  for (const [channel, dests] of channelDestsMap) {
     const isNumeric = /^-?\d+$/.test(channel);
     if (isNumeric) {
       addChannelIds(channel); // fallback immediato per ID numerici
-      // Registra nel fallback map anche se la risoluzione entità fallirà
       const s = channel.replace(/^-/, '');
       const rawCore = s.startsWith('100') && s.length >= 12 ? s.slice(3) : s;
-      coreAutoPublish.set(rawCore, channelAutoPublish.get(channel) ?? false);
-      coreDestMap.set(rawCore, channelDestMap.get(channel) ?? null);
+      coreDestsMap.set(rawCore, dests);
     }
 
     let resolved = false;
@@ -322,12 +320,12 @@ async function startUser(userId: string) {
         const initMsgs = await client.getMessages(entity, { limit: 1 }).catch(() => [] as any[]);
         const entityCore = (() => { const s = String(entity.id).replace(/^-/, ''); return s.startsWith('100') && s.length >= 12 ? s.slice(3) : s; })();
         const initLastId = (initMsgs as any[])[0]?.id ?? 0;
-        const ap = channelAutoPublish.get(channel) ?? false;
-        const dc = channelDestMap.get(channel) ?? null;
-        channelEntities.push({ entity, core: entityCore, lastMsgId: initLastId, autoPublish: ap, destChannel: dc });
-        coreAutoPublish.set(entityCore, ap); // aggiorna con il core corretto
-        coreDestMap.set(entityCore, dc);
-        console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId} autoPublish=${ap} destChannel=${dc ?? 'default'} (tentativo ${attempt})`);
+        // Un'entry per ogni profilo/destinazione che monitora questo canale sorgente
+        for (const { auto_publish: ap, dest_channel: dc } of dests) {
+          channelEntities.push({ entity, core: entityCore, lastMsgId: initLastId, autoPublish: ap, destChannel: dc });
+          console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId} autoPublish=${ap} destChannel=${dc ?? 'default'} (tentativo ${attempt})`);
+        }
+        coreDestsMap.set(entityCore, dests); // aggiorna con il core corretto
         resolved = true;
       } catch (e: any) {
         console.warn(`[tg-monitor] ${userId} — tentativo ${attempt}/3 fallito per "${channel}": ${e.message}`);
@@ -375,12 +373,18 @@ async function startUser(userId: string) {
       console.log(`[tg-monitor] ${userId} — msg chatId=${rawId} monitored=${isMonitored}`);
       if (!isMonitored) return;
 
-      // Dedup con polling
-      const msgKey = `${core}:${msg.id ?? ''}`;
-      if (processedMsgIds.has(msgKey)) return;
-      processedMsgIds.add(msgKey);
-      const chInfo = channelEntities.find(c => c.core === core);
-      if (chInfo && (msg.id ?? 0) > chInfo.lastMsgId) chInfo.lastMsgId = msg.id;
+      // Dedup con polling — usa stesso formato chiave del poll (core:msgId:destChannel)
+      const matchingForDedup = channelEntities.filter(c => c.core === core);
+      const baseKey = `${core}:${msg.id ?? ''}`;
+      // Controlla se TUTTI i profili hanno già processato questo messaggio
+      const allAlreadyProcessed = matchingForDedup.length > 0
+        ? matchingForDedup.every(ce => processedMsgIds.has(`${baseKey}:${ce.destChannel ?? ''}`))
+        : processedMsgIds.has(baseKey);
+      if (allAlreadyProcessed) return;
+      // Marca come processati per tutti i profili + aggiorna lastMsgId
+      for (const ce of matchingForDedup) processedMsgIds.add(`${baseKey}:${ce.destChannel ?? ''}`);
+      if (!matchingForDedup.length) processedMsgIds.add(baseKey);
+      for (const ce of matchingForDedup) { if ((msg.id ?? 0) > ce.lastMsgId) ce.lastMsgId = msg.id; }
 
       const text: string = msg.message ?? '';
       console.log(`[tg-monitor] ${userId} — messaggio da ${rawId}: "${text.slice(0, 80)}"`);
@@ -429,11 +433,19 @@ async function startUser(userId: string) {
       }
 
       // 1 link → post singolo, 2+ link → post multiplo
-      // Fallback a coreAutoPublish se l'entità non era risolvibile all'avvio
-      const chEntity = channelEntities.find(c => c.core === core);
-      const autoPublish = chEntity?.autoPublish ?? coreAutoPublish.get(core) ?? false;
-      const destChannel = chEntity?.destChannel ?? coreDestMap.get(core) ?? null;
-      processMessage(userId, uniqueUrls, autoPublish, text, destChannel).catch(e => console.error('[tg-monitor] errore processMessage:', e));
+      // Chiama processMessage per ogni profilo/destinazione che monitora questo canale sorgente
+      const matchingEntities = channelEntities.filter(c => c.core === core);
+      if (matchingEntities.length > 0) {
+        for (const ce of matchingEntities) {
+          processMessage(userId, uniqueUrls, ce.autoPublish, text, ce.destChannel).catch(e => console.error('[tg-monitor] errore processMessage:', e));
+        }
+      } else {
+        // Fallback a coreDestsMap se l'entità non era risolvibile all'avvio
+        const fallbackDests = coreDestsMap.get(core) ?? [{ auto_publish: false, dest_channel: null }];
+        for (const { auto_publish: ap, dest_channel: dc } of fallbackDests) {
+          processMessage(userId, uniqueUrls, ap, text, dc).catch(e => console.error('[tg-monitor] errore processMessage:', e));
+        }
+      }
     } catch (e) {
       console.error('[tg-monitor] errore handler:', e);
     }
@@ -450,7 +462,8 @@ async function startUser(userId: string) {
         for (const msg of [...msgs].reverse()) {
           const msgId: number = (msg as any).id ?? 0;
           if (!msgId) continue;
-          const mk = `${info.core}:${msgId}`;
+          // Chiave dedup include destChannel: stesso messaggio va a destinazioni diverse
+          const mk = `${info.core}:${msgId}:${info.destChannel ?? ''}`;
           if (processedMsgIds.has(mk)) continue;
           processedMsgIds.add(mk);
           if (msgId > info.lastMsgId) info.lastMsgId = msgId;
@@ -463,7 +476,7 @@ async function startUser(userId: string) {
           for (const row of pollRows) { for (const btn of (row.buttons ?? row ?? [])) { const u = btn.url ?? ''; if (u) urlSet.add(u); } }
           const urls = [...urlSet].filter(u => { PRODUCT_URL_RE.lastIndex = 0; return PRODUCT_URL_RE.test(u); });
           if (!urls.length) continue;
-          console.log(`[tg-monitor] ${userId} — poll trovati ${urls.length} link in msg ${info.core}/${msgId}`);
+          console.log(`[tg-monitor] ${userId} — poll trovati ${urls.length} link in msg ${info.core}/${msgId} destChannel=${info.destChannel ?? 'default'}`);
           const uniqueUrls: string[] = [];
           const seen = new Set<string>();
           for (const url of urls) { const clean = url.replace(/[.,;!?)]+$/, ''); if (!seen.has(clean)) { seen.add(clean); uniqueUrls.push(clean); } }
