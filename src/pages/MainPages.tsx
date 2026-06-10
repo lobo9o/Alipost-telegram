@@ -3406,7 +3406,17 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
         const layout = layouts.find(l => l.id === origItem.layoutId) ?? layouts.find(l => l.tipo === 'multi');
         const updPost = { id: origItem.id, platform: origItem.platform as Platform, sourceUrl: origItem.sourceUrl, productId: origItem.productId, title: editFields.title, image: origItem.image, emoji: origItem.emoji, originalPrice: origP, discountedPrice: discP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, isHistoricalLow: editFields.isHistoricalLow, tagOverrides: editFields.tagOverrides, templateId: 'tpl1', layoutId: origItem.layoutId, keyboardId: 'kb1' } as CreatedPost;
         const newText = layout ? resolvePostTags(layout.contenuto, updPost, tags, cur) : '';
-        const newItems = p.multiItems.map((it, i) => i === idx ? { ...it, title: editFields.title, price: discP.toFixed(2), originalPrice: origP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, isHistoricalLow: editFields.isHistoricalLow, resolvedText: newText } : it);
+        const newItems = p.multiItems.map((it, i) => {
+          if (i === idx) return { ...it, title: editFields.title, price: discP.toFixed(2), originalPrice: origP, discountPercent: pct, customText: editFields.customText, coupon: editFields.coupon, isHistoricalLow: editFields.isHistoricalLow, resolvedText: newText };
+          // Ricalcola resolvedText per gli item non modificati se è vuoto (es. post auto-pubblicati)
+          if (!it.resolvedText) {
+            const itLayout = layouts.find(l => l.id === it.layoutId) ?? layouts.find(l => l.tipo === 'multi');
+            const itCur = it.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+            const itPost = { id: it.id, platform: it.platform as Platform, sourceUrl: it.sourceUrl, productId: it.productId, title: it.title, image: it.image, emoji: it.emoji, originalPrice: it.originalPrice, discountedPrice: parseFloat(it.price) || 0, discountPercent: it.discountPercent, customText: it.customText, coupon: it.coupon || '', isHistoricalLow: it.isHistoricalLow, templateId: 'tpl1', layoutId: it.layoutId, keyboardId: 'kb1' } as CreatedPost;
+            return { ...it, resolvedText: itLayout ? resolvePostTags(itLayout.contenuto, itPost, tags, itCur) : '' };
+          }
+          return it;
+        });
         const newCaption = newItems.map(it => it.resolvedText ?? '').filter(Boolean).join('\n');
         setPublished(prev => prev.map(x => x.id !== p.id ? x : { ...x, multiItems: newItems }));
         setEditingKey(null);
