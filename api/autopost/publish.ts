@@ -1900,7 +1900,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
                chat_id AS "chatId", message_id AS "messageId",
                title, original_price::float AS "originalPrice",
                discount_percent AS "discountPercent",
-               custom_text AS "customText", emoji
+               custom_text AS "customText", emoji,
+               COALESCE(is_multi, false) AS "isMulti",
+               COALESCE(multi_items, '[]'::jsonb) AS "multiItems"
         FROM published_posts
         WHERE user_id = ${userId}
           AND NOT COALESCE(terminata, false)
@@ -1914,7 +1916,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         // Aggiorna subito per evitare doppio check in run sovrapposti
         await sql`UPDATE published_posts SET last_checked_at = now() WHERE id = ${pub.id}`.catch(() => {});
 
-        if (pub.platform === 'aliexpress') continue;
+        // I multi-post e aliexpress non hanno productId verificabile — skip price check
+        if (pub.isMulti || pub.platform === 'aliexpress') continue;
         const check = await checkPostPrice(pub as any, cfg).catch(() => ({ valid: true as const, currentPrice: undefined as number | undefined }));
 
         // Registra il prezzo corrente nello storico anche se valido
@@ -1927,12 +1930,30 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         if (!check.valid) {
           console.log(`[autopost] offerta scaduta: ${String(pub.title ?? '').slice(0, 40)}`);
           const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
+          const telegramMode = String(termCfg.telegramMode ?? 'keep');
+          const telegramText = String(termCfg.telegramText ?? '❌ Offerta terminata');
 
-          // Genera immagine terminata (grayscale + overlay)
-          // Prima prova a ricostruire l'immagine con il template del canale (come in publish),
-          // poi applica grayscale+overlay su quella. Fallback: URL prodotto grezzo.
+          // Genera immagine terminata (grayscale + overlay) — uguale alla terminata manuale
           let termImg: Buffer | null = null;
-          if (pub.image && String(pub.image).startsWith('http')) {
+          if (pub.isMulti) {
+            // Multi: ricostruisce griglia composita da multi_items, poi applica terminata
+            const multiItems = Array.isArray(pub.multiItems) ? pub.multiItems : [];
+            const imgUrls = (multiItems as any[]).map(it => String(it.image ?? '')).filter(u => u.startsWith('http'));
+            if (imgUrls.length > 0) {
+              try {
+                const compositeDataUrl = await generateMultiImageServer(imgUrls);
+                if (compositeDataUrl) {
+                  const b64 = compositeDataUrl.replace(/^data:image\/\w+;base64,/, '');
+                  termImg = await generateTerminataImageServer(Buffer.from(b64, 'base64'), termCfg).catch((e: any) => {
+                    console.warn('[autopost] terminata multi img:', e?.message ?? e);
+                    return null;
+                  });
+                }
+              } catch (e: any) {
+                console.warn('[autopost] terminata multi: errore composita —', e?.message ?? e);
+              }
+            }
+          } else if (pub.image && String(pub.image).startsWith('http')) {
             let baseForTerm: string | Buffer = String(pub.image);
             try {
               const [termTpl] = await sql`
@@ -1953,7 +1974,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
                     sconto:           `-${Number(pub.discountPercent)}%`,
                   }).catch(() => null);
                   if (tplBuf) {
-                    // tplBuf è base64 data URL → converti in Buffer
                     const b64 = String(tplBuf).replace(/^data:image\/\w+;base64,/, '');
                     baseForTerm = Buffer.from(b64, 'base64');
                     console.log(`[autopost] terminata: uso template ${termTpl.id} per base image`);
@@ -1969,29 +1989,37 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             });
           }
 
-          // Carica layout testo terminata
-          const [termLayoutRow] = termCfg.layoutId ? await sql`
-            SELECT body FROM layouts WHERE id = ${termCfg.layoutId} AND user_id = ${userId}
-          `.catch(() => [null]) : [null];
-
-          const affUrl     = String(pub.sourceUrl ?? '');
-          const termCaption = termLayoutRow?.body
-            ? buildMessage(String(termLayoutRow.body), pub as any, affUrl)
-            : `❌ <b>OFFERTA TERMINATA</b>\n\n${esc(String(pub.title ?? ''))}`;
+          // Costruisce caption rispettando telegramMode — identico alla terminata manuale
+          let termCaption: string | undefined;
+          if (telegramMode === 'only') {
+            termCaption = telegramText;
+          } else if (telegramMode === 'append') {
+            const [termLayoutRow] = termCfg.layoutId ? await sql`
+              SELECT body FROM layouts WHERE id = ${termCfg.layoutId} AND user_id = ${userId}
+            `.catch(() => [null]) : [null];
+            const affUrl = String(pub.sourceUrl ?? '');
+            const builtCaption = termLayoutRow?.body
+              ? buildMessage(String(termLayoutRow.body), pub as any, affUrl)
+              : '';
+            termCaption = builtCaption ? `${telegramText}\n\n${builtCaption}`.trim() : telegramText;
+          }
+          // telegramMode === 'keep' (default) → termCaption rimane undefined, non cambia il testo
 
           const chatIdStr = String(pub.chatId ?? channels[0] ?? '');
           const msgIdNum  = Number(pub.messageId ?? 0);
 
           if (chatIdStr && msgIdNum) {
             if (termImg) {
+              const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo', parse_mode: 'HTML' };
+              if (termCaption !== undefined) mediaObj.caption = termCaption.slice(0, 1024);
               const form = new FormData();
               form.append('chat_id', chatIdStr);
               form.append('message_id', String(msgIdNum));
-              form.append('media', JSON.stringify({ type: 'photo', media: 'attach://photo', caption: termCaption.slice(0, 1024), parse_mode: 'HTML' }));
+              form.append('media', JSON.stringify(mediaObj));
               form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
               await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => {});
-            } else {
-              // Fallback: solo caption
+            } else if (termCaption !== undefined) {
+              // Nessuna nuova immagine ma cambio testo
               const captR = await fetch(`${tgBase}/editMessageCaption`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ chat_id: chatIdStr, message_id: msgIdNum, caption: termCaption.slice(0, 1024), parse_mode: 'HTML' }),
