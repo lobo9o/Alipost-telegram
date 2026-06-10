@@ -3524,17 +3524,13 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
 
     const body: Record<string, any> = { chatId: p.chatId, messageId: p.messageId, terminata: true, newImage, telegramMode };
     if (telegramMode === 'only') {
-      body.telegramText = telegramText;
+      body.newCaption = telegramText;
     } else if (telegramMode === 'append') {
-      body.telegramText = telegramText;
       const postLayout = layouts.find(l => l.id === p.layoutId);
-      body.layoutContenuto = postLayout?.contenuto ?? '';
-      body.postData = {
-        title: p.title, discountedPrice: Number(p.price), originalPrice: p.originalPrice,
-        discountPercent: p.discountPercent, customText: p.customText,
-        isHistoricalLow: p.isHistoricalLow, platform: p.platform, sourceUrl: p.sourceUrl,
-        productId: p.productId,
-      };
+      const cur = p.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+      const postForCaption = { id: p.id, platform: p.platform as Platform, sourceUrl: p.sourceUrl, productId: p.productId, title: p.title, image: p.image, emoji: p.emoji, originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price) || 0, discountPercent: p.discountPercent, customText: p.customText, isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1' } as CreatedPost;
+      const baseCaption = postLayout ? resolvePostTags(postLayout.contenuto, postForCaption, tags, cur) : '';
+      body.newCaption = `${baseCaption}\n\n${telegramText}`.trim();
     }
 
     try {
@@ -3568,11 +3564,18 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     let newCaption: string | undefined;
     if (telegramMode !== 'keep' && p.multiItems) {
       const sections = p.multiItems.map((it, i) => {
-        const base = it.resolvedText ?? '';
+        // Calcola resolvedText se vuoto (post auto-pubblicati lo hanno a '')
+        let base = it.resolvedText ?? '';
+        if (!base) {
+          const itLayout = layouts.find(l => l.id === it.layoutId) ?? layouts.find(l => l.tipo === 'multi');
+          const itCur = it.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+          const itPost = { id: it.id, platform: it.platform as Platform, sourceUrl: it.sourceUrl, productId: it.productId, title: it.title, image: it.image, emoji: it.emoji, originalPrice: it.originalPrice, discountedPrice: parseFloat(it.price) || 0, discountPercent: it.discountPercent, customText: it.customText, coupon: it.coupon || '', isHistoricalLow: it.isHistoricalLow, templateId: 'tpl1', layoutId: it.layoutId, keyboardId: 'kb1' } as CreatedPost;
+          base = itLayout ? resolvePostTags(itLayout.contenuto, itPost, tags, itCur) : '';
+        }
         const isTerminata = i === idx || !!it.terminata;
         if (isTerminata) {
           if (telegramMode === 'only') return telegramText;
-          if (telegramMode === 'append') return `${telegramText}\n${base}`;
+          if (telegramMode === 'append') return `${base}\n\n${telegramText}`.trim();
         }
         return base;
       });
