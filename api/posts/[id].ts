@@ -364,7 +364,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         formEp.append('chat_id', chatId);
         formEp.append('message_id', String(messageId));
         const mediaObjEp: Record<string, string> = { type: 'photo', media: 'attach://photo' };
-        if (newCaption) { mediaObjEp.caption = String(newCaption).slice(0, 1024); mediaObjEp.parse_mode = 'HTML'; }
+        if (newCaption) { mediaObjEp.caption = safeCaption(String(newCaption), 1024); mediaObjEp.parse_mode = 'HTML'; }
         formEp.append('media', JSON.stringify(mediaObjEp));
         formEp.append('photo', new Blob([imgBufEp], { type: 'image/jpeg' }), 'photo.jpg');
         const tgRep = await fetch(`${tgBase2}/editMessageMedia`, { method: 'POST', body: formEp });
@@ -372,11 +372,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         if (!tgDep.ok) { res.status(500).json({ error: `Telegram: ${tgDep.description ?? 'errore'}` }); return; }
       } else if (newCaption) {
         // Solo testo
-        const tgBody = { chat_id: chatId, message_id: messageId, caption: String(newCaption).slice(0, 1024), parse_mode: 'HTML' };
+        const tgBody = { chat_id: chatId, message_id: messageId, caption: safeCaption(String(newCaption), 1024), parse_mode: 'HTML' };
         let tgR = await fetch(`${tgBase2}/editMessageCaption`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tgBody) });
         let tgD = await tgR.json() as { ok: boolean; description?: string };
         if (!tgD.ok && tgD.description?.includes('there is no caption')) {
-          tgR = await fetch(`${tgBase2}/editMessageText`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: String(newCaption).slice(0, 4096), parse_mode: 'HTML' }) });
+          tgR = await fetch(`${tgBase2}/editMessageText`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: safeCaption(String(newCaption), 4096), parse_mode: 'HTML' }) });
           tgD = await tgR.json() as { ok: boolean; description?: string };
         }
         if (!tgD.ok) { res.status(500).json({ error: `Telegram: ${tgD.description ?? 'errore'}` }); return; }
@@ -427,7 +427,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       form.append('message_id', String(messageId));
       const mediaObj: Record<string, string> = { type: 'photo', media: 'attach://photo' };
       if (caption !== undefined) {
-        mediaObj.caption = caption.slice(0, 1024);
+        mediaObj.caption = safeCaption(caption, 1024);
         mediaObj.parse_mode = 'HTML';
       }
       form.append('media', JSON.stringify(mediaObj));
@@ -437,13 +437,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     } else if (caption !== undefined) {
       tgRes = await fetch(`${tgBase}/editMessageCaption`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption: caption.slice(0, 1024), parse_mode: 'HTML' }),
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption: safeCaption(caption, 1024), parse_mode: 'HTML' }),
       });
       tgData = await tgRes.json() as { ok: boolean; description?: string };
       if (!tgData.ok && tgData.description?.includes('there is no caption')) {
         tgRes = await fetch(`${tgBase}/editMessageText`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: caption.slice(0, 4096), parse_mode: 'HTML' }),
+          body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: safeCaption(caption, 4096), parse_mode: 'HTML' }),
         });
         tgData = await tgRes.json() as { ok: boolean; description?: string };
       }
