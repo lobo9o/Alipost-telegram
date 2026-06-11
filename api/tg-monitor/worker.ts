@@ -632,8 +632,12 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   const { getLayoutAndKeyboard, templateId } = await getUserLayouts(profileId);
   const isMulti = urls.length > 1;
 
-  // Processa tutti i link in parallelo
-  const rawProducts = (await Promise.all(urls.map(u => fetchProduct(profileId, u, headers)))).filter(Boolean);
+  // Processa tutti i link in parallelo — mantiene _urlIdx per abbinare coupon per sezione
+  const rawProductsRaw = await Promise.all(urls.map(async (u, urlIdx) => {
+    const p = await fetchProduct(profileId, u, headers);
+    return p ? { ...p, _urlIdx: urlIdx } : null;
+  }));
+  const rawProducts = rawProductsRaw.filter(Boolean);
   if (!rawProducts.length) return;
 
   // Deduplica per productId/ASIN: due URL diversi (es. amzlink.to + amazon.it/dp/ con ref= differente)
@@ -679,6 +683,22 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   const { couponCode: textCoupon, textPrice, textOriginalPrice, textCountry } = extractCouponFromText(messageText);
   if (textCoupon || textOriginalPrice || textCountry) console.log(`[tg-monitor] ${userId} — da testo: coupon="${textCoupon || '-'}" prezzoFinale=${textPrice || '-'} prezzoPrecedente=${textOriginalPrice || '-'} paese="${textCountry || '-'}"`);
 
+  // Per post multi-prodotto: estrai coupon per sezione di testo (una per URL).
+  // Il testo del canale sorgente ha coupon specifici per ogni prodotto (es. P20PDAMZ, P15ITJUN)
+  // che sono più precisi del coupon generico restituito dall'API (es. PROSCENIC per tutti).
+  const textCouponsPerUrl: string[] = [];
+  if (isMulti) {
+    let remaining = messageText;
+    for (const url of urls) {
+      const urlPos = remaining.indexOf(url);
+      const sectionEnd = urlPos >= 0 ? urlPos + url.length : remaining.length;
+      const { couponCode } = extractCouponFromText(remaining.slice(0, sectionEnd));
+      textCouponsPerUrl.push(couponCode);
+      if (urlPos >= 0) remaining = remaining.slice(urlPos + url.length);
+    }
+    if (textCouponsPerUrl.some(Boolean)) console.log(`[tg-monitor] ${userId} — coupon per URL: ${textCouponsPerUrl.map((c, i) => `url${i}="${c || '-'}"`).join(' ')}`);
+  }
+
   // Rileva errori di prezzo nel testo sorgente → imposta {custom}
   const PRICE_ERROR_RE = /errore\s+di\s+prezzo|errore\s+del\s+prezzo|errore\s+sul\s+prezzo|errore\s+nel\s+prezzo|errore\s+prezzo|prezzo\s+errato|prezzo\s+sbagliato|prezzo\s+anomalo|anomalia\s+(?:di\s+)?prezzo|probabile\s+errore|possibile\s+errore|sembra\s+(?:un\s+)?errore|forse\s+(?:un\s+)?errore|potrebbe\s+essere\s+(?:un\s+)?errore|glitch\s+(?:di\s+)?prezzo|prezzo\s+glitch|price\s+error|pricing\s+error|price\s+glitch|price\s+mistake|errore!/i;
   const detectedCustom = PRICE_ERROR_RE.test(messageText) ? '❌ERRORE DI PREZZO❌' : '';
@@ -690,9 +710,12 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     const platform: 'amazon' | 'aliexpress' = product._platform;
     const { layoutId, keyboardId } = getLayoutAndKeyboard(platform, isMulti);
 
-    // Coupon: usa quello dell'API (clip coupon) se presente, altrimenti quello dal testo
-    const finalCoupon   = product.coupon   || textCoupon;
-    const finalBoxcoupon = product.coupon ? (product.couponBox ?? false) : false;
+    // Coupon: per post singolo l'API ha priorità (clip coupon Amazon preciso).
+    // Per post multi-prodotto il testo ha priorità: ogni prodotto ha il suo coupon specifico
+    // nel canale sorgente, più preciso del coupon generico del brand restituito dall'API.
+    const urlTextCoupon = isMulti ? (textCouponsPerUrl[(product as any)._urlIdx ?? 0] || textCoupon) : textCoupon;
+    const finalCoupon   = isMulti ? (urlTextCoupon || product.coupon) : (product.coupon || textCoupon);
+    const finalBoxcoupon = (!isMulti && product.coupon) ? (product.couponBox ?? false) : false;
 
     // Prezzi: per post singolo il testo ha priorità sull'API (più preciso).
     // Per post multi-prodotto NON si sovrascrive: il prezzo nel testo potrebbe
