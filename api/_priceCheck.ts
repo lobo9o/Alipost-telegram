@@ -111,7 +111,8 @@ export async function checkPostPrice(
   post: Record<string, any>,
   cfg: Record<string, any>,
 ): Promise<PriceCheckResult> {
-  const storedPrice = Number(post.discountedPrice);
+  const storedPrice  = Number(post.discountedPrice);
+  const originalPrice = Number(post.originalPrice ?? 0);
   if (!storedPrice) return { valid: false, reason: 'Prezzo non disponibile (0)' };
 
   try {
@@ -163,7 +164,8 @@ export async function checkPostPrice(
             const html = await r.text();
             const unavailable = /attualmente non disponibile|currently unavailable|non è disponibile|temporaneamente esaurito/i.test(html);
             const hasPrice = /class="a-price-whole"|"priceAmount"|id="priceblock_ourprice"|id="priceblock_dealprice"/i.test(html);
-            if (unavailable || !hasPrice) {
+            // Solo "non disponibile" esplicito — !hasPrice da solo causa troppi falsi positivi
+            if (unavailable) {
               return { valid: false, reason: 'Prodotto non più disponibile (scrape)' };
             }
             // Estrai prezzo corrente dalla pagina e confronta con quello salvato
@@ -188,13 +190,27 @@ export async function checkPostPrice(
       if (currentPrice === null) return { valid: true }; // impossibile verificare → considera valido
     }
 
-    const increase = (currentPrice - storedPrice) / storedPrice;
-    if (increase > PRICE_TOLERANCE) {
-      return {
-        valid: false,
-        reason: `Prezzo salito da ${storedPrice.toFixed(2)} a ${currentPrice.toFixed(2)} (+${Math.round(increase * 100)}%)`,
-        currentPrice,
-      };
+    // Se abbiamo un prezzo originale significativo, l'offerta è scaduta solo se il prezzo
+    // è tornato vicino al prezzo originale (≥85%). Questo evita falsi positivi sui coupon
+    // (l'API restituisce il prezzo base senza coupon, più alto del prezzo pubblicato).
+    if (originalPrice > storedPrice * 1.10) {
+      if (currentPrice >= originalPrice * 0.85) {
+        return {
+          valid: false,
+          reason: `Offerta scaduta: ${currentPrice.toFixed(2)} tornato vicino all'originale ${originalPrice.toFixed(2)}`,
+          currentPrice,
+        };
+      }
+    } else {
+      // Nessun prezzo originale utile: tolleranza 30% per coprire coupon e varianti
+      const increase = (currentPrice - storedPrice) / storedPrice;
+      if (increase > 0.30) {
+        return {
+          valid: false,
+          reason: `Prezzo salito da ${storedPrice.toFixed(2)} a ${currentPrice.toFixed(2)} (+${Math.round(increase * 100)}%)`,
+          currentPrice,
+        };
+      }
     }
 
     return { valid: true, currentPrice };
