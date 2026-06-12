@@ -1910,9 +1910,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         WHERE user_id = ${userId}
           AND NOT COALESCE(terminata, false)
           AND published_at < now() - interval '30 minutes'
-          AND (last_checked_at IS NULL OR last_checked_at < now() - interval '1 hour')
+          AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
         ORDER BY last_checked_at ASC NULLS FIRST
-        LIMIT 20
+        LIMIT 50
       `.catch(() => []);
 
       for (const pub of toCheck) {
