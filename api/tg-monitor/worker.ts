@@ -164,6 +164,18 @@ export function initTgMonitor(port: number) {
       }
     }
   }, 5 * 60 * 1000);
+
+  // Price-check: ogni 30 minuti controlla se i post pubblicati oggi sono ancora attivi
+  setInterval(async () => {
+    try {
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
+      await fetch(`http://localhost:${serverPort}/api/posts?action=price-check`, { headers });
+      console.log('[tg-monitor] price-check completato');
+    } catch (e: any) {
+      console.warn('[tg-monitor] price-check errore:', e.message);
+    }
+  }, 30 * 60 * 1000);
 }
 
 // Debounce: più chiamate ravvicinate (es. swap di due canali) producono un solo reload
