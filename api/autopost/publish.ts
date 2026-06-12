@@ -1912,7 +1912,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           AND published_at < now() - interval '30 minutes'
           AND (last_checked_at IS NULL OR last_checked_at < now() - interval '1 hour')
         ORDER BY last_checked_at ASC NULLS FIRST
-        LIMIT 5
+        LIMIT 20
       `.catch(() => []);
 
       for (const pub of toCheck) {
