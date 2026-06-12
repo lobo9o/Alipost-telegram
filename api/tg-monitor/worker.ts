@@ -10,8 +10,9 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
   // I codici coupon Amazon reali contengono sempre almeno una cifra (SSIT12, H45Z8AJZ, ZSCADDR6).
   // Parole italiane comuni come "MINIMO", "STORICO" sono escluse automaticamente.
   const COUPON_RE = /(?=.*\d)[A-Za-z0-9]{4,20}/; // deve avere almeno un numero
+  // Il keyword deve essere a inizio riga (flag 'm') — evita di matchare "Codice IH8226" nei titoli prodotto
   const couponM =
-    text.match(new RegExp(`(?:coupon|codice|code|promo)(?:\\s+(?:sconto|discount|promo|codice|code)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'i')) ??
+    text.match(new RegExp(`(?:^|[\\n\\r])\\s*(?:coupon|codice|code|promo)(?:\\s+(?:sconto|discount|promo|codice|code)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'im')) ??
     text.match(new RegExp(`[✂🎟]\\s*(?:coupon|codice|code|promo)?(?:\\s+(?:sconto|discount)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'iu'));
   const couponCode = couponM ? couponM[1].toUpperCase() : '';
 
