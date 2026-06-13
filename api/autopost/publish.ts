@@ -1939,6 +1939,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           LIMIT 50
         `.catch(() => []);
 
+      console.log(`[autopost] price-check ${userId}: trovati ${toCheck.length} post da verificare`);
       for (const pub of toCheck) {
         // Aggiorna subito per evitare doppio check in run sovrapposti
         await sql`UPDATE published_posts SET last_checked_at = now() WHERE id = ${pub.id}`.catch(() => {});
@@ -1946,6 +1947,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         // I multi-post e aliexpress non hanno productId verificabile — skip price check
         if (pub.isMulti || pub.platform === 'aliexpress') continue;
         const check = await checkPostPrice(pub as any, cfg).catch(() => ({ valid: true as const, currentPrice: undefined as number | undefined }));
+        console.log(`[autopost] price-check ${pub.productId}: valid=${check.valid} price=${check.currentPrice ?? '-'} stored=${pub.discountedPrice} orig=${pub.originalPrice} chatId=${pub.chatId}`);
 
         // Registra il prezzo corrente nello storico anche se valido
         if (check.currentPrice && pub.productId) {
@@ -1955,7 +1957,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         }
 
         if (!check.valid) {
-          console.log(`[autopost] offerta scaduta: ${String(pub.title ?? '').slice(0, 40)}`);
+          console.log(`[autopost] offerta scaduta: ${String(pub.title ?? '').slice(0, 40)} — ${check.reason}`);
           const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
           const telegramMode = String(termCfg.telegramMode ?? 'keep');
           const telegramText = String(termCfg.telegramText ?? '❌ Offerta terminata');
@@ -2037,6 +2039,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const chatIdStr = String(pub.chatId ?? channels[0] ?? '');
           const msgIdNum  = Number(pub.messageId ?? 0);
 
+          console.log(`[autopost] terminata: chatId=${chatIdStr} msgId=${msgIdNum} img=${!!termImg} mode=${telegramMode}`);
           if (chatIdStr && msgIdNum) {
             if (termImg) {
               const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo', parse_mode: 'HTML' };
@@ -2046,7 +2049,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               form.append('message_id', String(msgIdNum));
               form.append('media', JSON.stringify(mediaObj));
               form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
-              await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => {});
+              const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
+              const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
+              console.log(`[autopost] terminata Telegram: ok=${tgD.ok}${tgD.ok ? '' : ' err=' + tgD.description}`);
             } else if (termCaption !== undefined) {
               // Nessuna nuova immagine ma cambio testo
               const captR = await fetch(`${tgBase}/editMessageCaption`, {
