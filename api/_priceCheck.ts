@@ -190,9 +190,9 @@ export async function checkPostPrice(
       if (currentPrice === null) return { valid: true }; // impossibile verificare → considera valido
     }
 
-    // Se abbiamo un prezzo originale significativo, l'offerta è scaduta solo se il prezzo
-    // è tornato vicino al prezzo originale (≥85%). Questo evita falsi positivi sui coupon
-    // (l'API restituisce il prezzo base senza coupon, più alto del prezzo pubblicato).
+    // Termina solo se abbiamo un prezzo originale affidabile come riferimento e il prezzo
+    // è tornato vicino a quello (≥85%). Senza originalPrice i falsi positivi sono troppi:
+    // l'API restituisce il prezzo base senza coupon, più alto del prezzo pubblicato.
     if (originalPrice > storedPrice * 1.10) {
       if (currentPrice >= originalPrice * 0.85) {
         return {
@@ -201,17 +201,9 @@ export async function checkPostPrice(
           currentPrice,
         };
       }
-    } else {
-      // Nessun prezzo originale utile: tolleranza 30% per coprire coupon e varianti
-      const increase = (currentPrice - storedPrice) / storedPrice;
-      if (increase > 0.30) {
-        return {
-          valid: false,
-          reason: `Prezzo salito da ${storedPrice.toFixed(2)} a ${currentPrice.toFixed(2)} (+${Math.round(increase * 100)}%)`,
-          currentPrice,
-        };
-      }
     }
+    // Senza originalPrice utile: non terminare su variazione di prezzo (troppi falsi positivi).
+    // La terminazione avviene solo tramite scraping "non disponibile" (vedi sopra).
 
     return { valid: true, currentPrice };
 
