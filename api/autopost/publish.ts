@@ -1896,24 +1896,48 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     // ── Controlla offerte scadute (max 3 per run, anche con coda vuota) ────────
     try {
-      const toCheck = await sql`
-        SELECT id, product_id AS "productId", platform,
-               discounted_price::float AS "discountedPrice",
-               source_url AS "sourceUrl", image,
-               chat_id AS "chatId", message_id AS "messageId",
-               title, original_price::float AS "originalPrice",
-               discount_percent AS "discountPercent",
-               custom_text AS "customText", emoji,
-               COALESCE(is_multi, false) AS "isMulti",
-               COALESCE(multi_items, '[]'::jsonb) AS "multiItems"
-        FROM published_posts
-        WHERE user_id = ${userId}
-          AND NOT COALESCE(terminata, false)
-          AND published_at < now() - interval '30 minutes'
-          AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
-        ORDER BY last_checked_at ASC NULLS FIRST
-        LIMIT 50
-      `.catch(() => []);
+      // Per profili primari includi anche i post dei profili secondari (userId:channelId)
+      // che potrebbero avere attivo=false e quindi non essere iterati nel loop principale.
+      const secondaryPattern = userId.includes(':') ? null : `${userId}:%`;
+      const toCheck = secondaryPattern
+        ? await sql`
+          SELECT id, product_id AS "productId", platform,
+                 discounted_price::float AS "discountedPrice",
+                 source_url AS "sourceUrl", image,
+                 chat_id AS "chatId", message_id AS "messageId",
+                 title, original_price::float AS "originalPrice",
+                 discount_percent AS "discountPercent",
+                 custom_text AS "customText", emoji,
+                 layout_id AS "layoutId",
+                 COALESCE(is_multi, false) AS "isMulti",
+                 COALESCE(multi_items, '[]'::jsonb) AS "multiItems"
+          FROM published_posts
+          WHERE (user_id = ${userId} OR user_id LIKE ${secondaryPattern})
+            AND NOT COALESCE(terminata, false)
+            AND published_at < now() - interval '30 minutes'
+            AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
+          ORDER BY last_checked_at ASC NULLS FIRST
+          LIMIT 50
+        `.catch(() => [])
+        : await sql`
+          SELECT id, product_id AS "productId", platform,
+                 discounted_price::float AS "discountedPrice",
+                 source_url AS "sourceUrl", image,
+                 chat_id AS "chatId", message_id AS "messageId",
+                 title, original_price::float AS "originalPrice",
+                 discount_percent AS "discountPercent",
+                 custom_text AS "customText", emoji,
+                 layout_id AS "layoutId",
+                 COALESCE(is_multi, false) AS "isMulti",
+                 COALESCE(multi_items, '[]'::jsonb) AS "multiItems"
+          FROM published_posts
+          WHERE user_id = ${userId}
+            AND NOT COALESCE(terminata, false)
+            AND published_at < now() - interval '30 minutes'
+            AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
+          ORDER BY last_checked_at ASC NULLS FIRST
+          LIMIT 50
+        `.catch(() => []);
 
       for (const pub of toCheck) {
         // Aggiorna subito per evitare doppio check in run sovrapposti
@@ -1997,8 +2021,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           if (telegramMode === 'only') {
             termCaption = telegramText;
           } else if (telegramMode === 'append') {
-            const [termLayoutRow] = termCfg.layoutId ? await sql`
-              SELECT body FROM layouts WHERE id = ${termCfg.layoutId} AND user_id = ${userId}
+            // Usa il layout del post stesso (non termCfg.layoutId che potrebbe non essere impostato)
+            const layoutIdToUse = (pub as any).layoutId ?? termCfg.layoutId ?? null;
+            const [termLayoutRow] = layoutIdToUse ? await sql`
+              SELECT body FROM layouts WHERE id = ${layoutIdToUse} AND (user_id = ${userId} OR user_id = ${baseUserId})
             `.catch(() => [null]) : [null];
             const affUrl = String(pub.sourceUrl ?? '');
             const builtCaption = termLayoutRow?.body
