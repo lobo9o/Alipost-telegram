@@ -162,9 +162,12 @@ export async function checkPostPrice(
           clearTimeout(t);
           if (r.ok) {
             const html = await r.text();
-            const unavailable = /attualmente non disponibile|currently unavailable|non è disponibile|temporaneamente esaurito/i.test(html);
-            const hasPrice = /class="a-price-whole"|"priceAmount"|id="priceblock_ourprice"|id="priceblock_dealprice"/i.test(html);
-            // Solo "non disponibile" esplicito — !hasPrice da solo causa troppi falsi positivi
+            // Solo messaggi di pagina-intera che indicano prodotto completamente esaurito.
+            // "non è disponibile" è troppo generico: appare anche per varianti o date di consegna.
+            const unavailable =
+              /attualmente non disponibile\.\s*Non sappiamo quando/i.test(html) ||
+              /currently unavailable\.\s*We don't know when/i.test(html) ||
+              /temporaneamente esaurito\.\s*Non sappiamo quando/i.test(html);
             if (unavailable) {
               return { valid: false, reason: 'Prodotto non più disponibile (scrape)' };
             }
