@@ -668,12 +668,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const baseCfg = (typeof baseRow.data === 'string' ? JSON.parse(baseRow.data) : baseRow.data) as Record<string, any>;
       // Merge campo per campo per evitare che valori vuoti del secondario sovrascrivano quelli del primario
       if (!cfg.aliexpress) cfg.aliexpress = {};
+      // Solo credenziali API condivise — appKey/appSecret possono essere del primario
       if (!cfg.aliexpress.appKey && baseCfg.aliexpress?.appKey) cfg.aliexpress.appKey = baseCfg.aliexpress.appKey;
       if (!cfg.aliexpress.appSecret && baseCfg.aliexpress?.appSecret) cfg.aliexpress.appSecret = baseCfg.aliexpress.appSecret;
+      // trackingId NON si eredita: è il tag affiliato e deve essere esclusivo del profilo secondario
       if (!cfg.amazon) cfg.amazon = {};
       if (!cfg.amazon.credentialId && baseCfg.amazon?.credentialId) cfg.amazon.credentialId = baseCfg.amazon.credentialId;
       if (!cfg.amazon.credentialSecret && baseCfg.amazon?.credentialSecret) cfg.amazon.credentialSecret = baseCfg.amazon.credentialSecret;
-      if (!cfg.amazon.affiliateTag && baseCfg.amazon?.affiliateTag) cfg.amazon.affiliateTag = baseCfg.amazon.affiliateTag;
+      // affiliateTag NON si eredita: ogni profilo deve avere il proprio tag affiliato
       if (!cfg.amazon.version && baseCfg.amazon?.version) cfg.amazon.version = baseCfg.amazon.version;
       if (!cfg.amazon.marketplace && baseCfg.amazon?.marketplace) cfg.amazon.marketplace = baseCfg.amazon.marketplace;
     }
@@ -696,8 +698,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       ? (cfg.amazon?.affiliateTag || '')
       : (process.env.AMAZON_AFFILIATE_TAG || '');
 
-    // affiliateTag: tag nel link del post — sempre quello dell'utente se disponibile
-    const affiliateTag = cfg.amazon?.affiliateTag || process.env.AMAZON_AFFILIATE_TAG || '';
+    // affiliateTag: deve essere sempre il tag dell'utente — mai fallback a env (evita tag altrui)
+    const affiliateTag = cfg.amazon?.affiliateTag || '';
 
     const version = userHasCreds
       ? (cfg.amazon?.version      || process.env.AMAZON_VERSION      || '2.2')
@@ -895,7 +897,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     const appKey     = cfg.aliexpress?.appKey     || process.env.ALIEXPRESS_APP_KEY     || '';
     const appSecret  = cfg.aliexpress?.appSecret  || process.env.ALIEXPRESS_APP_SECRET  || '';
-    const trackingId = cfg.aliexpress?.trackingId || process.env.ALIEXPRESS_TRACKING_ID || '';
+    // trackingId: deve essere sempre il tag affiliato dell'utente — mai fallback a env
+    const trackingId = cfg.aliexpress?.trackingId || '';
     const country    = cfg.aliexpress?.targetCountry || process.env.ALIEXPRESS_COUNTRY   || 'IT';
 
     if (!appKey || !appSecret) {

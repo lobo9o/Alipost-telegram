@@ -1682,7 +1682,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       if (post.platform === 'aliexpress' && post.productId && affiliateUrl && !affiliateUrl.includes('s.click.aliexpress.com')) {
         const aliAppKey = cfg.aliexpress?.appKey || process.env.ALIEXPRESS_APP_KEY || '';
         const aliAppSec = cfg.aliexpress?.appSecret || process.env.ALIEXPRESS_APP_SECRET || '';
-        const aliTrackId = cfg.aliexpress?.trackingId || process.env.ALIEXPRESS_TRACKING_ID || '';
+        const aliTrackId = cfg.aliexpress?.trackingId || '';
         const aliCountry = (cfg.aliexpress?.targetCountry || process.env.ALIEXPRESS_COUNTRY || 'IT').toUpperCase();
         if (aliAppKey && aliAppSec && aliTrackId) {
           const productPageUrl = `https://www.aliexpress.com/item/${post.productId}.html`;
