@@ -551,7 +551,7 @@ async function getUserLayouts(userId: string) {
   const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
   const templates = await sql<{ id: string }[]>`
     SELECT id FROM templates WHERE user_id = ${baseUserId} OR user_id = ${userId}
-    ORDER BY updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
+    ORDER BY (user_id = ${userId}) DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1
   `;
   const templateId = templates[0]?.id ?? '';
 
@@ -623,6 +623,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     ? await (async () => {
         const pid = `${userId}:${destChannel}`;
         const [pr] = await sql<{ user_id: string }[]>`SELECT user_id FROM settings WHERE user_id = ${pid} LIMIT 1`.catch(() => []);
+        console.log(`[tg-monitor] ${userId} — profileId risolto: ${pr ? pid : userId} (destChannel=${destChannel})`);
         return pr ? pid : userId;
       })()
     : userId;
@@ -643,6 +644,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
 
   const { getLayoutAndKeyboard, templateId } = await getUserLayouts(profileId);
+  console.log(`[tg-monitor] ${profileId} — templateId=${templateId || '(nessuno)'}`);
   const isMulti = urls.length > 1;
 
   // Processa tutti i link in parallelo — mantiene _urlIdx per abbinare coupon per sezione
