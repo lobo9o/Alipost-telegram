@@ -197,10 +197,10 @@ export async function checkPostPrice(
     // è tornato vicino a quello (≥85%). Senza originalPrice i falsi positivi sono troppi:
     // l'API restituisce il prezzo base senza coupon, più alto del prezzo pubblicato.
     if (originalPrice > storedPrice * 1.10) {
-      if (currentPrice >= originalPrice * 0.98) {
+      if (currentPrice > originalPrice) {
         return {
           valid: false,
-          reason: `Offerta scaduta: ${currentPrice.toFixed(2)} tornato al prezzo originale ${originalPrice.toFixed(2)}`,
+          reason: `Offerta scaduta: ${currentPrice.toFixed(2)} supera il prezzo originale ${originalPrice.toFixed(2)}`,
           currentPrice,
         };
       }
