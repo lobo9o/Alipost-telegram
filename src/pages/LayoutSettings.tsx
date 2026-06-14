@@ -1486,14 +1486,12 @@ const Chevron = ({ open }: { open: boolean }) => (
 type AuthStep = 'idle' | 'code' | 'twofa' | 'active';
 
 export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
-  const { settings } = useApp();
-  const destChannels: string[] = (settings?.channels ?? []).filter(Boolean);
+  const { activeProfileId } = useApp();
   const [step, setStep] = useState<AuthStep>('idle');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [twofa, setTwofa] = useState('');
   const [newChannel, setNewChannel] = useState('');
-  const [newDest, setNewDest] = useState('');
   const [channels, setChannels] = useState<TgMonitorChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -1545,10 +1543,8 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
 
   const handleAddChannel = () => go(async () => {
     if (!newChannel.trim()) return;
-    const res = await tgMonitorApi.addChannel(newChannel.trim());
-    if (newDest) await tgMonitorApi.updateChannel(res.id, { dest_channel: newDest });
+    await tgMonitorApi.addChannel(newChannel.trim());
     setNewChannel('');
-    setNewDest('');
     setChannels(await tgMonitorApi.listChannels());
   });
 
@@ -1556,13 +1552,6 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
     await tgMonitorApi.removeChannel(id);
     setChannels(prev => prev.filter(c => c.id !== id));
   });
-
-  const handleSetDest = async (id: string, dest: string) => {
-    const val = dest || null;
-    setChannels(ch => ch.map(c => c.id === id ? { ...c, dest_channel: val } : c));
-    try { await tgMonitorApi.updateChannel(id, { dest_channel: val }); }
-    catch (e: any) { setErr(e.message ?? 'Errore salvataggio destinazione'); }
-  };
 
   // mode: 'queue' = metti in coda, 'publish' = pubblica subito, 'pause' = ferma controllo
   const handleSetMode = async (id: string, mode: 'queue' | 'publish' | 'pause') => {
@@ -1580,9 +1569,17 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
     }
   };
 
+  const activeChannel = activeProfileId.includes(':') ? activeProfileId.split(':').slice(1).join(':') : null;
+
   return (
     <div className="pg">
       <PageHeader title="Monitor canali" onBack={() => nav('dash')} />
+
+      {activeChannel && (
+        <div style={{ margin: '0 16px 10px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--t2)' }}>
+          Canale attivo: <b style={{ color: 'var(--t1)' }}>{activeChannel}</b> — i canali aggiunti qui copiano su questo profilo
+        </div>
+      )}
 
       {err && (
         <div style={{ margin: '0 16px 12px', background: '#2a0a0a', border: '1px solid #5c1a1a', borderRadius: 8, padding: '10px 12px', color: '#f87171', fontSize: 13 }}>
@@ -1711,17 +1708,6 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                         {btn('publish', '⚡ Subito',    '#16a34a')}
                         {btn('pause',   '⏸ Pausa',     '#6b3d1e')}
                       </div>
-                      {destChannels.length > 1 && (
-                        <div style={{ borderTop: '1px solid var(--bdr)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 11, color: 'var(--t3)', whiteSpace: 'nowrap' }}>Pubblica su</span>
-                          <select
-                            value={ch.dest_channel ?? destChannels[0]}
-                            onChange={e => handleSetDest(ch.id, e.target.value)}
-                            style={{ flex: 1, fontSize: 12, background: 'var(--bg3)', color: 'var(--t1)', border: '1px solid var(--bdr)', borderRadius: 6, padding: '4px 8px' }}>
-                            {destChannels.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
-                        </div>
-                      )}
                     </>
                   );
                 })()}
@@ -1737,17 +1723,6 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                 placeholder="@username o https://t.me/username"
                 onKeyDown={e => e.key === 'Enter' && handleAddChannel()} />
             </div>
-            {destChannels.length > 1 && (
-              <div style={{ marginTop: 8 }}>
-                <label style={{ fontSize: 11, color: 'var(--t3)', display: 'block', marginBottom: 4 }}>Pubblica su</label>
-                <select
-                  value={newDest || destChannels[0]}
-                  onChange={e => setNewDest(e.target.value)}
-                  style={{ width: '100%', fontSize: 13, background: 'var(--bg3)', color: 'var(--t1)', border: '1px solid var(--bdr)', borderRadius: 8, padding: '8px 12px' }}>
-                  {destChannels.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            )}
             <div style={{ height: 8 }} />
             <button className="btn bp bfull" onClick={handleAddChannel} disabled={loading || !newChannel.trim()}>
               {loading ? '⏳...' : '➕ Aggiungi canale'}
