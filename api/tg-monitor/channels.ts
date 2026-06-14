@@ -4,6 +4,7 @@ import sql from '../../lib/db.js';
 export default withErrorHandler(async (req, res) => {
   const userId = requireUserId(req, res);
   if (!userId) return;
+  const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
 
   // ── GET: lista canali ────────────────────────────────────────
   if (req.method === 'GET') {
@@ -37,7 +38,7 @@ export default withErrorHandler(async (req, res) => {
     }
 
     const { reloadUser } = await import('./worker.js');
-    reloadUser(userId);
+    reloadUser(baseUserId);
 
     return res.json({ ok: true });
   }
@@ -59,7 +60,7 @@ export default withErrorHandler(async (req, res) => {
     `;
 
     const { reloadUser } = await import('./worker.js');
-    reloadUser(userId);
+    reloadUser(baseUserId);
 
     return res.json({ ok: true, id: row.id });
   }
@@ -72,7 +73,7 @@ export default withErrorHandler(async (req, res) => {
     await sql`DELETE FROM tg_monitor_channels WHERE id = ${id} AND user_id = ${userId}`;
 
     const { reloadUser } = await import('./worker.js');
-    reloadUser(userId);
+    reloadUser(baseUserId);
 
     return res.json({ ok: true });
   }
