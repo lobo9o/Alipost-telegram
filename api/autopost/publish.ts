@@ -1591,7 +1591,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             if (genImg) post = { ...post, generatedImage: genImg };
           } else {
             // Nessun template dedicato: rigenera con template base + badge
-            const [baseTpl] = await sql`SELECT id, config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId}) LIMIT 1`.catch(() => [null]);
+            const [baseTpl] = await sql`SELECT id, config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId}) AND tipo NOT IN ('historical_low') ORDER BY (user_id = ${userId}) DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1`.catch(() => [null]);
             if (baseTpl) {
               const baseCfg = parseTemplateCfg(baseTpl)!;
               const genImg = await generateTemplateImageServer(baseCfg, String(post.image), post.platform, hlPriceData, true).catch(() => null);
