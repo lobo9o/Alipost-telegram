@@ -113,10 +113,8 @@ export interface ImgEl {
 
 export interface MultiBarConfig {
   enabled: boolean;
-  color: string;
+  src: string | null;
   height: number;
-  text: string;
-  textColor: string;
 }
 
 export interface MultiPriceConfig {
@@ -173,7 +171,7 @@ export function makeDefaultTemplate(id = 'tpl1'): Template {
     testoCustom: defText({ enabled: false, x: 5, y: 90, fontSize: 22 }),
     storeAmazon:     defImg({ enabled: true, x: 3, y: 3, size: 20 }),
     storeAliexpress: defImg({ enabled: true, x: 3, y: 3, size: 20 }),
-    multiBar:   { enabled: false, color: '#cc0000', height: 60, text: '', textColor: '#ffffff' },
+    multiBar:   { enabled: false, src: null, height: 60 },
     multiPrice: { enabled: false, bgColor: '#1a1a1a', textColor: '#ffffff', height: 36 },
   };
 }

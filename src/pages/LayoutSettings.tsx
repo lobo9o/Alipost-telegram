@@ -994,44 +994,84 @@ function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, show
   );
 }
 
+// ── Multi Previewer ───────────────────────────────────────────
+function MultiPreviewer({ tpl }: { tpl: Template }) {
+  const mb: MultiBarConfig   = tpl.multiBar  ?? { enabled: false, src: null, height: 60 };
+  const mp: MultiPriceConfig = tpl.multiPrice ?? { enabled: false, bgColor: '#1a1a1a', textColor: '#ffffff', height: 36 };
+  const N = 6; const cols = 3; const rows = 2;
+  const previewW = 330;
+  const cellSizePx = Math.round(previewW / cols);
+  const barHpx    = mb.enabled && mb.src ? Math.round((mb.height ?? 60) * previewW / 1024) : 0;
+  const priceHpx  = mp.enabled ? Math.round((mp.height ?? 36) * previewW / 1024) : 0;
+  const totalH    = barHpx + rows * (cellSizePx + priceHpx);
+
+  return (
+    <div style={{ margin: '0 16px 8px', border: '1px solid var(--bd)', borderRadius: 6, overflow: 'hidden', background: '#fff', position: 'relative', width: previewW, height: totalH }}>
+      {barHpx > 0 && mb.src && (
+        <img src={mb.src} alt="" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: barHpx, objectFit: 'fill', display: 'block' }} />
+      )}
+      {Array.from({ length: N }).map((_, i) => {
+        const col = i % cols; const row = Math.floor(i / cols);
+        return (
+          <div key={i} style={{
+            position: 'absolute', left: col * cellSizePx, top: barHpx + row * (cellSizePx + priceHpx),
+            width: cellSizePx, height: cellSizePx,
+            background: '#e5e7eb', border: '1px solid #d1d5db',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+          }}>📦</div>
+        );
+      })}
+      {mp.enabled && priceHpx > 0 && Array.from({ length: N }).map((_, i) => {
+        const col = i % cols; const row = Math.floor(i / cols);
+        return (
+          <div key={`p${i}`} style={{
+            position: 'absolute', left: col * cellSizePx, top: barHpx + row * (cellSizePx + priceHpx) + cellSizePx,
+            width: cellSizePx, height: priceHpx,
+            background: mp.bgColor ?? '#1a1a1a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ color: mp.textColor ?? '#ffffff', fontSize: Math.round(priceHpx * 0.58), fontWeight: 700 }}>€12,99</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Multiplo Panel ────────────────────────────────────────────
 function MultipliPanel({ tpl, onUpdate }: { tpl: Template; onUpdate: (ch: Partial<Template>) => void }) {
-  const mb: MultiBarConfig  = tpl.multiBar  ?? { enabled: false, color: '#cc0000', height: 60, text: '', textColor: '#ffffff' };
+  const mb: MultiBarConfig   = tpl.multiBar  ?? { enabled: false, src: null, height: 60 };
   const mp: MultiPriceConfig = tpl.multiPrice ?? { enabled: false, bgColor: '#1a1a1a', textColor: '#ffffff', height: 36 };
+  const barH = mb.height ?? 60;
+
+  const handleBarFile = async (file: File | null) => {
+    if (!file) return;
+    const b64 = await readAsBase64(file);
+    onUpdate({ multiBar: { ...mb, src: b64 as string } });
+  };
 
   return (
     <>
       <div className="stit">BARRA IN ALTO</div>
-      <ToggleRow label="Barra superiore" sub="Aggiunge una striscia colorata in cima alla griglia immagine"
+      <ToggleRow label="Barra superiore" sub="Aggiunge un'immagine in cima alla griglia (es. logo o banner)"
         value={mb.enabled} onChange={v => onUpdate({ multiBar: { ...mb, enabled: v } })} />
       {mb.enabled && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-            <div className="fld" style={{ margin: 0 }}>
-              <label className="lbl">Colore barra</label>
-              <input type="color" className="inp" value={mb.color || '#cc0000'}
-                onChange={e => onUpdate({ multiBar: { ...mb, color: e.target.value } })}
-                style={{ height: 40, padding: 4, cursor: 'pointer' }} />
-            </div>
-            <div className="fld" style={{ margin: 0 }}>
-              <label className="lbl">Colore testo</label>
-              <input type="color" className="inp" value={mb.textColor || '#ffffff'}
-                onChange={e => onUpdate({ multiBar: { ...mb, textColor: e.target.value } })}
-                style={{ height: 40, padding: 4, cursor: 'pointer' }} />
-            </div>
-          </div>
           <div className="fld">
-            <label className="lbl">Altezza ({mb.height || 60}px)</label>
-            <input type="range" min={30} max={120} value={mb.height || 60}
+            <label className="lbl">Altezza ({barH}px) — immagine consigliata: 1024 × {barH}px</label>
+            <input type="range" min={30} max={120} value={barH}
               onChange={e => onUpdate({ multiBar: { ...mb, height: Number(e.target.value) } })}
               style={{ width: '100%', marginTop: 10 }} />
           </div>
-          <div className="fld">
-            <label className="lbl">Testo nella barra (opzionale)</label>
-            <input className="inp" value={mb.text || ''}
-              onChange={e => onUpdate({ multiBar: { ...mb, text: e.target.value } })}
-              placeholder="es. 🔥 OFFERTE DEL GIORNO" />
-          </div>
+          <button className="btn bgh" style={{ width: '100%', marginBottom: 8, position: 'relative', overflow: 'hidden' }}>
+            {mb.src ? '✓ Immagine caricata — cambia' : '+ Carica immagine barra (PNG/JPG)'}
+            <input type="file" accept="image/*" onChange={e => handleBarFile(e.target.files?.[0] ?? null)}
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+          </button>
+          {mb.src && (
+            <button className="btn bgh" style={{ width: '100%', fontSize: 12, marginBottom: 8 }}
+              onClick={() => onUpdate({ multiBar: { ...mb, src: null } })}>× Rimuovi immagine</button>
+          )}
         </>
       )}
 
@@ -1042,13 +1082,13 @@ function MultipliPanel({ tpl, onUpdate }: { tpl: Template; onUpdate: (ch: Partia
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div className="fld" style={{ margin: 0 }}>
-              <label className="lbl">Sfondo prezzo</label>
+              <label className="lbl">Sfondo</label>
               <input type="color" className="inp" value={mp.bgColor || '#1a1a1a'}
                 onChange={e => onUpdate({ multiPrice: { ...mp, bgColor: e.target.value } })}
                 style={{ height: 40, padding: 4, cursor: 'pointer' }} />
             </div>
             <div className="fld" style={{ margin: 0 }}>
-              <label className="lbl">Colore testo</label>
+              <label className="lbl">Testo</label>
               <input type="color" className="inp" value={mp.textColor || '#ffffff'}
                 onChange={e => onUpdate({ multiPrice: { ...mp, textColor: e.target.value } })}
                 style={{ height: 40, padding: 4, cursor: 'pointer' }} />
@@ -1359,11 +1399,15 @@ function TemplateSection() {
       )}
 
       {/* Anteprima live — frecce per spostare l'elemento attivo */}
-      <TemplatePreviewer
-        tpl={tpl} platform={previewPlatform}
-        onArrowMove={activePanel && activePanel !== 'terminata' && !isMultiKey(activePanel as ComponentKey) ? handleArrowMove : undefined}
-        activeTextKey={activePanel && isTextKey(activePanel as ComponentKey) ? activePanel : null}
-      />
+      {activePanel === 'multiplo' ? (
+        <MultiPreviewer tpl={tpl} />
+      ) : (
+        <TemplatePreviewer
+          tpl={tpl} platform={previewPlatform}
+          onArrowMove={activePanel && activePanel !== 'terminata' && !isMultiKey(activePanel as ComponentKey) ? handleArrowMove : undefined}
+          activeTextKey={activePanel && isTextKey(activePanel as ComponentKey) ? activePanel : null}
+        />
+      )}
 
       {/* Selettore step + zoom sulla stessa riga */}
       {activePanel && activePanel !== 'terminata' && !isMultiKey(activePanel as ComponentKey) && (() => {

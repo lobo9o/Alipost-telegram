@@ -760,7 +760,7 @@ async function generateTemplateImageServer(
 async function generateMultiImageServer(
   imageUrls: string[],
   opts: {
-    barEnabled?: boolean; barColor?: string; barHeight?: number; barText?: string; barTextColor?: string;
+    barEnabled?: boolean; barSrc?: string | null; barHeight?: number;
     priceEnabled?: boolean; prices?: string[]; priceBgColor?: string; priceTextColor?: string; priceHeight?: number;
   } = {}
 ): Promise<string | null> {
@@ -797,17 +797,16 @@ async function generateMultiImageServer(
     const composites: any[] = [];
     const validUrls = imageUrls.filter(Boolean);
 
-    // Barra superiore
-    if (barH > 0) {
-      const barColor = opts.barColor ?? '#cc0000';
-      const barTxt   = opts.barText?.trim() ?? '';
-      const barTxtColor = opts.barTextColor ?? '#ffffff';
-      const fs = Math.round(barH * 0.52);
-      const svgBar = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${barH}">
-        <rect width="${canvasW}" height="${barH}" fill="${escXml(barColor)}"/>
-        ${barTxt ? `<text x="${canvasW / 2}" y="${Math.round(barH * 0.72)}" font-family="Arial,sans-serif" font-size="${fs}px" font-weight="bold" fill="${escXml(barTxtColor)}" text-anchor="middle">${escXml(barTxt)}</text>` : ''}
-      </svg>`;
-      composites.push({ input: Buffer.from(svgBar), left: 0, top: 0 });
+    // Barra superiore (immagine caricata dall'utente)
+    if (barH > 0 && opts.barSrc) {
+      try {
+        const b64 = opts.barSrc.includes(',') ? opts.barSrc.split(',')[1] : opts.barSrc;
+        const barBuf = Buffer.from(b64, 'base64');
+        const resizedBar = await sharp(barBuf).resize(canvasW, barH, { fit: 'fill' }).toBuffer();
+        composites.push({ input: resizedBar, left: 0, top: 0 });
+      } catch (e: any) {
+        console.warn('[multiImg] errore rendering barSrc:', e.message);
+      }
     }
 
     for (let i = 0; i < validUrls.length; i++) {
@@ -1835,10 +1834,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
           const composita = await generateMultiImageServer(multiImgUrls, {
             barEnabled:    !!mb.enabled,
-            barColor:      String(mb.color    ?? '#cc0000'),
+            barSrc:        mb.src ?? null,
             barHeight:     Number(mb.height   ?? 60),
-            barText:       String(mb.text     ?? ''),
-            barTextColor:  String(mb.textColor ?? '#ffffff'),
             priceEnabled:  !!mp.enabled,
             prices:        multiPrices,
             priceBgColor:  String(mp.bgColor   ?? '#1a1a1a'),
@@ -1847,7 +1844,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           });
           if (composita) {
             post = { ...post, generatedImage: composita };
-            console.log(`[autopost] immagine composita multi generata (${multiImgUrls.length} prodotti, bar=${!!mb.enabled} price=${!!mp.enabled})`);
+            console.log(`[autopost] immagine composita multi generata (${multiImgUrls.length} prodotti, bar=${!!mb.enabled && !!mb.src} price=${!!mp.enabled})`);
           }
         }
       }
