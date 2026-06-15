@@ -81,7 +81,7 @@ export const postsApi = {
   create: (post: CreatedPost) => req<CreatedPost>('POST', '/api/posts', post),
   update: (id: string, post: Partial<CreatedPost>) => req<CreatedPost>('PUT', `/api/posts/${id}`, post),
   delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/posts/${id}`),
-  publish: (id: string, payload: { post: CreatedPost; layoutContenuto?: string; keyboardContenuto?: string; generatedImage?: string; multiImageUrls?: string[]; disableNotification?: boolean; channelOverride?: string }) =>
+  publish: (id: string, payload: { post: CreatedPost; layoutContenuto?: string; keyboardContenuto?: string; generatedImage?: string; multiImageUrls?: string[]; multiPosts?: CreatedPost[]; disableNotification?: boolean; channelOverride?: string }) =>
     req<{ ok: boolean; messageId?: number; chatId?: string }>('POST', `/api/posts/${id}`, payload),
 };
 

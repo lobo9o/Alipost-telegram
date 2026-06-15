@@ -3,7 +3,13 @@ import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { getProductEmoji } from '../_titleFormat.js';
 
-async function generateMultiImageServer(imageUrls: string[]): Promise<string | null> {
+async function generateMultiImageServer(
+  imageUrls: string[],
+  opts: {
+    barEnabled?: boolean; barSrc?: string | null; barHeight?: number;
+    priceEnabled?: boolean; prices?: string[]; priceBgColor?: string; priceTextColor?: string; priceHeight?: number;
+  } = {}
+): Promise<string | null> {
   const validUrls = imageUrls.filter(u => u && String(u).startsWith('http'));
   const n = validUrls.length;
   if (n === 0) return null;
@@ -14,18 +20,32 @@ async function generateMultiImageServer(imageUrls: string[]): Promise<string | n
     const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
     const rows = Math.ceil(n / cols);
     const cellSize = Math.round(1024 / cols);
+    const barH   = opts.barEnabled  ? Math.max(30, Math.min(120, Number(opts.barHeight  ?? 60))) : 0;
+    const priceH = opts.priceEnabled ? Math.max(24, Math.min(64,  Number(opts.priceHeight ?? 36))) : 0;
     const canvasW = cellSize * cols;
-    const canvasH = cellSize * rows;
+    const canvasH = barH + (cellSize + priceH) * rows;
     const PAD = 4;
+    const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const base = await sharp({ create: { width: canvasW, height: canvasH, channels: 3, background: { r: 255, g: 255, b: 255 } } }).png().toBuffer();
     const composites: any[] = [];
+
+    // Barra superiore (immagine caricata dall'utente)
+    if (barH > 0 && opts.barSrc) {
+      try {
+        const b64 = opts.barSrc.includes(',') ? opts.barSrc.split(',')[1] : opts.barSrc;
+        const barBuf = Buffer.from(b64, 'base64');
+        const resizedBar = await sharp(barBuf).resize(canvasW, barH, { fit: 'fill' }).toBuffer();
+        composites.push({ input: resizedBar, left: 0, top: 0 });
+      } catch (e: any) { console.warn('[publish] errore rendering barSrc:', e.message); }
+    }
+
     for (let i = 0; i < validUrls.length; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const itemsInRow = Math.min(cols, validUrls.length - row * cols);
       const rowOffsetX = Math.floor(((cols - itemsInRow) * cellSize) / 2);
       const cellX = rowOffsetX + col * cellSize;
-      const cellY = row * cellSize;
+      const cellY = barH + row * (cellSize + priceH);
       try {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 8000);
@@ -37,6 +57,20 @@ async function generateMultiImageServer(imageUrls: string[]): Promise<string | n
         const availH = cellSize - PAD * 2;
         const { data, info } = await sharp(buf).resize(availW, availH, { fit: 'inside' }).toBuffer({ resolveWithObject: true });
         composites.push({ input: data, left: cellX + PAD + Math.round((availW - info.width) / 2), top: cellY + PAD + Math.round((availH - info.height) / 2) });
+
+        // Etichetta prezzo sotto la foto
+        if (priceH > 0) {
+          const priceText = opts.prices?.[i] ?? '';
+          const priceBg  = opts.priceBgColor  ?? '#1a1a1a';
+          const priceTxt = opts.priceTextColor ?? '#ffffff';
+          const pfs = Math.round(priceH * 0.58);
+          const cellW = cellSize;
+          const svgPrice = `<svg xmlns="http://www.w3.org/2000/svg" width="${cellW}" height="${priceH}">
+            <rect width="${cellW}" height="${priceH}" fill="${escXml(priceBg)}"/>
+            ${priceText ? `<text x="${cellW / 2}" y="${Math.round(priceH * 0.75)}" font-family="Arial,sans-serif" font-size="${pfs}px" font-weight="bold" fill="${escXml(priceTxt)}" text-anchor="middle">${escXml(priceText)}</text>` : ''}
+          </svg>`;
+          composites.push({ input: Buffer.from(svgPrice), left: cellX, top: cellY + cellSize });
+        }
       } catch { /* skip */ }
     }
     const result = await sharp(base).composite(composites).jpeg({ quality: 88 }).toBuffer();
@@ -550,12 +584,39 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
 
-  // Per multi post: genera composita server-side se multiImageUrls forniti e generatedImage mancante
-  if (Array.isArray(multiImageUrls) && multiImageUrls.length > 1 && (!generatedImage || !String(generatedImage).startsWith('data:'))) {
-    const composita = await generateMultiImageServer(multiImageUrls);
+  // Per multi post: rigenera sempre la griglia con barra e prezzi dal template
+  if (Array.isArray(multiImageUrls) && multiImageUrls.length > 1) {
+    const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+    const tplId = post?.templateId;
+    const [tplRow] = tplId && tplId !== 'tpl1'
+      ? await sql`SELECT config FROM templates WHERE id = ${tplId} AND (user_id = ${baseUserId} OR user_id = ${userId}) LIMIT 1`.catch(() => [null])
+      : await sql`SELECT config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId}) ORDER BY (user_id = ${userId}) DESC, updated_at DESC NULLS LAST LIMIT 1`.catch(() => [null]);
+    const tplCfg = tplRow ? (typeof tplRow.config === 'string' ? JSON.parse(tplRow.config) : (tplRow.config ?? {})) : null;
+    const mb = (tplCfg?.multiBar ?? {}) as Record<string, any>;
+    const mpr = (tplCfg?.multiPrice ?? { enabled: true }) as Record<string, any>;
+
+    const multiPostsArr: any[] = Array.isArray(req.body?.multiPosts) ? req.body.multiPosts : [];
+    const multiPrices = multiPostsArr.map((mp: any) => {
+      const price = Number(mp.discountedPrice ?? 0);
+      if (price <= 0) return '';
+      const sym = mp.platform === 'aliexpress'
+        ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
+      return `${sym}${price.toFixed(2).replace('.', ',')}`;
+    });
+
+    const composita = await generateMultiImageServer(multiImageUrls, {
+      barEnabled:    !!mb.enabled,
+      barSrc:        mb.src ?? null,
+      barHeight:     Number(mb.height   ?? 60),
+      priceEnabled:  mpr.enabled !== false,
+      prices:        multiPrices,
+      priceBgColor:  String(mpr.bgColor   ?? '#1a1a1a'),
+      priceTextColor: String(mpr.textColor ?? '#ffffff'),
+      priceHeight:   Number(mpr.height    ?? 36),
+    });
     if (composita) {
       generatedImage = composita;
-      console.log(`[publish] composita multi generata server-side (${multiImageUrls.length} img)`);
+      console.log(`[publish] composita multi generata server-side (${multiImageUrls.length} img, bar=${!!mb.enabled && !!mb.src} price=${mpr.enabled !== false})`);
     }
   }
 

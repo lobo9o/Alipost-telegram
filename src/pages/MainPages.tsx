@@ -2553,7 +2553,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         const multiImageUrls = multiPosts.map(mp => mp.image).filter(Boolean);
         const pubResult = await postsApi.publish(post.id, {
           post, layoutContenuto: expandedLayout, keyboardContenuto: multiKeyboard,
-          multiImageUrls, disableNotification, channelOverride,
+          multiImageUrls, multiPosts, disableNotification, channelOverride,
         });
         autopostApi.delete(id).catch(() => {});
         const now = new Date().toISOString();
