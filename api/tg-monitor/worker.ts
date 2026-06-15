@@ -642,8 +642,6 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
 
   const { getLayoutAndKeyboard, templateId } = await getUserLayouts(profileId);
   console.log(`[tg-monitor] ${profileId} — templateId=${templateId || '(nessuno)'}`);
-  const isMulti = urls.length > 1;
-
   // Processa tutti i link in parallelo — mantiene _urlIdx per abbinare coupon per sezione
   const rawProductsRaw = await Promise.all(urls.map(async (u, urlIdx) => {
     const p = await fetchProduct(profileId, u, headers);
@@ -665,6 +663,9 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     return true;
   });
   if (!products.length) return;
+
+  // isMulti basato sui prodotti reali trovati, non sugli URL (es. link cashback non è un prodotto)
+  const isMulti = products.length > 1;
 
   const productIds = products.map((p: any) => (p.asin ?? p.productId ?? '').toString()).filter(Boolean);
 
