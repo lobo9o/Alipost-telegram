@@ -1504,15 +1504,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // ── Seleziona layout se il post non ne ha uno ────────────────────────────
     if (!post.layoutId) {
       const platform = String(post.platform ?? 'amazon');
-      const [autoLayout] = await sql`
-        SELECT id FROM layouts WHERE user_id = ${userId}
-          AND tipo IN ('amazon', 'normal', 'aliexpress')
-        ORDER BY
-          (tipo = ${platform === 'aliexpress' ? 'aliexpress' : 'amazon'}) DESC,
-          (tipo = 'normal') DESC,
-          created_at ASC
-        LIMIT 1
-      `.catch(() => [null]);
+      const isAli = platform === 'aliexpress';
+      // Amazon: solo tipo 'normal'; AliExpress: preferisce 'aliexpress', fallback 'normal'
+      const [autoLayout] = isAli
+        ? await sql`
+            SELECT id FROM layouts WHERE user_id = ${userId}
+              AND tipo IN ('aliexpress', 'normal')
+            ORDER BY (tipo = 'aliexpress') DESC, created_at ASC
+            LIMIT 1
+          `.catch(() => [null])
+        : await sql`
+            SELECT id FROM layouts WHERE user_id = ${userId}
+              AND tipo = 'normal'
+            ORDER BY created_at ASC
+            LIMIT 1
+          `.catch(() => [null]);
       if (autoLayout?.id) {
         post = { ...post, layoutId: String(autoLayout.id) };
         console.log(`[autopost] layout assegnato al publish: ${autoLayout.id}`);
@@ -1631,15 +1637,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         // Fallback: se layoutId punta a un multi, seleziona il layout singolo corretto
         if (!layoutRow) {
           const platform = String(post.platform ?? 'amazon');
-          [layoutRow] = await sql`
-            SELECT body, keyboard_id FROM layouts WHERE user_id = ${userId}
-              AND tipo IN ('amazon', 'normal', 'aliexpress')
-            ORDER BY
-              (tipo = ${platform === 'aliexpress' ? 'aliexpress' : 'amazon'}) DESC,
-              (tipo = 'normal') DESC,
-              created_at ASC
-            LIMIT 1
-          `.catch(() => [null]);
+          const isAliF = platform === 'aliexpress';
+          [layoutRow] = isAliF
+            ? await sql`
+                SELECT body, keyboard_id FROM layouts WHERE user_id = ${userId}
+                  AND tipo IN ('aliexpress', 'normal')
+                ORDER BY (tipo = 'aliexpress') DESC, created_at ASC
+                LIMIT 1
+              `.catch(() => [null])
+            : await sql`
+                SELECT body, keyboard_id FROM layouts WHERE user_id = ${userId}
+                  AND tipo = 'normal'
+                ORDER BY created_at ASC
+                LIMIT 1
+              `.catch(() => [null]);
         }
       }
 
