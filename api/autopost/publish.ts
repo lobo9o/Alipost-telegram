@@ -757,7 +757,13 @@ async function generateTemplateImageServer(
 
 // Genera immagine composita (griglia) per post multipli lato server — replica la logica
 // di generateMultiPostImage (imageCompose.ts) usando sharp invece di canvas browser.
-async function generateMultiImageServer(imageUrls: string[]): Promise<string | null> {
+async function generateMultiImageServer(
+  imageUrls: string[],
+  opts: {
+    barEnabled?: boolean; barColor?: string; barHeight?: number; barText?: string; barTextColor?: string;
+    priceEnabled?: boolean; prices?: string[]; priceBgColor?: string; priceTextColor?: string; priceHeight?: number;
+  } = {}
+): Promise<string | null> {
   const n = imageUrls.filter(Boolean).length;
   if (n === 0) return null;
   try {
@@ -768,9 +774,13 @@ async function generateMultiImageServer(imageUrls: string[]): Promise<string | n
     const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
     const rows = Math.ceil(n / cols);
     const cellSize = Math.round(1024 / cols);
+    const barH   = opts.barEnabled   ? Math.max(30, Math.min(120, Number(opts.barHeight   ?? 60))) : 0;
+    const priceH = opts.priceEnabled ? Math.max(24, Math.min(64,  Number(opts.priceHeight ?? 36))) : 0;
     const canvasW = cellSize * cols;
-    const canvasH = cellSize * rows;
+    const canvasH = barH + (cellSize + priceH) * rows;
     const PAD = 4;
+
+    const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
     async function fetchBuf(url: string): Promise<Buffer | null> {
       try {
@@ -787,13 +797,26 @@ async function generateMultiImageServer(imageUrls: string[]): Promise<string | n
     const composites: any[] = [];
     const validUrls = imageUrls.filter(Boolean);
 
+    // Barra superiore
+    if (barH > 0) {
+      const barColor = opts.barColor ?? '#cc0000';
+      const barTxt   = opts.barText?.trim() ?? '';
+      const barTxtColor = opts.barTextColor ?? '#ffffff';
+      const fs = Math.round(barH * 0.52);
+      const svgBar = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${barH}">
+        <rect width="${canvasW}" height="${barH}" fill="${escXml(barColor)}"/>
+        ${barTxt ? `<text x="${canvasW / 2}" y="${Math.round(barH * 0.72)}" font-family="Arial,sans-serif" font-size="${fs}px" font-weight="bold" fill="${escXml(barTxtColor)}" text-anchor="middle">${escXml(barTxt)}</text>` : ''}
+      </svg>`;
+      composites.push({ input: Buffer.from(svgBar), left: 0, top: 0 });
+    }
+
     for (let i = 0; i < validUrls.length; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const itemsInRow = Math.min(cols, validUrls.length - row * cols);
       const rowOffsetX = Math.floor(((cols - itemsInRow) * cellSize) / 2);
       const cellX = rowOffsetX + col * cellSize;
-      const cellY = row * cellSize;
+      const cellY = barH + row * (cellSize + priceH);
       const buf = await fetchBuf(validUrls[i]);
       if (!buf) continue;
       const availW = cellSize - PAD * 2;
@@ -802,6 +825,20 @@ async function generateMultiImageServer(imageUrls: string[]): Promise<string | n
       const left = cellX + PAD + Math.round((availW - info.width) / 2);
       const top  = cellY + PAD + Math.round((availH - info.height) / 2);
       composites.push({ input: data, left, top });
+
+      // Etichetta prezzo sotto l'immagine
+      if (priceH > 0) {
+        const priceText = opts.prices?.[i] ?? '';
+        const priceBg   = opts.priceBgColor  ?? '#1a1a1a';
+        const priceTxt  = opts.priceTextColor ?? '#ffffff';
+        const pfs = Math.round(priceH * 0.58);
+        const cellW = cellSize;
+        const svgPrice = `<svg xmlns="http://www.w3.org/2000/svg" width="${cellW}" height="${priceH}">
+          <rect width="${cellW}" height="${priceH}" fill="${escXml(priceBg)}"/>
+          ${priceText ? `<text x="${cellW / 2}" y="${Math.round(priceH * 0.75)}" font-family="Arial,sans-serif" font-size="${pfs}px" font-weight="bold" fill="${escXml(priceTxt)}" text-anchor="middle">${escXml(priceText)}</text>` : ''}
+        </svg>`;
+        composites.push({ input: Buffer.from(svgPrice), left: cellX, top: cellY + cellSize });
+      }
     }
 
     const result = await sharp(base).composite(composites).jpeg({ quality: 88 }).toBuffer();
@@ -1779,10 +1816,38 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           .map(p => String(p.image ?? ''))
           .filter(u => u.startsWith('http'));
         if (multiImgUrls.length > 0) {
-          const composita = await generateMultiImageServer(multiImgUrls);
+          // Carica config template per impostazioni multiplo (barra + prezzi)
+          const mTplId = (postsArr as any[])[0]?.templateId;
+          const mTplRows = mTplId && mTplId !== 'tpl1'
+            ? await sql`SELECT config FROM templates WHERE id = ${mTplId} AND (user_id = ${baseUserId} OR user_id = ${userId}) LIMIT 1`.catch(() => [])
+            : await sql`SELECT config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId}) ORDER BY (user_id = ${userId}) DESC, updated_at DESC NULLS LAST LIMIT 1`.catch(() => []);
+          const mTplCfg = parseTemplateCfg(mTplRows[0] ?? null);
+          const mb = (mTplCfg?.multiBar  ?? {}) as Record<string, any>;
+          const mp = (mTplCfg?.multiPrice ?? {}) as Record<string, any>;
+
+          const multiPrices = (postsArr as Record<string, any>[]).map(p => {
+            const price = Number(p.discountedPrice ?? 0);
+            if (price <= 0) return '';
+            const sym = p.platform === 'aliexpress'
+              ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
+            return `${sym}${price.toFixed(2).replace('.', ',')}`;
+          });
+
+          const composita = await generateMultiImageServer(multiImgUrls, {
+            barEnabled:    !!mb.enabled,
+            barColor:      String(mb.color    ?? '#cc0000'),
+            barHeight:     Number(mb.height   ?? 60),
+            barText:       String(mb.text     ?? ''),
+            barTextColor:  String(mb.textColor ?? '#ffffff'),
+            priceEnabled:  !!mp.enabled,
+            prices:        multiPrices,
+            priceBgColor:  String(mp.bgColor   ?? '#1a1a1a'),
+            priceTextColor: String(mp.textColor ?? '#ffffff'),
+            priceHeight:   Number(mp.height    ?? 36),
+          });
           if (composita) {
             post = { ...post, generatedImage: composita };
-            console.log(`[autopost] immagine composita multi generata (${multiImgUrls.length} prodotti)`);
+            console.log(`[autopost] immagine composita multi generata (${multiImgUrls.length} prodotti, bar=${!!mb.enabled} price=${!!mp.enabled})`);
           }
         }
       }

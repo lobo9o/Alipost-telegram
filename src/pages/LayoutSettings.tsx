@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, TextLayout, KeyboardLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig } from '../types';
+import { NavPage, TextLayout, KeyboardLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig, MultiBarConfig, MultiPriceConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId, INITIAL_LAYOUTS, INITIAL_KEYBOARDS } from '../data/mock';
 import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, tgMonitorApi, TgMonitorChannel } from '../lib/api';
@@ -994,9 +994,81 @@ function TextElPanel({ el, onUpdate, showTextInput = false, canvasH = 1024, show
   );
 }
 
+// ── Multiplo Panel ────────────────────────────────────────────
+function MultipliPanel({ tpl, onUpdate }: { tpl: Template; onUpdate: (ch: Partial<Template>) => void }) {
+  const mb: MultiBarConfig  = tpl.multiBar  ?? { enabled: false, color: '#cc0000', height: 60, text: '', textColor: '#ffffff' };
+  const mp: MultiPriceConfig = tpl.multiPrice ?? { enabled: false, bgColor: '#1a1a1a', textColor: '#ffffff', height: 36 };
+
+  return (
+    <>
+      <div className="stit">BARRA IN ALTO</div>
+      <ToggleRow label="Barra superiore" sub="Aggiunge una striscia colorata in cima alla griglia immagine"
+        value={mb.enabled} onChange={v => onUpdate({ multiBar: { ...mb, enabled: v } })} />
+      {mb.enabled && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div className="fld" style={{ margin: 0 }}>
+              <label className="lbl">Colore barra</label>
+              <input type="color" className="inp" value={mb.color || '#cc0000'}
+                onChange={e => onUpdate({ multiBar: { ...mb, color: e.target.value } })}
+                style={{ height: 40, padding: 4, cursor: 'pointer' }} />
+            </div>
+            <div className="fld" style={{ margin: 0 }}>
+              <label className="lbl">Colore testo</label>
+              <input type="color" className="inp" value={mb.textColor || '#ffffff'}
+                onChange={e => onUpdate({ multiBar: { ...mb, textColor: e.target.value } })}
+                style={{ height: 40, padding: 4, cursor: 'pointer' }} />
+            </div>
+          </div>
+          <div className="fld">
+            <label className="lbl">Altezza ({mb.height || 60}px)</label>
+            <input type="range" min={30} max={120} value={mb.height || 60}
+              onChange={e => onUpdate({ multiBar: { ...mb, height: Number(e.target.value) } })}
+              style={{ width: '100%', marginTop: 10 }} />
+          </div>
+          <div className="fld">
+            <label className="lbl">Testo nella barra (opzionale)</label>
+            <input className="inp" value={mb.text || ''}
+              onChange={e => onUpdate({ multiBar: { ...mb, text: e.target.value } })}
+              placeholder="es. 🔥 OFFERTE DEL GIORNO" />
+          </div>
+        </>
+      )}
+
+      <div className="stit" style={{ marginTop: 8 }}>PREZZO SOTTO OGNI PRODOTTO</div>
+      <ToggleRow label="Mostra prezzo" sub="Aggiunge il prezzo scontato sotto ogni foto prodotto"
+        value={mp.enabled} onChange={v => onUpdate({ multiPrice: { ...mp, enabled: v } })} />
+      {mp.enabled && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div className="fld" style={{ margin: 0 }}>
+              <label className="lbl">Sfondo prezzo</label>
+              <input type="color" className="inp" value={mp.bgColor || '#1a1a1a'}
+                onChange={e => onUpdate({ multiPrice: { ...mp, bgColor: e.target.value } })}
+                style={{ height: 40, padding: 4, cursor: 'pointer' }} />
+            </div>
+            <div className="fld" style={{ margin: 0 }}>
+              <label className="lbl">Colore testo</label>
+              <input type="color" className="inp" value={mp.textColor || '#ffffff'}
+                onChange={e => onUpdate({ multiPrice: { ...mp, textColor: e.target.value } })}
+                style={{ height: 40, padding: 4, cursor: 'pointer' }} />
+            </div>
+          </div>
+          <div className="fld">
+            <label className="lbl">Altezza banda ({mp.height || 36}px)</label>
+            <input type="range" min={24} max={64} value={mp.height || 36}
+              onChange={e => onUpdate({ multiPrice: { ...mp, height: Number(e.target.value) } })}
+              style={{ width: '100%', marginTop: 10 }} />
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 // ── Template Section ──────────────────────────────────────────
 
-type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store' | 'terminata';
+type ComponentKey = 'product' | 'overlay' | 'badge' | 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' | 'store' | 'terminata' | 'multiplo';
 
 const COMP_INFO: Record<ComponentKey, string> = {
   product:          '📦 Riquadro dove verrà inserita la foto del prodotto Amazon/AliExpress. Usa le frecce sull\'anteprima per spostarlo e 🔍 per ridimensionarlo.',
@@ -1008,6 +1080,7 @@ const COMP_INFO: Record<ComponentKey, string> = {
   testoCustom:      '📝 Testo libero personalizzabile. Corrisponde al campo "Testo custom" del post.',
   store:            '🏪 Logo negozio — seleziona Amazon o AliExpress e regola posizione/dimensione per ciascuno.',
   terminata:        '🚫 Configura come appare il post quando l\'offerta termina: immagine B&N, testo overlay, elementi visibili e layout Telegram.',
+  multiplo:         '📊 Impostazioni per post multipli: barra colorata in cima alla griglia e prezzo sotto ogni foto prodotto.',
 };
 
 const COMP_BUTTONS: { id: ComponentKey; icon: string; label: string }[] = [
@@ -1019,11 +1092,13 @@ const COMP_BUTTONS: { id: ComponentKey; icon: string; label: string }[] = [
   { id: 'sconto',           icon: '🏷️', label: 'Sconto' },
   { id: 'testoCustom',      icon: '📝', label: 'Testo' },
   { id: 'store',            icon: '🏪', label: 'Store' },
+  { id: 'multiplo',         icon: '📊', label: 'Multiplo' },
   { id: 'terminata',        icon: '🚫', label: 'Terminata' },
 ];
 
 function getElEnabled(id: ComponentKey, tpl: Template): boolean {
   if (id === 'product' || id === 'terminata') return true;
+  if (id === 'multiplo') return !!(tpl.multiBar?.enabled || tpl.multiPrice?.enabled);
   if (id === 'store') return tpl.storeAmazon?.enabled || tpl.storeAliexpress?.enabled || false;
   if (id === 'overlay' || id === 'badge') return (tpl[id] as ImgEl).enabled;
   return (tpl[id] as TextEl).enabled;
@@ -1166,6 +1241,7 @@ function TemplateSection() {
 
   const isTextKey = (k: ComponentKey): k is 'prezzo' | 'prezzoPrecedente' | 'sconto' | 'testoCustom' =>
     ['prezzo', 'prezzoPrecedente', 'sconto', 'testoCustom'].includes(k);
+  const isMultiKey = (k: ComponentKey): k is 'multiplo' => k === 'multiplo';
 
   const getActiveZoom = (): { value: number; min: number; max: number; unit: string; onChange: (v: number) => void } | null => {
     if (!activePanel || activePanel === 'terminata') return null;
@@ -1203,7 +1279,7 @@ function TemplateSection() {
   };
 
   const toggleEnabled = (id: ComponentKey) => {
-    if (id === 'product' || id === 'terminata') return;
+    if (id === 'product' || id === 'terminata' || id === 'multiplo') return;
     const cur = getElEnabled(id, tpl);
     if (id === 'store') {
       updateImg('storeAmazon', { enabled: !cur });
@@ -1285,12 +1361,12 @@ function TemplateSection() {
       {/* Anteprima live — frecce per spostare l'elemento attivo */}
       <TemplatePreviewer
         tpl={tpl} platform={previewPlatform}
-        onArrowMove={activePanel && activePanel !== 'terminata' ? handleArrowMove : undefined}
+        onArrowMove={activePanel && activePanel !== 'terminata' && !isMultiKey(activePanel as ComponentKey) ? handleArrowMove : undefined}
         activeTextKey={activePanel && isTextKey(activePanel as ComponentKey) ? activePanel : null}
       />
 
       {/* Selettore step + zoom sulla stessa riga */}
-      {activePanel && activePanel !== 'terminata' && (() => {
+      {activePanel && activePanel !== 'terminata' && !isMultiKey(activePanel as ComponentKey) && (() => {
         const zoom = getActiveZoom();
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 16px 0', flexWrap: 'wrap' }}>
@@ -1339,6 +1415,7 @@ function TemplateSection() {
               showSconto={activePanel === 'sconto'}
             />
           )}
+          {activePanel === 'multiplo' && <MultipliPanel tpl={tpl} onUpdate={updateTpl} />}
           {activePanel === 'terminata' && <TerminataPanel />}
         </div>
       )}

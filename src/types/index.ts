@@ -111,6 +111,21 @@ export interface ImgEl {
   src: string | null;
 }
 
+export interface MultiBarConfig {
+  enabled: boolean;
+  color: string;
+  height: number;
+  text: string;
+  textColor: string;
+}
+
+export interface MultiPriceConfig {
+  enabled: boolean;
+  bgColor: string;
+  textColor: string;
+  height: number;
+}
+
 export interface Template {
   id: string;
   name?: string;
@@ -126,6 +141,8 @@ export interface Template {
   testoCustom: TextEl;
   storeAmazon: ImgEl;
   storeAliexpress: ImgEl;
+  multiBar: MultiBarConfig;
+  multiPrice: MultiPriceConfig;
 }
 
 // Helpers
@@ -156,6 +173,8 @@ export function makeDefaultTemplate(id = 'tpl1'): Template {
     testoCustom: defText({ enabled: false, x: 5, y: 90, fontSize: 22 }),
     storeAmazon:     defImg({ enabled: true, x: 3, y: 3, size: 20 }),
     storeAliexpress: defImg({ enabled: true, x: 3, y: 3, size: 20 }),
+    multiBar:   { enabled: false, color: '#cc0000', height: 60, text: '', textColor: '#ffffff' },
+    multiPrice: { enabled: false, bgColor: '#1a1a1a', textColor: '#ffffff', height: 36 },
   };
 }
 
