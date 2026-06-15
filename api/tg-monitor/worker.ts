@@ -8,12 +8,15 @@ const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|
 function extractCouponFromText(text: string): { couponCode: string; textPrice: number; textOriginalPrice: number; textCountry: string } {
   // Coupon: "Coupon: ZSCADDR6" / "Coupon Sconto: SSIT12" / "✂️ Coupon➡️ H45Z8AJZ" / "codice: X" / "✂ ABCD1234"
   // I codici coupon Amazon reali contengono sempre almeno una cifra (SSIT12, H45Z8AJZ, ZSCADDR6).
-  // Parole italiane comuni come "MINIMO", "STORICO" sono escluse automaticamente.
-  const COUPON_RE = /(?=.*\d)[A-Za-z0-9]{4,20}/; // deve avere almeno un numero
+  // Lookahead: la cifra deve essere DENTRO il token catturato, non solo da qualche parte dopo.
+  // Esempio: "🎟️ Coupon: ITTP30" — (?=.*\d) matchava "Coupon" perché "30" era dopo → produceva "COUPON".
+  // Con (?=[A-Za-z0-9]{0,19}\d) il lookahead fallisce su "Coupon" (non contiene cifre proprie).
+  const COUPON_RE = /(?=[A-Za-z0-9]{0,19}\d)[A-Za-z0-9]{4,20}/; // la cifra deve stare nel token
   // Il keyword deve essere a inizio riga (flag 'm') — evita di matchare "Codice IH8226" nei titoli prodotto
+  // Seconda regex: \W* invece di \s* per consumare il variation selector U+FE0F dopo emoji (es. 🎟️)
   const couponM =
     text.match(new RegExp(`(?:^|[\\n\\r])\\s*(?:coupon|codice|code|promo)(?:\\s+(?:sconto|discount|promo|codice|code)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'im')) ??
-    text.match(new RegExp(`[✂🎟]\\s*(?:coupon|codice|code|promo)?(?:\\s+(?:sconto|discount)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'iu'));
+    text.match(new RegExp(`[✂🎟]\\W*(?:coupon|codice|code|promo)?(?:\\s+(?:sconto|discount)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'iu'));
   const couponCode = couponM ? couponM[1].toUpperCase() : '';
 
   // Prezzi con € o $ sia dopo (12,99€ / 1.234,56€) sia prima (€12.99 / $1,234.56)
