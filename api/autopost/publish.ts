@@ -1809,8 +1809,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         console.log(`[autopost] ⚠️ dest_channel non impostato per item ${queueItem?.id} — uso canale default ${channels[0]}`);
       }
 
-      // Per post multipli senza immagine composita: genera griglia server-side
-      if (isMulti && !post.generatedImage) {
+      // Per post multipli: rigenera sempre la griglia lato server (applica barra + prezzi dal template)
+      if (isMulti) {
         const multiImgUrls = (postsArr as Record<string, any>[])
           .map(p => String(p.image ?? ''))
           .filter(u => u.startsWith('http'));
@@ -1822,7 +1822,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             : await sql`SELECT config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId}) ORDER BY (user_id = ${userId}) DESC, updated_at DESC NULLS LAST LIMIT 1`.catch(() => []);
           const mTplCfg = parseTemplateCfg(mTplRows[0] ?? null);
           const mb = (mTplCfg?.multiBar  ?? {}) as Record<string, any>;
-          const mp = (mTplCfg?.multiPrice ?? {}) as Record<string, any>;
+          // Se multiPrice non è configurato nel template, mostra i prezzi di default
+          const mp = (mTplCfg?.multiPrice ?? { enabled: true }) as Record<string, any>;
 
           const multiPrices = (postsArr as Record<string, any>[]).map(p => {
             const price = Number(p.discountedPrice ?? 0);
@@ -1836,7 +1837,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             barEnabled:    !!mb.enabled,
             barSrc:        mb.src ?? null,
             barHeight:     Number(mb.height   ?? 60),
-            priceEnabled:  !!mp.enabled,
+            priceEnabled:  mp.enabled !== false,
             prices:        multiPrices,
             priceBgColor:  String(mp.bgColor   ?? '#1a1a1a'),
             priceTextColor: String(mp.textColor ?? '#ffffff'),
@@ -1844,7 +1845,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           });
           if (composita) {
             post = { ...post, generatedImage: composita };
-            console.log(`[autopost] immagine composita multi generata (${multiImgUrls.length} prodotti, bar=${!!mb.enabled && !!mb.src} price=${!!mp.enabled})`);
+            console.log(`[autopost] immagine composita multi generata (${multiImgUrls.length} prodotti, bar=${!!mb.enabled && !!mb.src} price=${mp.enabled !== false})`);
           }
         }
       }
