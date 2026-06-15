@@ -255,10 +255,8 @@ function TextLayoutSection() {
           <label className="lbl">Tipo</label>
           <select className="sel" value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value as LayoutType })}>
             <option value="normal">Normale</option>
-            <option value="historical_low">Minimo Storico</option>
             <option value="multi">Multiplo</option>
             <option value="aliexpress">AliExpress</option>
-            <option value="aliexpress_historical_low">Min. Storico AliExpress</option>
           </select>
         </div>
         <div className="fld">
