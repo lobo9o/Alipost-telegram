@@ -618,19 +618,13 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
 
   console.log(`[tg-monitor] ${userId} — processMessage ENTER: autoPublish=${autoPublish} destChannel=${destChannel ?? 'null'} urls=[${urls.join(', ').slice(0, 120)}]`);
 
-  // Se esiste un profilo canale (userId:destChannel) usa quello, altrimenti usa il base userId
-  const profileId = destChannel
-    ? await (async () => {
-        const pid = `${userId}:${destChannel}`;
-        const [pr] = await sql<{ user_id: string }[]>`SELECT user_id FROM settings WHERE user_id = ${pid} LIMIT 1`.catch(() => []);
-        console.log(`[tg-monitor] ${userId} — profileId risolto: ${pr ? pid : userId} (destChannel=${destChannel})`);
-        return pr ? pid : userId;
-      })()
-    : userId;
+  // Profilo canale: userId:destChannel. Non richiede riga settings (creata da channels.ts).
+  const profileId = destChannel ? `${userId}:${destChannel}` : userId;
 
-  // Se autopost è disabilitato nel profilo, non salvare nulla
-  const [settingsRow] = await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${profileId}`;
-  const cfgRaw = settingsRow?.data ?? {};
+  // Se autopost è disabilitato nel profilo, non salvare nulla. Fallback al profilo base se secondario senza settings.
+  const [settingsRow] = await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${profileId}`.catch(() => []);
+  const [baseRow] = profileId !== userId ? await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${userId}`.catch(() => []) : [settingsRow];
+  const cfgRaw = settingsRow?.data ?? baseRow?.data ?? {};
   const cfg = typeof cfgRaw === 'string' ? JSON.parse(cfgRaw) : cfgRaw as Record<string, any>;
   if (!cfg.attivo && autoPublish) {
     console.log(`[tg-monitor] ${profileId} — autopost disabilitato e canale su "pubblica subito", skip`);

@@ -59,6 +59,14 @@ export default withErrorHandler(async (req, res) => {
       RETURNING id
     `;
 
+    // Profilo secondario: crea riga settings con attivo=true se non esiste
+    // Necessario perché publish.ts itera solo i profili con riga in settings
+    if (userId !== baseUserId) {
+      const [baseCfg] = await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${baseUserId}`.catch(() => []);
+      const baseData = baseCfg?.data as Record<string, any> ?? {};
+      await sql`INSERT INTO settings (user_id, data) VALUES (${userId}, ${sql.json({ attivo: baseData.attivo ?? true })}) ON CONFLICT (user_id) DO NOTHING`.catch(() => {});
+    }
+
     const { reloadUser } = await import('./worker.js');
     reloadUser(baseUserId);
 
