@@ -5,7 +5,7 @@ import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanne
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
 import { resolvePostTags, aliCurrencySym, SYSTEM_TAGS } from '../utils/tagUtils';
-import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, channelInfoApi, DealProduct } from '../lib/api';
+import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, dealsCacheApi, settingsApi, channelInfoApi, multiPreviewApi, DealProduct } from '../lib/api';
 import { generatePostImage, generateMultiPostImage, generateTerminataImage, generateMultiTerminataImage, applyCurrPos, applyDecimalSep, applySconto } from '../utils/imageCompose';
 import { getProductEmoji, shortenTitle } from '../lib/titleFormat';
 
@@ -2178,6 +2178,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
   const touchStartY = useRef(0);
   const [dedupNotice, setDedupNotice] = useState<string | null>(null);
   const dedupDone = useRef(false);
+  const multiPreviewCache = useRef<Record<string, string | 'loading'>>({});
 
   // Dedup: rimuove articoli duplicati (stesso productId) al caricamento della coda
   React.useEffect(() => {
@@ -2200,6 +2201,24 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       setDedupNotice(`${toRemove.length} articol${toRemove.length === 1 ? 'o duplicato rimosso' : 'i duplicati rimossi'} dalla coda`);
     }
   }, [queue]);
+
+  // Carica anteprima composita server-side per post multipli (con barra e prezzi)
+  React.useEffect(() => {
+    const idx = Math.min(currentIdx, Math.max(0, queue.length - 1));
+    const item = queue[idx];
+    if (!item || item.tipo !== 'multi') return;
+    if (multiPreviewCache.current[item.id]) return; // già in cache o in caricamento
+    const imageUrls = (item.posts as CreatedPost[]).map(mp => mp.image).filter(Boolean);
+    if (imageUrls.length < 2) return;
+    multiPreviewCache.current[item.id] = 'loading';
+    const tplId = (item.posts[0] as CreatedPost).templateId;
+    multiPreviewApi.generate({ imageUrls, multiPosts: item.posts as CreatedPost[], templateId: tplId })
+      .then(res => {
+        multiPreviewCache.current[item.id] = res.image;
+        setQueue(q => [...q]); // forza re-render per mostrare l'immagine caricata
+      })
+      .catch(() => { delete multiPreviewCache.current[item.id]; });
+  }, [currentIdx, queue.length]); // eslint-disable-line
 
   const safeIdx = Math.min(currentIdx, Math.max(0, queue.length - 1));
 
@@ -2957,15 +2976,23 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           {/* Anteprima immagine */}
           {isMultiPost ? (
             <div style={{ margin: '0 16px 8px', borderRadius: 12, overflow: 'hidden', background: 'var(--bg3)' }}>
-              {(p as any).generatedImage
-                ? <img src={(p as any).generatedImage} alt="multi" style={{ width: '100%', display: 'block' }} />
-                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 8 }}>
+              {(() => {
+                const cached = multiPreviewCache.current[item.id];
+                if (cached && cached !== 'loading') {
+                  return <img src={cached} alt="multi" style={{ width: '100%', display: 'block' }} />;
+                }
+                if (cached === 'loading') {
+                  return <div style={{ padding: 20, textAlign: 'center', fontSize: 12, color: 'var(--t3)' }}>⏳ Generazione anteprima…</div>;
+                }
+                return (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 8 }}>
                     {(item.posts as CreatedPost[]).slice(0, 6).map(mp => (
                       <img key={mp.id} src={`/api/posts?img=${encodeURIComponent(mp.image)}`}
                         alt="" style={{ width: 'calc(33% - 4px)', aspectRatio: '1', objectFit: 'contain', background: '#fff', borderRadius: 6 }} />
                     ))}
                   </div>
-              }
+                );
+              })()}
             </div>
           ) : p?.generatedImage ? (
             <div style={{ margin: '0 16px 12px', borderRadius: 10, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.35)' }}>

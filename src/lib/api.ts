@@ -85,6 +85,12 @@ export const postsApi = {
     req<{ ok: boolean; messageId?: number; chatId?: string }>('POST', `/api/posts/${id}`, payload),
 };
 
+// ── Multi Preview ─────────────────────────────────────────────────────────────
+export const multiPreviewApi = {
+  generate: (payload: { imageUrls: string[]; multiPosts: CreatedPost[]; templateId?: string }) =>
+    req<{ image: string }>('POST', '/api/multi-preview', payload),
+};
+
 // ── Autopost Queue ────────────────────────────────────────────────────────────
 export const autopostApi = {
   list: () => req<QueueItem[]>('GET', '/api/autopost'),
