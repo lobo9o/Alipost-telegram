@@ -535,6 +535,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const rawData = settingsRow?.data ?? {};
   const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
 
+  // Profili secondari (userId:channelId): eredita settings dal profilo base se mancanti
+  const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+  if (baseUserId !== userId && !settingsRow) {
+    const [baseRow] = await sql`SELECT data FROM settings WHERE user_id = ${baseUserId}`.catch(() => [null]);
+    if (baseRow) {
+      const baseCfg = (typeof baseRow.data === 'string' ? JSON.parse(baseRow.data) : (baseRow.data ?? {})) as Record<string, any>;
+      if (!cfg.amazon) cfg.amazon = { ...baseCfg.amazon, affiliateTag: '' }; // tag NON ereditato
+      if (!cfg.aliexpress) cfg.aliexpress = { ...baseCfg.aliexpress };
+      if (!cfg.channels?.length && baseCfg.channels?.length) cfg.channels = baseCfg.channels;
+    }
+  }
+
   const envChannelOverride = process.env.CHANNEL_OVERRIDE || '';
   // Profili secondari: userId = "primaryId:channelId" — se channels non salvato usa il channelId dall'ID
   const channelFromId = userId.includes(':') ? userId.split(':')[1] : null;
@@ -553,12 +565,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     : (bodyChannel ? String(bodyChannel) : channels[0]);
   console.log('[publish] channel selected:', channel);
 
-  // Build affiliate URL
-  let affiliateUrl: string = post.sourceUrl ?? '';
-  if (!affiliateUrl && post.platform === 'amazon' && post.productId) {
+  // Build affiliate URL: per Amazon ricostruisce sempre con il tag dell'utente corrente
+  // per evitare che post copiati da altri canali usino il tag affiliato sbagliato
+  let affiliateUrl: string = '';
+  if (post.platform === 'amazon' && post.productId && cfg.amazon?.affiliateTag) {
     const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
     const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
-    affiliateUrl = `https://${domain}/dp/${post.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}`;
+    affiliateUrl = `https://${domain}/dp/${post.productId}?tag=${cfg.amazon.affiliateTag}`;
+  } else {
+    affiliateUrl = post.sourceUrl ?? '';
   }
 
   const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato} <s>{prezzo}</s>\n🏷️ Sconto: -{sconto}\n\n{custom}`;
