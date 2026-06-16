@@ -750,6 +750,12 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
       finalOriginalPrice = 0;
     }
 
+    // Fallback: se il prezzo precedente non è stato trovato, stima +33% del prezzo scontato
+    if (finalOriginalPrice <= 0 && finalDiscountedPrice > 0) {
+      finalOriginalPrice = parseFloat((finalDiscountedPrice * 1.33).toFixed(2));
+      console.log(`[tg-monitor] ${userId} — prezzo precedente non trovato, fallback +33%: scontato=${finalDiscountedPrice} → stimato=${finalOriginalPrice}`);
+    }
+
     if (finalDiscountedPrice <= 0) {
       console.log(`[tg-monitor] ${userId} — skip: prodotto non disponibile (prezzo 0) — "${product.title?.slice(0, 50) ?? product.productId}"`);
       continue;
