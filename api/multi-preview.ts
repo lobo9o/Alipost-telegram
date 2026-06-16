@@ -66,7 +66,7 @@ async function generateComposite(
           const priceBg  = opts.priceBgColor  ?? '#1a1a1a';
           const priceTxt = opts.priceTextColor ?? '#ffffff';
           const pfs = Math.round(Math.min(priceH * 0.9, cellSize * 0.075));
-          const pFont = escXml(opts.fontFamily ?? 'Arial,sans-serif');
+          const pFont = escXml(opts.fontFamily ?? 'Arial');
           const cellW = cellSize;
           const svgPrice = `<svg xmlns="http://www.w3.org/2000/svg" width="${cellW}" height="${priceH}">
             <rect width="${cellW}" height="${priceH}" fill="${escXml(priceBg)}"/>
@@ -123,7 +123,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     priceBgColor:  String(mpr.bgColor   ?? '#1a1a1a'),
     priceTextColor: String(mpr.textColor ?? '#ffffff'),
     priceHeight:   Number(mpr.height    ?? 36),
-    fontFamily:    String(mpr.fontFamily ?? 'Arial,sans-serif'),
+    fontFamily:    String(mpr.fontFamily ?? 'Arial'),
   });
 
   if (!image) { res.status(500).json({ error: 'generazione fallita' }); return; }

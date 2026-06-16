@@ -1030,7 +1030,7 @@ function MultiPreviewer({ tpl }: { tpl: Template }) {
             background: mp.bgColor ?? '#1a1a1a',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ color: mp.textColor ?? '#ffffff', fontSize: Math.max(9, Math.round(Math.min(priceHpx * 0.9, cellSizePx * 0.075))), fontWeight: 700, fontFamily: mp.fontFamily ?? 'Arial,sans-serif' }}>€12,99</span>
+            <span style={{ color: mp.textColor ?? '#ffffff', fontSize: Math.max(9, Math.round(Math.min(priceHpx * 0.9, cellSizePx * 0.075))), fontWeight: 700, fontFamily: mp.fontFamily ?? 'Arial' }}>€12,99</span>
           </div>
         );
       })}
@@ -1102,15 +1102,10 @@ function MultipliPanel({ tpl, onUpdate }: { tpl: Template; onUpdate: (ch: Partia
           </div>
           <div className="fld">
             <label className="lbl">Font</label>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-              {(['Arial,sans-serif', 'Impact,Arial Black,sans-serif', 'Georgia,serif', '"Courier New",monospace'] as const).map(f => (
-                <button key={f} className={`btn bsm ${(mp.fontFamily ?? 'Arial,sans-serif') === f ? 'bp' : 'bgh'}`}
-                  style={{ fontFamily: f, minWidth: 70 }}
-                  onClick={() => onUpdate({ multiPrice: { ...mp, fontFamily: f } })}>
-                  {f.split(',')[0].replace(/"/g, '')}
-                </button>
-              ))}
-            </div>
+            <select className="sel" value={mp.fontFamily ?? 'Arial'}
+              onChange={e => onUpdate({ multiPrice: { ...mp, fontFamily: e.target.value } })}>
+              {FONTS.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+            </select>
           </div>
         </>
       )}
