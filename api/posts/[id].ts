@@ -608,7 +608,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       : await sql`SELECT config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId}) ORDER BY (user_id = ${userId}) DESC, updated_at DESC NULLS LAST LIMIT 1`.catch(() => [null]);
     const tplCfg = tplRow ? (typeof tplRow.config === 'string' ? JSON.parse(tplRow.config) : (tplRow.config ?? {})) : null;
     const mb = (tplCfg?.multiBar ?? {}) as Record<string, any>;
-    const mpr = (tplCfg?.multiPrice ?? { enabled: true }) as Record<string, any>;
+    const mpr = (tplCfg?.multiPrice ?? {}) as Record<string, any>;
 
     const multiPostsArr: any[] = Array.isArray(req.body?.multiPosts) ? req.body.multiPosts : [];
     const multiPrices = multiPostsArr.map((mp: any) => {
@@ -623,7 +623,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       barEnabled:    !!mb.enabled,
       barSrc:        mb.src ?? null,
       barHeight:     Number(mb.height   ?? 60),
-      priceEnabled:  mpr.enabled !== false,
+      priceEnabled:  !!mpr.enabled,
       prices:        multiPrices,
       priceBgColor:  String(mpr.bgColor   ?? '#1a1a1a'),
       priceTextColor: String(mpr.textColor ?? '#ffffff'),
@@ -631,7 +631,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     });
     if (composita) {
       generatedImage = composita;
-      console.log(`[publish] composita multi generata server-side (${multiImageUrls.length} img, bar=${!!mb.enabled && !!mb.src} price=${mpr.enabled !== false})`);
+      console.log(`[publish] composita multi generata server-side (${multiImageUrls.length} img, bar=${!!mb.enabled && !!mb.src} price=${!!mpr.enabled})`);
     }
   }
 

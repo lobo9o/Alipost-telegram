@@ -98,7 +98,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     : await sql`SELECT config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId}) ORDER BY (user_id = ${userId}) DESC, updated_at DESC NULLS LAST LIMIT 1`.catch(() => [null]);
   const tplCfg = tplRow ? (typeof tplRow.config === 'string' ? JSON.parse(tplRow.config) : (tplRow.config ?? {})) : null;
   const mb  = (tplCfg?.multiBar   ?? {}) as Record<string, any>;
-  const mpr = (tplCfg?.multiPrice ?? { enabled: true }) as Record<string, any>;
+  const mpr = (tplCfg?.multiPrice ?? {}) as Record<string, any>;
 
   // Carica settings per valuta AliExpress
   const [settingsRow] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`.catch(() => [null]);
@@ -117,7 +117,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     barEnabled:    !!mb.enabled,
     barSrc:        mb.src ?? null,
     barHeight:     Number(mb.height   ?? 60),
-    priceEnabled:  mpr.enabled !== false,
+    priceEnabled:  !!mpr.enabled,
     prices,
     priceBgColor:  String(mpr.bgColor   ?? '#1a1a1a'),
     priceTextColor: String(mpr.textColor ?? '#ffffff'),
