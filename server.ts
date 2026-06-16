@@ -47,6 +47,7 @@ async function main() {
     tgMonitorAuthHandler,
     tgMonitorChannelsHandler,
     channelInfoHandler,
+    multiPreviewHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -68,6 +69,7 @@ async function main() {
     loadHandler('api/tg-monitor/auth.ts'),
     loadHandler('api/tg-monitor/channels.ts'),
     loadHandler('api/channel-info.ts'),
+    loadHandler('api/multi-preview.ts'),
   ]);
 
   const app = express();
@@ -117,6 +119,7 @@ async function main() {
   app.all('/api/tg-monitor/channels', tgMonitorChannelsHandler);
   app.all('/api/tg-monitor/channels/:id', withId(tgMonitorChannelsHandler));
   app.all('/api/channel-info', channelInfoHandler);
+  app.all('/api/multi-preview', multiPreviewHandler);
 
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
