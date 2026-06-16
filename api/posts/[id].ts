@@ -7,7 +7,7 @@ async function generateMultiImageServer(
   imageUrls: string[],
   opts: {
     barEnabled?: boolean; barSrc?: string | null; barHeight?: number;
-    priceEnabled?: boolean; prices?: string[]; priceBgColor?: string; priceTextColor?: string; priceHeight?: number;
+    priceEnabled?: boolean; prices?: string[]; priceBgColor?: string; priceTextColor?: string; priceHeight?: number; fontFamily?: string;
   } = {}
 ): Promise<string | null> {
   const validUrls = imageUrls.filter(u => u && String(u).startsWith('http'));
@@ -63,11 +63,12 @@ async function generateMultiImageServer(
           const priceText = opts.prices?.[i] ?? '';
           const priceBg  = opts.priceBgColor  ?? '#1a1a1a';
           const priceTxt = opts.priceTextColor ?? '#ffffff';
-          const pfs = Math.round(priceH * 0.58);
+          const pfs = Math.round(Math.min(priceH * 0.9, cellSize * 0.075));
+          const pFont = escXml(opts.fontFamily ?? 'Arial,sans-serif');
           const cellW = cellSize;
           const svgPrice = `<svg xmlns="http://www.w3.org/2000/svg" width="${cellW}" height="${priceH}">
             <rect width="${cellW}" height="${priceH}" fill="${escXml(priceBg)}"/>
-            ${priceText ? `<text x="${cellW / 2}" y="${Math.round(priceH * 0.75)}" font-family="Arial,sans-serif" font-size="${pfs}px" font-weight="bold" fill="${escXml(priceTxt)}" text-anchor="middle">${escXml(priceText)}</text>` : ''}
+            ${priceText ? `<text x="${cellW / 2}" y="${Math.round(priceH * 0.75)}" font-family="${pFont}" font-size="${pfs}px" font-weight="bold" fill="${escXml(priceTxt)}" text-anchor="middle">${escXml(priceText)}</text>` : ''}
           </svg>`;
           composites.push({ input: Buffer.from(svgPrice), left: cellX, top: cellY + cellSize });
         }
@@ -628,6 +629,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       priceBgColor:  String(mpr.bgColor   ?? '#1a1a1a'),
       priceTextColor: String(mpr.textColor ?? '#ffffff'),
       priceHeight:   Number(mpr.height    ?? 36),
+      fontFamily:    String(mpr.fontFamily ?? 'Arial,sans-serif'),
     });
     if (composita) {
       generatedImage = composita;

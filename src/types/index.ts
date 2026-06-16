@@ -122,6 +122,7 @@ export interface MultiPriceConfig {
   bgColor: string;
   textColor: string;
   height: number;
+  fontFamily?: string;
 }
 
 export interface Template {
