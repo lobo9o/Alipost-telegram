@@ -65,7 +65,7 @@ async function generateComposite(
           const priceText = opts.prices?.[i] ?? '';
           const priceBg  = opts.priceBgColor  ?? '#1a1a1a';
           const priceTxt = opts.priceTextColor ?? '#ffffff';
-          const pfs = Math.round(Math.min(priceH * 0.9, cellSize * 0.075));
+          const pfs = Math.round(Math.min(priceH * 0.9, cellSize * 0.10));
           const pFont = escXml(opts.fontFamily ?? 'Arial');
           const cellW = cellSize;
           const svgPrice = `<svg xmlns="http://www.w3.org/2000/svg" width="${cellW}" height="${priceH}">

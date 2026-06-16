@@ -1030,7 +1030,7 @@ function MultiPreviewer({ tpl }: { tpl: Template }) {
             background: mp.bgColor ?? '#1a1a1a',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ color: mp.textColor ?? '#ffffff', fontSize: Math.max(9, Math.round(Math.min(priceHpx * 0.9, cellSizePx * 0.075))), fontWeight: 700, fontFamily: mp.fontFamily ?? 'Arial' }}>€12,99</span>
+            <span style={{ color: mp.textColor ?? '#ffffff', fontSize: Math.max(9, Math.round(Math.min(priceHpx * 0.9, cellSizePx * 0.10))), fontWeight: 700, fontFamily: mp.fontFamily ?? 'Arial' }}>€12,99</span>
           </div>
         );
       })}
