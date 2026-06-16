@@ -231,17 +231,31 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
       }
     }
 
-    // Prezzo alternativo dal buybox: apex-pricetopay-value size="l" con ≥2 opzioni
-    // (es. prezzo con coupon S&S vs senza, prezzo con promozione vs senza)
-    // Quando esistono due opzioni, la più alta è il prezzo "senza sconto extra" da mostrare nel post.
-    // Gira SEMPRE, non solo se snsSection — la pagina può non avere keyword S&S ma avere due opzioni prezzo.
+    // Prezzo alternativo dal buybox: apex-pricetopay-value size="l" con ≥2 opzioni.
+    // Due scenari possibili:
+    //  A) S&S: [prezzo_singolo, prezzo_sns] → max = prezzo reale da usare
+    //  B) Offerta/Prime Day: [prezzo_offerta, prezzo_barrato] → API già corretta, max = riferimento barrato
+    // Distinzione: se il prezzo API corrisponde a uno dei valori apex, siamo nel caso B.
     const apexLPrices = [...html.matchAll(/apex-pricetopay-value[^>]*data-a-size="l"[^>]*><span class="a-offscreen">([\d,]+€)/gi)]
       .map(m => parsePriceStr(m[1])).filter(p => p > 0);
     if (apexLPrices.length >= 2) {
       const maxApex = Math.max(...apexLPrices);
-      if (maxApex > scrapedPrice) {
-        console.log(`[product] apex max opzione prezzo: ${maxApex} (era ${scrapedPrice}) | opzioni: ${apexLPrices.join(',')}`);
-        scrapedPrice = maxApex;
+      const apiMatchesAnApex = discountedPrice > 0 &&
+        apexLPrices.some(p => Math.abs(p - discountedPrice) / discountedPrice < 0.05);
+      if (apiMatchesAnApex) {
+        // Caso B: API ha già il prezzo corretto; il max è il prezzo di riferimento barrato
+        if (maxApex > scrapedOrigPrice) {
+          console.log(`[product] apex: prezzo barrato (riferimento) = ${maxApex} | prezzo corrente API = ${discountedPrice} | opzioni: ${apexLPrices.join(',')}`);
+          scrapedOrigPrice = maxApex;
+        }
+        // Se a-offscreen aveva già letto il prezzo barrato come scrapedPrice, correggilo
+        if (scrapedPrice > discountedPrice * 1.05) scrapedPrice = discountedPrice;
+      } else {
+        // Caso A: S&S — il max è il prezzo acquisto singolo (reale)
+        if (maxApex > scrapedPrice) {
+          console.log(`[product] apex max opzione prezzo (S&S): ${maxApex} (era ${scrapedPrice}) | opzioni: ${apexLPrices.join(',')}`);
+          scrapedPrice = maxApex;
+        }
       }
     }
 
