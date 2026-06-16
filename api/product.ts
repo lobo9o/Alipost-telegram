@@ -119,14 +119,15 @@ async function creatorsGetItem(
 }
 
 function parsePriceStr(s: string): number {
-  // Rimuove simboli valuta, spazi, &nbsp; poi normalizza separatore decimale
   const clean = s.replace(/[€£$ \s]/g, '').trim();
-  // Formato europeo "29,99" → "29.99", formato USA "29.99" già ok
-  // Se ci sono sia punto che virgola (1.234,56) rimuove il punto migliaia
-  const normalized = /\d\.\d{3},\d{2}/.test(clean)
-    ? clean.replace('.', '').replace(',', '.')
-    : clean.replace(',', '.');
-  return parseFloat(normalized) || 0;
+  // Formato EU con separatore migliaia: 1.234,56 → 1234.56
+  if (/\d\.\d{3},\d{2}/.test(clean))
+    return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0;
+  // Formato anglosassone con separatore migliaia: 1,234.56 → 1234.56
+  if (/\d,\d{3}\.\d{2}/.test(clean))
+    return parseFloat(clean.replace(/,/g, '')) || 0;
+  // Semplice EU senza migliaia: 29,99 → 29.99
+  return parseFloat(clean.replace(',', '.')) || 0;
 }
 
 async function scrapeAmazonPage(asin: string, domain: string): Promise<{
@@ -209,8 +210,8 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
 
     // Prezzo di riferimento barrato (basisPrice / Prezzo di listino) — due strategie:
     // 1. a-text-strike nel blocco basisPrice (layout con strikethrough esplicito)
-    const basisStrikeM = html.match(/basisPrice.{0,100}Prezzo\s+di\s+listino.{0,200}a-text-strike[^>]*>\s*([\d]+[,.][\d]{1,2})/si)
-      ?? html.match(/Prezzo\s+di\s+listino.{0,200}a-text-strike[^>]*>\s*([\d]+[,.][\d]{1,2})/si);
+    const basisStrikeM = html.match(/basisPrice.{0,100}Prezzo\s+di\s+listino.{0,200}a-text-strike[^>]*>\s*([\d.,]+)/si)
+      ?? html.match(/Prezzo\s+di\s+listino.{0,200}a-text-strike[^>]*>\s*([\d.,]+)/si);
     if (basisStrikeM) {
       const basisPrice = parsePriceStr(basisStrikeM[1]);
       if (basisPrice > scrapedPrice) {
@@ -221,7 +222,7 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
     // 2. data-a-color="secondary" — il prezzo di riferimento/confronto mostrato in grigio
     //    (usato sia per "Prezzo di listino" che per "Prezzo più basso ultimi 30gg")
     if (scrapedOrigPrice <= scrapedPrice) {
-      const secondaryM = html.match(/data-a-color="secondary"[^>]*>.*?class="a-offscreen">([\d,]+€)/si);
+      const secondaryM = html.match(/data-a-color="secondary"[^>]*>.*?class="a-offscreen">([\d.,]+€)/si);
       if (secondaryM) {
         const secPrice = parsePriceStr(secondaryM[1]);
         if (secPrice > scrapedPrice) {
@@ -236,7 +237,7 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
     //  A) S&S: [prezzo_singolo, prezzo_sns] → max = prezzo reale da usare
     //  B) Offerta/Prime Day: [prezzo_offerta, prezzo_barrato] → API già corretta, max = riferimento barrato
     // Distinzione: se il prezzo API corrisponde a uno dei valori apex, siamo nel caso B.
-    const apexLPrices = [...html.matchAll(/apex-pricetopay-value[^>]*data-a-size="l"[^>]*><span class="a-offscreen">([\d,]+€)/gi)]
+    const apexLPrices = [...html.matchAll(/apex-pricetopay-value[^>]*data-a-size="l"[^>]*><span class="a-offscreen">([\d.,]+€)/gi)]
       .map(m => parsePriceStr(m[1])).filter(p => p > 0);
     if (apexLPrices.length >= 2) {
       const maxApex = Math.max(...apexLPrices);
@@ -262,8 +263,8 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
     // Legacy S&S: sns-base-price / snsSavings (mantenuto per compatibilità layout vecchi)
     const snsSection = html.includes('subscribeAndSave_feature_div') || html.includes('sns-base-price') || html.includes('snsSavings') || html.includes('subscribe_save');
     if (snsSection) {
-      const snsBaseM = html.match(/id="sns-base-price[^"]*"[^>]*>[^€]*€\s*([\d]+[,.][\d]{2})/i)
-        ?? html.match(/class="[^"]*snsSavings[^"]*"[^€]*€\s*([\d]+[,.][\d]{2})/i);
+      const snsBaseM = html.match(/id="sns-base-price[^"]*"[^>]*>[^€]*€\s*([\d.,]+)/i)
+        ?? html.match(/class="[^"]*snsSavings[^"]*"[^€]*€\s*([\d.,]+)/i);
       if (snsBaseM) {
         const basePrice = parsePriceStr(snsBaseM[1]);
         if (basePrice > scrapedPrice) {
@@ -271,7 +272,7 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
           scrapedPrice = basePrice;
         }
       } else {
-        const snsPriceM = html.match(/Prezzo[^€<]{0,30}€\s*([\d]+[,.][\d]{2})/);
+        const snsPriceM = html.match(/Prezzo[^€<]{0,30}€\s*([\d.,]+)/);
         if (snsPriceM) {
           const basePrice = parsePriceStr(snsPriceM[1]);
           if (basePrice > scrapedPrice && scrapedPrice > 0) {
