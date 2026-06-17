@@ -800,20 +800,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
     }
 
-    // Se lo scraping trova un prezzo INFERIORE a quello dell'API → l'API ha dati stale/errati
-    // (es. Amazon aggiornato il prezzo ma la PA API non si è ancora sincronizzata)
-    if (scrapedPrice > 0 && scrapedPrice < finalDiscountedPrice * 0.97) {
-      console.log(`[product] ${resolvedAsin}: prezzo scraped (${scrapedPrice}) < API (${finalDiscountedPrice}) — API stale, uso prezzo pagina`);
-      if (finalOriginalPrice <= finalDiscountedPrice && savingsPct > 0) {
-        // Stima il prezzo originale dalla percentuale di sconto dichiarata dall'API
-        finalOriginalPrice = Math.round(scrapedPrice / (1 - savingsPct / 100) * 100) / 100;
-        console.log(`[product] ${resolvedAsin}: prezzo originale stimato da savingsPct ${savingsPct}%: ${finalOriginalPrice}`);
-      } else if (finalOriginalPrice <= finalDiscountedPrice) {
-        finalOriginalPrice = finalDiscountedPrice; // vecchio prezzo API come riferimento
-      }
-      finalDiscountedPrice = scrapedPrice;
-    }
-
     if (discountedPrice === 0) {
       console.warn('[product] prezzo zero da API per ASIN', resolvedAsin, '| listings count:', allListings.length);
       if (scrapedPrice > 0) {
