@@ -590,6 +590,10 @@ async function fetchProduct(userId: string, url: string, headers: Record<string,
     `http://localhost:${serverPort}/api/product`,
     { method: 'POST', headers, body: JSON.stringify({ platform, url }) }
   );
+  if (productRes.status === 429) {
+    console.warn(`[tg-monitor] /api/product rate-limited (429) per ${url}`);
+    return { _rateLimited: true };
+  }
   if (!productRes.ok) {
     console.warn(`[tg-monitor] /api/product ${productRes.status} per ${url}`);
     return null;
@@ -647,8 +651,18 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     const p = await fetchProduct(profileId, u, headers);
     return p ? { ...p, _urlIdx: urlIdx } : null;
   }));
-  const rawProducts = rawProductsRaw.filter(Boolean);
-  if (!rawProducts.length) return;
+  const isRateLimited = rawProductsRaw.some((p: any) => p?._rateLimited);
+  const rawProducts = rawProductsRaw.filter((p: any) => p && !p._rateLimited);
+  if (!rawProducts.length) {
+    if (isRateLimited) {
+      // Rimuovi dal dedup in modo che il retry possa passare
+      urlSeen.delete(urlDedupKey);
+      console.warn(`[tg-monitor] ${profileId} — Creators API rate limited, retry in 60s per: ${urlKey.slice(0, 80)}`);
+      setTimeout(() => processMessage(userId, urls, autoPublish, messageText, destChannel)
+        .catch(e => console.error('[tg-monitor] errore retry rate-limit:', e.message)), 60_000);
+    }
+    return;
+  }
 
   // Deduplica per productId/ASIN: due URL diversi (es. amzlink.to + amazon.it/dp/ con ref= differente)
   // possono risolvere allo stesso prodotto e causare post duplicati

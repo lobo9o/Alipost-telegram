@@ -739,7 +739,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       return;
     }
 
-    const data = await creatorsGetItem(resolvedAsin, credentialId, credentialSecret, apiTag, version, marketplaceDomain) as any;
+    let data: any;
+    try {
+      data = await creatorsGetItem(resolvedAsin, credentialId, credentialSecret, apiTag, version, marketplaceDomain);
+    } catch (e: any) {
+      if (e.message?.includes('(429)')) {
+        res.status(429).json({ error: 'rate_limit', message: 'Amazon Creators API rate limit. Retry tra qualche minuto.' });
+        return;
+      }
+      throw e;
+    }
 
     // Supporto risposta camelCase e PascalCase
     const itemsResult = pick(data, 'itemsResult', 'ItemsResult') as any;
