@@ -2108,7 +2108,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             const builtCaption = termLayoutRow?.body
               ? buildMessage(String(termLayoutRow.body), pub as any, affUrl)
               : '';
-            termCaption = builtCaption ? `${builtCaption}\n\n${telegramText}`.trim() : telegramText;
+            termCaption = builtCaption ? `${telegramText}\n\n${builtCaption}`.trim() : telegramText;
           }
           // telegramMode === 'keep' (default) → termCaption rimane undefined, non cambia il testo
 
