@@ -186,8 +186,13 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
     let scrapedOrigPrice = 0;
 
     // 1. JSON-LD offers (più affidabile)
-    const ldM = html.match(/"@type"\s*:\s*"Offer"[^}]*?"price"\s*:\s*"?([\d]+(?:[.,][\d]+)?)"?/);
-    if (ldM) scrapedPrice = parsePriceStr(ldM[1]);
+    // Nota: [\d]+(?:[.,][\d]+)* con * (non ?) per catturare prezzi EU tipo "1.409,00" completi
+    const ldM = html.match(/"@type"\s*:\s*"Offer"[^}]*?"price"\s*:\s*"?([\d]+(?:[.,][\d]+)*)"?/);
+    if (ldM) {
+      const parsed = parsePriceStr(ldM[1]);
+      // Ignora valori palesemente sbagliati (< 5€): JSON-LD potrebbe aver catturato solo parte del prezzo EU
+      if (parsed >= 5) scrapedPrice = parsed;
+    }
 
     // 2. .a-offscreen — span accessibili dentro .a-price (primo=scontato, secondo=originale)
     if (scrapedPrice === 0) {
