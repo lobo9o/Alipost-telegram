@@ -1030,7 +1030,7 @@ function MultiPreviewer({ tpl }: { tpl: Template }) {
             background: mp.bgColor ?? '#1a1a1a',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ color: mp.textColor ?? '#ffffff', fontSize: Math.max(9, Math.round(Math.min(priceHpx * 0.9, cellSizePx * 0.10))), fontWeight: 700, fontFamily: mp.fontFamily ?? 'Arial' }}>€12,99</span>
+            <span style={{ color: mp.textColor ?? '#ffffff', fontSize: Math.max(9, Math.round(Math.min(priceHpx * 0.9, cellSizePx * 0.10))), fontWeight: 700, fontFamily: mp.fontFamily ?? 'Arial' }}>{mp.currencyPos === 'after' ? '12,99€' : '€12,99'}</span>
           </div>
         );
       })}
@@ -1059,7 +1059,7 @@ function MultipliPanel({ tpl, onUpdate }: { tpl: Template; onUpdate: (ch: Partia
         <>
           <div className="fld">
             <label className="lbl">Altezza ({barH}px) — immagine consigliata: 1024 × {barH}px</label>
-            <input type="range" min={30} max={120} value={barH}
+            <input type="range" min={30} max={150} value={barH}
               onChange={e => onUpdate({ multiBar: { ...mb, height: Number(e.target.value) } })}
               style={{ width: '100%', marginTop: 10 }} />
           </div>
@@ -1106,6 +1106,15 @@ function MultipliPanel({ tpl, onUpdate }: { tpl: Template; onUpdate: (ch: Partia
               onChange={e => onUpdate({ multiPrice: { ...mp, fontFamily: e.target.value } })}>
               {FONTS.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
             </select>
+          </div>
+          <div className="fld">
+            <label className="lbl">Simbolo valuta</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className={`btn bsm ${(mp.currencyPos ?? 'before') === 'before' ? 'bp' : 'bgh'}`}
+                style={{ flex: 1 }} onClick={() => onUpdate({ multiPrice: { ...mp, currencyPos: 'before' } })}>€ Sinistra</button>
+              <button className={`btn bsm ${mp.currencyPos === 'after' ? 'bp' : 'bgh'}`}
+                style={{ flex: 1 }} onClick={() => onUpdate({ multiPrice: { ...mp, currencyPos: 'after' } })}>Destra €</button>
+            </div>
           </div>
         </>
       )}

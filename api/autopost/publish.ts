@@ -774,7 +774,7 @@ async function generateMultiImageServer(
     const cols = n <= 3 ? n : n <= 4 ? 2 : 3;
     const rows = Math.ceil(n / cols);
     const cellSize = Math.round(1024 / cols);
-    const barH   = opts.barEnabled   ? Math.max(30, Math.min(120, Number(opts.barHeight   ?? 60))) : 0;
+    const barH   = opts.barEnabled   ? Math.max(30, Math.min(150, Number(opts.barHeight   ?? 60))) : 0;
     const priceH = opts.priceEnabled ? Math.max(24, Math.min(64,  Number(opts.priceHeight ?? 36))) : 0;
     const canvasW = cellSize * cols;
     const canvasH = barH + (cellSize + priceH) * rows;
@@ -1826,12 +1826,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           // Se multiPrice non è configurato nel template, mostra i prezzi di default
           const mp = (mTplCfg?.multiPrice ?? {}) as Record<string, any>;
 
+          const mpCurrencyPos: 'before' | 'after' = mp.currencyPos === 'after' ? 'after' : 'before';
           const multiPrices = (postsArr as Record<string, any>[]).map(p => {
             const price = Number(p.discountedPrice ?? 0);
             if (price <= 0) return '';
             const sym = p.platform === 'aliexpress'
               ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
-            return `${sym}${price.toFixed(2).replace('.', ',')}`;
+            const formatted = price.toFixed(2).replace('.', ',');
+            return mpCurrencyPos === 'after' ? `${formatted}${sym}` : `${sym}${formatted}`;
           });
 
           const composita = await generateMultiImageServer(multiImgUrls, {

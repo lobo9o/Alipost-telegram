@@ -123,6 +123,7 @@ export interface MultiPriceConfig {
   textColor: string;
   height: number;
   fontFamily?: string;
+  currencyPos?: 'before' | 'after';
 }
 
 export interface Template {
