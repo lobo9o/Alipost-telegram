@@ -769,7 +769,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const listingType = (l: any) => String(pick(l, 'type', 'Type') ?? '').toLowerCase();
     const isSnS = (l: any) => listingType(l).includes('subscribe');
     const regularListings = allListings.filter(l => !isSnS(l));
-    const listings        = regularListings[0] ?? allListings[0];
+    // Con più listing non-S&S (es. tipo vuoto), prendi quello con prezzo più alto.
+    // Evita di prendere listing con prezzo anomalo basso che Amazon a volte restituisce come [0].
+    const getListingAmt = (l: any) => (pick(pick(pick(l, 'price', 'Price'), 'money', 'Money'), 'amount', 'Amount') as number) ?? 0;
+    const listings = regularListings.length > 1
+      ? regularListings.reduce((best, curr) => getListingAmt(curr) > getListingAmt(best) ? curr : best)
+      : (regularListings[0] ?? allListings[0]);
     if (regularListings.length < allListings.length) {
       console.log(`[product] ${resolvedAsin}: esclusi ${allListings.length - regularListings.length} listing S&S (types: ${allListings.map(listingType).join(',')})`);
     } else {
@@ -800,6 +805,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       console.log(`[product] ${resolvedAsin}: prezzo API (${discountedPrice}) < scraping (${scrapedPrice}) — probabile S&S, uso prezzo pagina`);
       finalDiscountedPrice = scrapedPrice;
       finalOriginalPrice   = scrapedOrigPrice > scrapedPrice ? scrapedOrigPrice : scrapedPrice;
+    }
+    // Cross-validation: se il prezzo API è meno della metà di quello scraped, l'API ha restituito
+    // un listing sbagliato (es. variante diversa, offerta anomala). Usa il prezzo della pagina.
+    if (discountedPrice > 0 && scrapedPrice > discountedPrice * 2 && scrapedPrice >= 10) {
+      console.log(`[product] ${resolvedAsin}: prezzo API (${discountedPrice}) molto < scraping (${scrapedPrice}) — listing anomalo, uso prezzo pagina`);
+      finalDiscountedPrice = scrapedPrice;
+      finalOriginalPrice   = scrapedOrigPrice > scrapedPrice ? scrapedOrigPrice : finalOriginalPrice;
     }
     // Se lo scraping ha trovato un prezzo barrato (basisPrice) significativamente maggiore
     // del prezzo API, l'API non include il savingBasis — usiamo i prezzi della pagina
