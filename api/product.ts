@@ -769,16 +769,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const listingType = (l: any) => String(pick(l, 'type', 'Type') ?? '').toLowerCase();
     const isSnS = (l: any) => listingType(l).includes('subscribe');
     const regularListings = allListings.filter(l => !isSnS(l));
-    // Con più listing non-S&S (es. tipo vuoto), prendi quello con prezzo più alto.
-    // Evita di prendere listing con prezzo anomalo basso che Amazon a volte restituisce come [0].
     const getListingAmt = (l: any) => (pick(pick(pick(l, 'price', 'Price'), 'money', 'Money'), 'amount', 'Amount') as number) ?? 0;
-    const listings = regularListings.length > 1
-      ? regularListings.reduce((best, curr) => getListingAmt(curr) > getListingAmt(best) ? curr : best)
-      : (regularListings[0] ?? allListings[0]);
+    // lightning_deal ha priorità: è il prezzo promozionale attivo — non va scartato col "prendi il massimo"
+    const lightningDealListing = regularListings.find(l => listingType(l) === 'lightning_deal');
+    const isLightningDeal = lightningDealListing !== undefined;
+    const listings = lightningDealListing ??
+      (regularListings.length > 1
+        ? regularListings.reduce((best, curr) => getListingAmt(curr) > getListingAmt(best) ? curr : best)
+        : (regularListings[0] ?? allListings[0]));
     if (regularListings.length < allListings.length) {
-      console.log(`[product] ${resolvedAsin}: esclusi ${allListings.length - regularListings.length} listing S&S (types: ${allListings.map(listingType).join(',')})`);
+      console.log(`[product] ${resolvedAsin}: esclusi ${allListings.length - regularListings.length} listing S&S (types: ${allListings.map(listingType).join(',')})${isLightningDeal ? ' [usa lightning_deal]' : ''}`);
     } else {
-      console.log(`[product] ${resolvedAsin}: listing types: ${allListings.map(listingType).join(',')}`);
+      console.log(`[product] ${resolvedAsin}: listing types: ${allListings.map(listingType).join(',')}${isLightningDeal ? ' [usa lightning_deal]' : ''}`);
     }
     const priceObj        = pick(listings, 'price', 'Price') as any;
     const discountedPrice = (pick(pick(priceObj, 'money', 'Money'), 'amount', 'Amount') as number) ?? 0;
@@ -824,6 +826,21 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           finalDiscountedPrice = scrapedPrice;
         }
       }
+    }
+    // Per lightning_deal il savingBasis API è già il prezzo "normale" corretto.
+    // Lo scraping può trovare il "Prezzo di listino" (MSRP gonfiato) come scrapedOrigPrice —
+    // in quel caso ripristiniamo il savingBasis come riferimento.
+    if (isLightningDeal && savingBasisAmt > 0 && finalOriginalPrice > savingBasisAmt * 1.1) {
+      console.log(`[product] ${resolvedAsin}: lightning_deal — ripristino savingBasis (${savingBasisAmt}) come prezzo orig (era ${finalOriginalPrice})`);
+      finalOriginalPrice = savingBasisAmt;
+    }
+    // Fallback savingBasis: se lo scraping non trova il prezzo e il prezzo API è molto < savingBasis,
+    // probabilmente è un listing warehouse/usato — usa savingBasis come prezzo reale del prodotto nuovo.
+    if (finalDiscountedPrice === discountedPrice && scrapedPrice === 0 &&
+        savingBasisAmt > discountedPrice * 5 && savingBasisAmt > 200) {
+      console.log(`[product] ${resolvedAsin}: listing anomalo (warehouse?) — prezzo API (${discountedPrice}) << savingBasis (${savingBasisAmt}), uso savingBasis`);
+      finalDiscountedPrice = savingBasisAmt;
+      finalOriginalPrice   = savingBasisAmt;
     }
 
     if (discountedPrice === 0) {
