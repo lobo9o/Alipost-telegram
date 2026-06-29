@@ -1018,8 +1018,9 @@ function buildKeyboard(
       const colorMatch = btn.match(/^#([grb])\s+/);
       const style = colorMatch ? COLOR_MAP[colorMatch[1]] : undefined;
       const clean = colorMatch ? btn.slice(colorMatch[0].length) : btn;
-      // Accetta sia " - " (spazio-trattino-spazio) sia "emoji- " (trattino senza spazio prima)
-      const sepMatch = clean.match(/^(.*)\s*-\s+(.+)$/);
+      // Separa testo da URL/tag: cerca l'ultimo "-" prima di un tag {xxx} o URL http
+      const sepMatch = clean.match(/^(.*)\s*-\s*(\{[a-zA-Z_][a-zA-Z0-9_]*\}|https?:\/\/.+)$/)
+        ?? clean.match(/^(.*)\s+-\s+(.+)$/);
       if (!sepMatch) return null;
       const text = sepMatch[1].trim();
       let url = sepMatch[2].trim();

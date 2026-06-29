@@ -311,6 +311,8 @@ function TextLayoutSection() {
 
 const KB_TAG_LABELS: Record<string, string> = {
   '{link}': 'Link offerta',
+  '{addtocart}': 'Aggiungi al carrello',
+  '{buynow}': 'Checkout diretto',
   '{whatsapp}': 'Condivisione WhatsApp',
   '{poll}': 'Sondaggio 👍👎',
 };
@@ -322,9 +324,11 @@ function parseKbButton(raw: string): { text: string; color?: string; url: string
   let color: string | undefined;
   const colorMatch = s.match(/^#([grb])\s+/);
   if (colorMatch) { color = COLOR_MAP[colorMatch[1]]; s = s.slice(colorMatch[0].length); }
-  const lastDash = s.lastIndexOf(' - ');
-  if (lastDash === -1) return { text: s, url: '' };
-  return { text: s.slice(0, lastDash).trim(), color, url: s.slice(lastDash + 3).trim() };
+  // Cerca separatore: prima prova tag/URL senza spazi obbligatori, poi " - " classico
+  const sepMatch = s.match(/^(.*)\s*-\s*(\{[a-zA-Z_][a-zA-Z0-9_]*\}|https?:\/\/.+)$/)
+    ?? s.match(/^(.*)\s+-\s+(.+)$/);
+  if (!sepMatch) return { text: s, url: '' };
+  return { text: sepMatch[1].trim(), color, url: sepMatch[2].trim() };
 }
 
 function KbPreview({ contenuto }: { contenuto: string }) {
