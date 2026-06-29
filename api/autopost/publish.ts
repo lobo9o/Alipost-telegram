@@ -992,9 +992,8 @@ function buildKeyboard(
     try {
       const u = new URL(affiliateUrl);
       const tag = u.searchParams.get('tag') ?? '';
-      const base = `${u.origin}/gp/aws/cart/add.html?ASIN.1=${post.productId}&Quantity.1=1${tag ? `&tag=${tag}` : ''}`;
-      addToCartUrl = base;
-      buyNowUrl = `${base}&buyNow=1`;
+      addToCartUrl = `${u.origin}/gp/aws/cart/add.html?ASIN.1=${post.productId}&Quantity.1=1${tag ? `&tag=${tag}` : ''}`;
+      buyNowUrl = `${u.origin}/dp/${post.productId}${tag ? `?tag=${tag}` : ''}`;
     } catch { /* fallback al link normale */ }
   }
 

@@ -54,8 +54,8 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   '{valuta}':          'Simbolo della valuta — es. € oppure $',
   '{link_affiliato}':  'Link affiliato del prodotto',
   '{link}':            'Uguale a {link_affiliato}',
-  '{addtocart}':       'Link "Aggiungi al carrello" Amazon — il prodotto viene aggiunto al carrello senza passare per la pagina prodotto. Solo Tastiera.',
-  '{buynow}':          'Link "Checkout diretto" Amazon — porta l\'utente direttamente al pagamento saltando anche il carrello. Funziona solo per utenti loggati con metodo di pagamento salvato. Solo Tastiera.',
+  '{addtocart}':       'Link "Aggiungi al carrello" Amazon — aggiunge il prodotto al carrello tramite link affiliato. Solo Tastiera.',
+  '{buynow}':          'Link "Acquista ora" Amazon — apre direttamente la pagina prodotto dove l\'utente può cliccare "Acquista ora". Solo Tastiera.',
   '{coupon}':          'Codice coupon se presente nel post',
   '{boxcoupon}':       'Mostra testo "Abilita il coupon prima di acquistare" per link con coupon da abilitare nella pagina Amazon',
   '{checkout}':        'Testo "Sconto automatico al check-out" per prodotti con sconto applicato automaticamente al pagamento (senza box da spuntare)',
@@ -388,7 +388,7 @@ function KeyboardSection() {
           <InfoBanner>
             <b>Formato:</b> <code>Testo - url</code> per ogni riga. Usa <code>&amp;&amp;</code> per più bottoni sulla stessa riga.<br />
             <b>Colori:</b> <code>#g</code> verde · <code>#r</code> rosso · <code>#b</code> blu<br />
-            <b>Tag URL:</b> <code>{'{link}'}</code> link offerta · <code>{'{addtocart}'}</code> aggiungi al carrello · <code>{'{buynow}'}</code> checkout diretto · <code>{'{whatsapp}'}</code> condividi · <code>{'{poll}'}</code> sondaggio
+            <b>Tag URL:</b> <code>{'{link}'}</code> link offerta · <code>{'{addtocart}'}</code> aggiungi al carrello · <code>{'{buynow}'}</code> acquista ora (pagina prodotto) · <code>{'{whatsapp}'}</code> condividi · <code>{'{poll}'}</code> sondaggio
           </InfoBanner>
         </div>
         <div className="fld">
