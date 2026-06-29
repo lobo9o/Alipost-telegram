@@ -633,8 +633,14 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   const [baseRow] = profileId !== userId ? await sql<{ data: unknown }[]>`SELECT data FROM settings WHERE user_id = ${userId}`.catch(() => []) : [settingsRow];
   const cfgRaw = settingsRow?.data ?? baseRow?.data ?? {};
   const cfg = typeof cfgRaw === 'string' ? JSON.parse(cfgRaw) : cfgRaw as Record<string, any>;
-  if (!cfg.attivo && autoPublish) {
-    console.log(`[tg-monitor] ${profileId} — autopost disabilitato e canale su "pubblica subito", skip`);
+  // Per profili secondari: se attivo non è esplicitamente impostato, eredita dal profilo base.
+  // Evita che l'abilitazione di una funzione secondaria (es. autoPublishAmazon) crei un record
+  // con attivo=false di default, bloccando silenziosamente il tg-monitor.
+  const baseCfgRaw = profileId !== userId ? (baseRow?.data ?? {}) : cfgRaw;
+  const baseCfg = typeof baseCfgRaw === 'string' ? JSON.parse(baseCfgRaw) : baseCfgRaw as Record<string, any>;
+  const effectiveAttivo = cfg.attivo ?? baseCfg.attivo;
+  if (!effectiveAttivo && autoPublish) {
+    console.log(`[tg-monitor] ${profileId} — autopost disabilitato (attivo=${cfg.attivo} base=${baseCfg.attivo}) e canale su "pubblica subito", skip`);
     return;
   }
 
