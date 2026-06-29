@@ -248,11 +248,32 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
   return t;
 }
 
-function buildKeyboard(
+async function fetchOfferingId(domain: string, asin: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://${domain}/dp/${asin}`, {
+      signal: AbortSignal.timeout(6000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'it-IT,it;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const m = html.match(/"offerListingID"\s*:\s*"([^"]+)"/)
+      ?? html.match(/name="offerListingID"\s+value="([^"]+)"/)
+      ?? html.match(/value="([^"]+)"\s+name="offerListingID"/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+async function buildKeyboard(
   contenuto: string | undefined,
   post: Record<string, any>,
   affiliateUrl: string,
-): object | undefined {
+): Promise<object | undefined> {
   if (!contenuto?.trim()) return undefined;
 
   const waText = encodeURIComponent(`${post.title ?? ''}\n${affiliateUrl}`);
@@ -263,7 +284,14 @@ function buildKeyboard(
       const u = new URL(affiliateUrl);
       const tag = u.searchParams.get('tag') ?? '';
       addToCartUrl = `${u.origin}/gp/aws/cart/add.html?ASIN.1=${post.productId}&Quantity.1=1${tag ? `&tag=${tag}` : ''}`;
-      buyNowUrl = `${u.origin}/dp/${post.productId}${tag ? `?tag=${tag}` : ''}`;
+      if (contenuto.includes('{buynow}')) {
+        const offeringId = await fetchOfferingId(u.hostname, post.productId);
+        buyNowUrl = offeringId
+          ? `${u.origin}/checkout/entry/buynow?buyNow=1&quantity=1&asin=${post.productId}${tag ? `&tag=${tag}` : ''}&offeringID=${encodeURIComponent(offeringId)}`
+          : `${u.origin}/dp/${post.productId}${tag ? `?tag=${tag}` : ''}`;
+      } else {
+        buyNowUrl = `${u.origin}/dp/${post.productId}${tag ? `?tag=${tag}` : ''}`;
+      }
     } catch { /* fallback */ }
   }
   const urlTags: Record<string, string> = {
@@ -610,7 +638,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   const messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl, aliCurrency, customTags);
 
-  const replyMarkup = buildKeyboard(keyboardContenuto, post, affiliateUrl)
+  const replyMarkup = await buildKeyboard(keyboardContenuto, post, affiliateUrl)
     ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
