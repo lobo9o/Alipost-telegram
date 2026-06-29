@@ -984,9 +984,21 @@ function buildKeyboard(
   if (!contenuto?.trim()) return undefined;
 
   const waText = encodeURIComponent(`${post.title ?? ''}\n${affiliateUrl}`);
+
+  // Costruisce URL "Aggiungi al carrello" Amazon
+  let addToCartUrl = affiliateUrl;
+  if (post.platform === 'amazon' && post.productId) {
+    try {
+      const u = new URL(affiliateUrl);
+      const tag = u.searchParams.get('tag') ?? '';
+      addToCartUrl = `${u.origin}/gp/aws/cart/add.html?ASIN.1=${post.productId}&Quantity.1=1${tag ? `&tag=${tag}` : ''}`;
+    } catch { /* fallback al link normale */ }
+  }
+
   const urlTags: Record<string, string> = {
     '{link}':            affiliateUrl,
     '{link_affiliato}':  affiliateUrl,
+    '{addtocart}':       addToCartUrl,
     '{whatsapp}':        `https://api.whatsapp.com/send?text=${waText}`,
     '{app}':             affiliateUrl,
     '{amici}':           affiliateUrl,

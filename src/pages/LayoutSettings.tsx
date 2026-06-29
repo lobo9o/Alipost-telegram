@@ -382,7 +382,7 @@ function KeyboardSection() {
           <InfoBanner>
             <b>Formato:</b> <code>Testo - url</code> per ogni riga. Usa <code>&amp;&amp;</code> per più bottoni sulla stessa riga.<br />
             <b>Colori:</b> <code>#g</code> verde · <code>#r</code> rosso · <code>#b</code> blu<br />
-            <b>Tag URL:</b> <code>{'{link}'}</code> link offerta · <code>{'{whatsapp}'}</code> condividi · <code>{'{poll}'}</code> sondaggio
+            <b>Tag URL:</b> <code>{'{link}'}</code> link offerta · <code>{'{addtocart}'}</code> aggiungi al carrello · <code>{'{whatsapp}'}</code> condividi · <code>{'{poll}'}</code> sondaggio
           </InfoBanner>
         </div>
         <div className="fld">
