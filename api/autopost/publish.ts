@@ -985,13 +985,16 @@ function buildKeyboard(
 
   const waText = encodeURIComponent(`${post.title ?? ''}\n${affiliateUrl}`);
 
-  // Costruisce URL "Aggiungi al carrello" Amazon
+  // Costruisce URL "Aggiungi al carrello" e "Checkout diretto" Amazon
   let addToCartUrl = affiliateUrl;
+  let buyNowUrl = affiliateUrl;
   if (post.platform === 'amazon' && post.productId) {
     try {
       const u = new URL(affiliateUrl);
       const tag = u.searchParams.get('tag') ?? '';
-      addToCartUrl = `${u.origin}/gp/aws/cart/add.html?ASIN.1=${post.productId}&Quantity.1=1${tag ? `&tag=${tag}` : ''}`;
+      const base = `${u.origin}/gp/aws/cart/add.html?ASIN.1=${post.productId}&Quantity.1=1${tag ? `&tag=${tag}` : ''}`;
+      addToCartUrl = base;
+      buyNowUrl = `${base}&buyNow=1`;
     } catch { /* fallback al link normale */ }
   }
 
@@ -999,6 +1002,7 @@ function buildKeyboard(
     '{link}':            affiliateUrl,
     '{link_affiliato}':  affiliateUrl,
     '{addtocart}':       addToCartUrl,
+    '{buynow}':          buyNowUrl,
     '{whatsapp}':        `https://api.whatsapp.com/send?text=${waText}`,
     '{app}':             affiliateUrl,
     '{amici}':           affiliateUrl,

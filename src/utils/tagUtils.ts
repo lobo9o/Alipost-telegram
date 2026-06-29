@@ -6,7 +6,7 @@ export const SYSTEM_TAGS = new Set([
   '{titolo}', '{titoloup}', '{titoloshort}',
   '{prezzo}', '{prezzo_scontato}', '{oldprezzo}',
   '{sconto}', '{perc}', '{valuta}',
-  '{link_affiliato}', '{link}', '{addtocart}',
+  '{link_affiliato}', '{link}', '{addtocart}', '{buynow}',
   '{minimo_storico}',
   '{terminata}',
   '{custom}',
