@@ -150,7 +150,7 @@ function codeToCountryName(code?: string): string {
   return COUNTRY_IT[upper] ?? upper;
 }
 
-function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string, currency?: string, customTags: Record<string, string> = {}): string {
+function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string, currency?: string, customTags: Record<string, string> = {}, terminataValue?: string): string {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const pad = (n: number) => n < 10 ? `0${n}` : String(n);
@@ -176,6 +176,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{link_affiliato}':  affiliateUrl,
     '{link}':            affiliateUrl,
     '{minimo_storico}':  post.isHistoricalLow ? (customTags['{minimo_storico}'] || '🏆 MINIMO STORICO!') : '',
+    '{terminata}':       terminataValue ?? '',
     '{custom}':          esc(post.customText || ''),
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
@@ -443,8 +444,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const tagRows = await sql`SELECT name, value FROM tags WHERE user_id = ${userId} OR user_id = 'legacy' ORDER BY (user_id = ${userId}) ASC`;
         const customTags: Record<string, string> = {};
         for (const tr of tagRows) customTags[tr.name as string] = tr.value as string;
-        const builtCaption = buildMessage(patchLayout || defaultLayout, postData ?? {}, affiliateUrl, undefined, customTags);
-        caption = `${telegramText ?? ''}\n\n${builtCaption}`.trim();
+        const terminataVal = customTags['{terminata}'] ?? '';
+        const builtCaption = buildMessage(patchLayout || defaultLayout, postData ?? {}, affiliateUrl, undefined, customTags, terminataVal);
+        caption = builtCaption || terminataVal;
       }
     } else {
       // Backward compat: vecchio formato con newCaption

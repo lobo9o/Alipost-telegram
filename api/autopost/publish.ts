@@ -885,6 +885,7 @@ function buildMessage(
   affiliateUrl: string,
   currency?: string,
   customTags: Record<string, string> = {},
+  terminataValue?: string,
 ): string {
   const now = new Date();
   const giorni = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
@@ -911,6 +912,7 @@ function buildMessage(
     '{link_affiliato}':  affiliateUrl,
     '{link}':            affiliateUrl,
     '{minimo_storico}':  post.isHistoricalLow ? (customTags['{minimo_storico}'] || '🏆 MINIMO STORICO!') : '',
+    '{terminata}':       terminataValue ?? '',
     '{custom}':          esc(post.customText || ''),
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
@@ -1974,6 +1976,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     // ── Controlla offerte scadute (max 3 per run, anche con coda vuota) ────────
     try {
+      // Carica valore del tag {terminata} dal DB per questo utente
+      const [termTagRow] = await sql`
+        SELECT value FROM tags
+        WHERE name = '{terminata}' AND (user_id = ${userId} OR user_id = ${baseUserId})
+        ORDER BY (user_id = ${userId}) DESC LIMIT 1
+      `.catch(() => [null]);
+      const terminataTagValue = String(termTagRow?.value ?? '❌ Offerta terminata');
+
       // Per profili primari includi anche i post dei profili secondari (userId:channelId)
       // che potrebbero avere attivo=false e quindi non essere iterati nel loop principale.
       const secondaryPattern = userId.includes(':') ? null : `${userId}:%`;
@@ -2038,7 +2048,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           console.log(`[autopost] offerta scaduta: ${String(pub.title ?? '').slice(0, 40)} — ${check.reason}`);
           const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
           const telegramMode = String(termCfg.telegramMode ?? 'keep');
-          const telegramText = String(termCfg.telegramText ?? '❌ Offerta terminata');
 
           // Genera immagine terminata (grayscale + overlay) — uguale alla terminata manuale
           let termImg: Buffer | null = null;
@@ -2099,7 +2108,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           // Costruisce caption rispettando telegramMode — identico alla terminata manuale
           let termCaption: string | undefined;
           if (telegramMode === 'only') {
-            termCaption = telegramText;
+            termCaption = terminataTagValue;
           } else if (telegramMode === 'append') {
             // Usa il layout del post stesso (non termCfg.layoutId che potrebbe non essere impostato)
             const layoutIdToUse = (pub as any).layoutId ?? termCfg.layoutId ?? null;
@@ -2108,9 +2117,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             `.catch(() => [null]) : [null];
             const affUrl = String(pub.sourceUrl ?? '');
             const builtCaption = termLayoutRow?.body
-              ? buildMessage(String(termLayoutRow.body), pub as any, affUrl)
+              ? buildMessage(String(termLayoutRow.body), pub as any, affUrl, undefined, {}, terminataTagValue)
               : '';
-            termCaption = builtCaption ? `${telegramText}\n\n${builtCaption}`.trim() : telegramText;
+            termCaption = builtCaption || terminataTagValue;
           }
           // telegramMode === 'keep' (default) → termCaption rimane undefined, non cambia il testo
 

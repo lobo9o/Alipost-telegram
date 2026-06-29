@@ -1593,9 +1593,8 @@ function TerminataPanel() {
         ))}
       </div>
       {(cfg.telegramMode ?? 'keep') !== 'keep' && (
-        <div className="fld">
-          <label className="lbl">Scritta terminata (Telegram)</label>
-          <input className="inp" value={cfg.telegramText ?? ''} onChange={e => update('telegramText', e.target.value)} placeholder="❌ Offerta terminata" />
+        <div style={{ fontSize: 12, color: '#94a3b8', padding: '6px 8px', background: 'rgba(99,102,241,0.08)', borderRadius: 6, marginTop: 4 }}>
+          La scritta mostrata è quella del tag <b>{'{terminata}'}</b> — modificala in <b>Impostazioni → Tag</b>.
         </div>
       )}
 

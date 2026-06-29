@@ -21,6 +21,7 @@ export const INITIAL_TAGS: Tag[] = [
   { id: 'tag_linkalias',   name: '{link}',             value: 'Link affiliato (alias)' },
   // ── Badge
   { id: 'tag_minstor',     name: '{minimo_storico}',   value: '🏆 Minimo Storico!' },
+  { id: 'tag_terminata',   name: '{terminata}',        value: '❌ Offerta terminata' },
   // ── Testo libero
   { id: 'tag_custom',      name: '{custom}',           value: 'Testo personalizzato' },
   // ── Store

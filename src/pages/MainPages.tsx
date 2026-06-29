@@ -1902,6 +1902,7 @@ const SKIP_IN_TAG_PANEL = new Set([
   '{prezzo}', '{prezzo_scontato}', '{oldprezzo}', '{sconto}', '{perc}', '{valuta}',
   '{link}', '{link_affiliato}',
   '{minimo_storico}',
+  '{terminata}',
   '{custom}', // già coperto da "TESTO PERSONALIZZATO"
   '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
@@ -1930,6 +1931,7 @@ const AUTO_COMPUTED_TAGS = new Set([
   '{sconto}', '{perc}', '{valuta}',
   '{link_affiliato}', '{link}',
   '{minimo_storico}',
+  '{terminata}',
   '{store}', '{storeup}',
   '{giorno}', '{ora}', '{data}',
   // gestiti da campi dedicati nel PostCard:
@@ -3535,7 +3537,8 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     const terminataCfg = settings.terminata;
     const tmpl = templates[0];
     const telegramMode = terminataCfg.telegramMode ?? 'keep';
-    const telegramText = terminataCfg.telegramText ?? '❌ Offerta terminata';
+    // Legge il testo da {terminata} tag (modificabile nelle Impostazioni Tag)
+    const terminataTagValue = tags.find(t => t.name === '{terminata}')?.value || '❌ Offerta terminata';
 
     let newImage: string | undefined;
     if (tmpl && p.image && p.image.startsWith('http')) {
@@ -3551,13 +3554,14 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
 
     const body: Record<string, any> = { chatId: p.chatId, messageId: p.messageId, terminata: true, newImage, telegramMode };
     if (telegramMode === 'only') {
-      body.newCaption = telegramText;
+      body.newCaption = terminataTagValue;
     } else if (telegramMode === 'append') {
       const postLayout = layouts.find(l => l.id === p.layoutId);
       const cur = p.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
       const postForCaption = { id: p.id, platform: p.platform as Platform, sourceUrl: p.sourceUrl, productId: p.productId, title: p.title, image: p.image, emoji: p.emoji, originalPrice: p.originalPrice, discountedPrice: parseFloat(p.price) || 0, discountPercent: p.discountPercent, customText: p.customText, isHistoricalLow: p.isHistoricalLow, templateId: 'tpl1', layoutId: p.layoutId, keyboardId: 'kb1' } as CreatedPost;
-      const baseCaption = postLayout ? resolvePostTags(postLayout.contenuto, postForCaption, tags, cur) : '';
-      body.newCaption = `${baseCaption}\n\n${telegramText}`.trim();
+      // Ricostruisce il testo con {terminata} riempito (il blocco {__terminata} diventa visibile)
+      const captionWithTerminata = postLayout ? resolvePostTags(postLayout.contenuto, postForCaption, tags, cur, terminataTagValue) : terminataTagValue;
+      body.newCaption = captionWithTerminata || terminataTagValue;
     }
 
     try {
@@ -3576,7 +3580,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
 
     const terminataCfg = settings.terminata;
     const telegramMode = terminataCfg.telegramMode ?? 'keep';
-    const telegramText = terminataCfg.telegramText ?? '❌ Offerta terminata';
+    const terminataTagValue = tags.find(t => t.name === '{terminata}')?.value || '❌ Offerta terminata';
 
     // Genera immagine composita con solo quella cella in grigio
     let newImage: string | undefined;
@@ -3591,19 +3595,18 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     let newCaption: string | undefined;
     if (telegramMode !== 'keep' && p.multiItems) {
       const sections = p.multiItems.map((it, i) => {
-        // Calcola resolvedText se vuoto (post auto-pubblicati lo hanno a '')
-        let base = it.resolvedText ?? '';
-        if (!base) {
-          const itLayout = layouts.find(l => l.id === it.layoutId) ?? layouts.find(l => l.tipo === 'multi');
-          const itCur = it.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
-          const itPost = { id: it.id, platform: it.platform as Platform, sourceUrl: it.sourceUrl, productId: it.productId, title: it.title, image: it.image, emoji: it.emoji, originalPrice: it.originalPrice, discountedPrice: parseFloat(it.price) || 0, discountPercent: it.discountPercent, customText: it.customText, coupon: it.coupon || '', isHistoricalLow: it.isHistoricalLow, templateId: 'tpl1', layoutId: it.layoutId, keyboardId: 'kb1' } as CreatedPost;
-          base = itLayout ? resolvePostTags(itLayout.contenuto, itPost, tags, itCur) : '';
-        }
         const isTerminata = i === idx || !!it.terminata;
-        if (isTerminata) {
-          if (telegramMode === 'only') return telegramText;
-          if (telegramMode === 'append') return `${base}\n\n${telegramText}`.trim();
+        const itLayout = layouts.find(l => l.id === it.layoutId) ?? layouts.find(l => l.tipo === 'multi');
+        const itCur = it.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const itPost = { id: it.id, platform: it.platform as Platform, sourceUrl: it.sourceUrl, productId: it.productId, title: it.title, image: it.image, emoji: it.emoji, originalPrice: it.originalPrice, discountedPrice: parseFloat(it.price) || 0, discountPercent: it.discountPercent, customText: it.customText, coupon: it.coupon || '', isHistoricalLow: it.isHistoricalLow, templateId: 'tpl1', layoutId: it.layoutId, keyboardId: 'kb1' } as CreatedPost;
+        if (isTerminata && telegramMode === 'only') return terminataTagValue;
+        if (isTerminata && telegramMode === 'append') {
+          const resolved = itLayout ? resolvePostTags(itLayout.contenuto, itPost, tags, itCur, terminataTagValue) : terminataTagValue;
+          return resolved || terminataTagValue;
         }
+        // Item non terminata: usa resolvedText salvato o risolve dal layout
+        let base = it.resolvedText ?? '';
+        if (!base) base = itLayout ? resolvePostTags(itLayout.contenuto, itPost, tags, itCur) : '';
         return base;
       });
       newCaption = sections.join('\n');

@@ -8,6 +8,7 @@ export const SYSTEM_TAGS = new Set([
   '{sconto}', '{perc}', '{valuta}',
   '{link_affiliato}', '{link}',
   '{minimo_storico}',
+  '{terminata}',
   '{custom}',
   '{store}', '{storeup}', '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
@@ -56,7 +57,7 @@ export function codeToCountry(code: string): string {
   return name ? `${flag} ${name}` : flag;
 }
 
-function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: string): Record<string, string> {
+function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: string, terminataText?: string): Record<string, string> {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const valuta = currency ?? (post.platform === 'aliexpress' ? '$' : '€');
@@ -80,6 +81,7 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
     '{link_affiliato}':  post.sourceUrl || '[link]',
     '{link}':            post.sourceUrl || '[link]',
     '{minimo_storico}':  post.isHistoricalLow ? (minimoStoricoText || '🏆 Minimo Storico!') : '',
+    '{terminata}':       terminataText ?? '',
     '{custom}':          post.customText || '',
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
@@ -127,9 +129,12 @@ function cleanupSentinels(text: string): string {
     .join('\n');
 }
 
-export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[], currency?: string): string {
+export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[], currency?: string, terminataValue?: string): string {
   const minimoCustom = tags.find(t => t.name === '{minimo_storico}')?.value || undefined;
-  const builtIn = computedTags(post, currency, minimoCustom);
+  // terminataValue: se passato esplicitamente (es. al momento della terminata) usa quello,
+  // altrimenti '' (il blocco {__terminata} resta nascosto durante la pubblicazione normale)
+  const terminataText = terminataValue ?? '';
+  const builtIn = computedTags(post, currency, minimoCustom, terminataText);
   // Override per-post: i tagOverrides del post hanno priorità sui valori globali dei tag custom
   const effectiveTags = tags.map(t =>
     post.tagOverrides?.[t.name] !== undefined
