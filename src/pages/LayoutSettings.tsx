@@ -116,19 +116,22 @@ function TagsSection() {
                 placeholder="{nome_tag}" style={{ marginBottom: 7 }} />
             : <div style={{ padding: '2px 0 7px', fontSize: 13, fontWeight: 600, color: 'var(--a1)' }}>{t.name}</div>
           }
+          <textarea className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
+            placeholder="Valore / descrizione (Enter = a capo)"
+            rows={Math.max(2, (editValue.match(/\n/g) ?? []).length + 1)}
+            style={{ resize: 'vertical', fontFamily: 'inherit', marginBottom: 6 }} />
           <div className="irow">
-            <input className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
-              placeholder="Valore / descrizione"
-              onKeyDown={e => e.key === 'Enter' && saveEdit()} />
-            <button className="btn bp bsm" onClick={saveEdit} style={{ flexShrink: 0 }}>✓</button>
-            <button className="btn bs bsm" onClick={() => setEditId(null)} style={{ flexShrink: 0 }}>×</button>
+            <button className="btn bp bsm" onClick={saveEdit} style={{ flex: 1 }}>✓ Salva</button>
+            <button className="btn bs bsm" onClick={() => setEditId(null)} style={{ flex: 1 }}>× Annulla</button>
           </div>
         </>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className="tag-pill" style={{ flexShrink: 0 }}>{t.name}</span>
           <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {t.value || <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>vuoto</span>}
+            {t.value
+              ? (t.value.includes('\n') ? t.value.split('\n')[0] + ' …' : t.value)
+              : <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>vuoto</span>}
           </span>
           <button className="btn bgh bsm" style={{ padding: '3px 8px' }} onClick={() => startEdit(t)}>✏️</button>
           {isCustom && (
