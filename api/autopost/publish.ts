@@ -1018,10 +1018,11 @@ function buildKeyboard(
       const colorMatch = btn.match(/^#([grb])\s+/);
       const style = colorMatch ? COLOR_MAP[colorMatch[1]] : undefined;
       const clean = colorMatch ? btn.slice(colorMatch[0].length) : btn;
-      const lastDash = clean.lastIndexOf(' - ');
-      if (lastDash === -1) return null;
-      const text = clean.slice(0, lastDash).trim();
-      let url = clean.slice(lastDash + 3).trim();
+      // Accetta sia " - " (spazio-trattino-spazio) sia "emoji- " (trattino senza spazio prima)
+      const sepMatch = clean.match(/^(.*)\s*-\s+(.+)$/);
+      if (!sepMatch) return null;
+      const text = sepMatch[1].trim();
+      let url = sepMatch[2].trim();
       for (const [tag, val] of Object.entries(urlTags)) {
         url = url.split(tag).join(val);
       }
@@ -1711,7 +1712,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
       // Tastiera: usa quella del layout se impostata, altrimenti quella del post,
       // altrimenti la prima tastiera dell'utente (fallback per layout senza keyboard_id)
-      const effectiveKeyboardId = layoutRow?.keyboard_id || post.keyboardId;
+      const effectiveKeyboardId = post.keyboardId || layoutRow?.keyboard_id;
       let [keyboardRow] = effectiveKeyboardId ? await sql`
         SELECT body FROM keyboards WHERE id = ${effectiveKeyboardId} AND user_id = ${userId}
       ` : [null];

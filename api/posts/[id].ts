@@ -256,9 +256,22 @@ function buildKeyboard(
   if (!contenuto?.trim()) return undefined;
 
   const waText = encodeURIComponent(`${post.title ?? ''}\n${affiliateUrl}`);
+  let addToCartUrl = affiliateUrl;
+  let buyNowUrl = affiliateUrl;
+  if (post.platform === 'amazon' && post.productId) {
+    try {
+      const u = new URL(affiliateUrl);
+      const tag = u.searchParams.get('tag') ?? '';
+      const base = `${u.origin}/gp/aws/cart/add.html?ASIN.1=${post.productId}&Quantity.1=1${tag ? `&tag=${tag}` : ''}`;
+      addToCartUrl = base;
+      buyNowUrl = `${base}&buyNow=1`;
+    } catch { /* fallback */ }
+  }
   const urlTags: Record<string, string> = {
     '{link}':       affiliateUrl,
     '{link_affiliato}': affiliateUrl,
+    '{addtocart}':  addToCartUrl,
+    '{buynow}':     buyNowUrl,
     '{whatsapp}':   `https://api.whatsapp.com/send?text=${waText}`,
     '{app}':        affiliateUrl,
     '{amici}':      affiliateUrl,
@@ -274,10 +287,10 @@ function buildKeyboard(
       const colorMatch = btn.match(/^#([grb])\s+/);
       const style = colorMatch ? COLOR_MAP[colorMatch[1]] : undefined;
       const clean = colorMatch ? btn.slice(colorMatch[0].length) : btn;
-      const lastDash = clean.lastIndexOf(' - ');
-      if (lastDash === -1) return null;
-      const text = clean.slice(0, lastDash).trim();
-      let url = clean.slice(lastDash + 3).trim();
+      const sepMatch = clean.match(/^(.*)\s*-\s+(.+)$/);
+      if (!sepMatch) return null;
+      const text = sepMatch[1].trim();
+      let url = sepMatch[2].trim();
       for (const [tag, val] of Object.entries(urlTags)) {
         url = url.split(tag).join(val);
       }

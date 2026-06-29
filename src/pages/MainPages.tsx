@@ -2626,7 +2626,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
           );
         } catch { /* fall back to URL */ }
       }
-      const effectiveKbId = layout?.keyboardId ?? post.keyboardId;
+      const effectiveKbId = post.keyboardId || layout?.keyboardId;
       const keyboard = keyboards.find(k => k.id === effectiveKbId) ?? keyboards[0];
       const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage, disableNotification, channelOverride });
       autopostApi.delete(id).catch(() => {}); // cleanup finale, fire-and-forget OK (status già aggiornato)
@@ -2714,7 +2714,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         : resolvePostTags(layout.contenuto, p, tags, qCurrency))
     : '';
   // Bottoni tastiera reale per la preview
-  const effectiveKbId = layout?.keyboardId ?? (isMultiPost ? undefined : p?.keyboardId);
+  const effectiveKbId = (!isMultiPost && p?.keyboardId) || layout?.keyboardId;
   const effectiveKb = keyboards.find(k => k.id === effectiveKbId);
   const kbButtons: string[] | undefined = effectiveKb
     ? parseKbButtons(effectiveKb.contenuto)
