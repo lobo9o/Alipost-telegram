@@ -318,7 +318,11 @@ async function buildKeyboard(
         ?? clean.match(/^(.*)\s+-\s+(.+)$/);
       if (!sepMatch) return null;
       const text = sepMatch[1].trim();
-      let url = sepMatch[2].trim();
+      const rawUrl = sepMatch[2].trim();
+      // {buynow} bypassa la pagina prodotto: nascondilo se c'è un coupon da inserire
+      // o da spuntare. Se lo sconto è automatico al checkout, il bottone rimane.
+      if (rawUrl === '{buynow}' && (post.coupon || post.boxcoupon)) return null;
+      let url = rawUrl;
       for (const [tag, val] of Object.entries(urlTags)) {
         url = url.split(tag).join(val);
       }
