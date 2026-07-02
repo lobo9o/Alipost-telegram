@@ -288,27 +288,44 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
       }
     }
 
-    // Clip coupon (checkbox da spuntare nel buybox) — rilevato da couponLabelText.
-    // Scansiona TUTTE le occorrenze e controlla il testo del coupon stesso:
-    // se il testo contiene parole S&S ("abbonati", "prima consegna", ecc.) → salta.
+    // Clip coupon (checkbox da spuntare nel buybox) — rilevato da couponLabelText/couponBadge.
+    // Amazon usa formati diversi: "Applica coupon X%", "Risparmia X% con il coupon", ecc.
+    // Scansiona TUTTE le occorrenze e salta i coupon S&S.
     let clipCoupon = '';
     let clipCouponPct = false;
     const SNS_COUPON_RE = /abbonati|prima\s+consegna|consegne\s+ripetute|solo\s+all.{0,5}opzione/i;
-    const couponLabelRe = /couponLabelText[^>]*>([^<]+)/gi;
+    // Cattura testo da couponLabelText, couponBadge, coupon-badge, a-badge-supplementary
+    const couponLabelRe = /(?:couponLabelText|couponBadge|coupon-badge|a-badge-supplementary)[^>]*>([^<]{3,120})/gi;
+    const couponTexts: string[] = [];
     let cm: RegExpExecArray | null;
     while ((cm = couponLabelRe.exec(html)) !== null) {
-      const text = cm[1].trim();
+      const t = cm[1].trim();
+      if (t) couponTexts.push(t);
+    }
+    for (const text of couponTexts) {
       if (!text) continue;
       if (SNS_COUPON_RE.test(text)) {
         console.log('[product] coupon ignorato (S&S):', text.slice(0, 100));
         continue;
       }
-      const pctM = text.match(/Applica\s+coupon\s+([\d,\.]+)\s*%/i);
-      if (pctM) { clipCoupon = pctM[1].replace(',', '.') + '%'; clipCouponPct = true; break; }
-      const amtM = text.match(/Applica\s+coupon\s+(?:€|EUR\s*)?([\d,\.]+)/i);
-      if (amtM) { clipCoupon = amtM[1].replace(',', '.') + '€'; break; }
+      // "Applica coupon 10%" / "Applica coupon €2,00"
+      const applyPct = text.match(/Applica\s+(?:il\s+)?coupon\s+([\d,\.]+)\s*%/i);
+      if (applyPct) { clipCoupon = applyPct[1].replace(',', '.') + '%'; clipCouponPct = true; break; }
+      const applyAmt = text.match(/Applica\s+(?:il\s+)?coupon\s+(?:€|EUR\s*)?([\d,\.]+)/i);
+      if (applyAmt) { clipCoupon = applyAmt[1].replace(',', '.') + '€'; break; }
+      // "Risparmia il 5% con il coupon" / "Risparmia 1,00€ con il coupon"
+      const savePct = text.match(/Risparmia\s+(?:il\s+|un\s+)?(?:ulteriore\s+)?([\d,\.]+)\s*%\s+con\s+il\s+coupon/i);
+      if (savePct) { clipCoupon = savePct[1].replace(',', '.') + '%'; clipCouponPct = true; break; }
+      const saveAmt = text.match(/Risparmia\s+(?:€|EUR\s*)?([\d,\.]+)\s*(?:€)?\s+con\s+il\s+coupon/i);
+      if (saveAmt) { clipCoupon = saveAmt[1].replace(',', '.') + '€'; break; }
+      // Fallback generico: qualunque testo di coupon con un numero (non S&S)
+      const genericPct = text.match(/coupon[^%\d]*([\d,\.]+)\s*%/i);
+      if (genericPct) { clipCoupon = genericPct[1].replace(',', '.') + '%'; clipCouponPct = true; break; }
+      const genericAmt = text.match(/coupon[^€\d]*(?:€|EUR\s*)?([\d,\.]+)/i);
+      if (genericAmt) { clipCoupon = genericAmt[1].replace(',', '.') + '€'; break; }
     }
     if (clipCoupon) console.log('[product] clip coupon da scraping:', clipCoupon, 'pct:', clipCouponPct);
+    else if (couponTexts.length) console.log('[product] couponLabelText trovati ma non parsati:', couponTexts.map(t => t.slice(0, 80)));
 
     // Checkout discount (sconto automatico al check-out, senza spuntare box)
     // Cerca "Risparmia X,XX € al check-out" nell'HTML

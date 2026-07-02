@@ -755,7 +755,8 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     // nel canale sorgente, più preciso del coupon generico del brand restituito dall'API.
     const urlTextCoupon = isMulti ? (textCouponsPerUrl[(product as any)._urlIdx ?? 0] || textCoupon) : textCoupon;
     const finalCoupon   = isMulti ? (urlTextCoupon || product.coupon) : (product.coupon || textCoupon);
-    const finalBoxcoupon = (!isMulti && product.coupon) ? (product.couponBox ?? false) : false;
+    // couponBox può essere true anche senza product.coupon (coupon rilevato ma senza importo numerico)
+    const finalBoxcoupon = !isMulti ? (product.couponBox ?? false) : false;
 
     // Prezzi: per post singolo il testo ha priorità sull'API (più preciso).
     // Per post multi-prodotto NON si sovrascrive: il prezzo nel testo potrebbe
