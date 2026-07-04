@@ -610,7 +610,11 @@ async function fetchProduct(userId: string, url: string, headers: Record<string,
     console.warn(`[tg-monitor] prodotto non trovato per ${url}`);
     return null;
   }
-  return { ...product, _platform: platform };
+  // Se il prodotto ha un ASIN è sicuramente Amazon, indipendentemente dall'URL sorgente
+  // (es. link AliExpress che redirige a Amazon o URL con "aliexpress" nei parametri)
+  const actualPlatform: 'amazon' | 'aliexpress' = product.asin ? 'amazon' : platform;
+  if (actualPlatform !== platform) console.log(`[tg-monitor] ${userId} — platform corretto: ${platform}→${actualPlatform} (ASIN: ${product.asin})`);
+  return { ...product, _platform: actualPlatform };
 }
 
 async function processMessage(userId: string, urls: string[], autoPublish = false, messageText = '', destChannel: string | null = null) {
