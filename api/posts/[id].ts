@@ -190,7 +190,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{recensioni}':      post.recensioni || '',
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
-    '{coupon}':          post.coupon || '',
+    '{coupon}':          (post as any).boxcoupon ? '' : (post.coupon || ''),
     '{boxcoupon}':       (post as any).boxcoupon || '',
     '{checkout}':        (post as any).checkout || '',
     '{emojicat}':        getProductEmoji(post.title || '', post.cat || ''),

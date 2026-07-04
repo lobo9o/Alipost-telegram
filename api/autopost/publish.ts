@@ -926,7 +926,7 @@ function buildMessage(
     '{recensioni}':      post.recensioni || '',
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
-    '{coupon}':          post.coupon || '',
+    '{coupon}':          post.boxcoupon ? '' : (post.coupon || ''),
     '{boxcoupon}':       post.boxcoupon ? (customTags['{boxcoupon}'] || 'Abilita il coupon prima di acquistare') : '',
     '{checkout}':        post.checkout || '',
     '{emojicat}':        getProductEmoji(post.title || '', post.cat || ''),
