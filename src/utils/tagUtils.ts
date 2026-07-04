@@ -95,7 +95,7 @@ function computedTags(post: CreatedPost, currency?: string, minimoStoricoText?: 
     '{recensioni}':      post.recensioni || '',
     '{cat}':             post.cat || '',
     '{author}':          post.author || '',
-    '{coupon}':          post.coupon || '',
+    '{coupon}':          post.boxcoupon ? '' : (post.coupon || ''),
     '{boxcoupon}':       post.boxcoupon || '',
     '{checkout}':        post.checkout || '',
     '{emojicat}':        getProductEmoji(post.title, post.cat || ''),
