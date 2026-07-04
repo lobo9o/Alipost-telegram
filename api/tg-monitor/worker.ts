@@ -539,8 +539,8 @@ async function startUser(userId: string) {
       reloadUser(userId);
       return;
     }
-    if (isActiveHours() && Date.now() - lastProactiveReconnect >= 3 * 60 * 60_000) {
-      console.log(`[tg-monitor] ${userId} — watchdog: reconnect proattivo anti-zombie (3h)`);
+    if (isActiveHours() && Date.now() - lastProactiveReconnect >= 45 * 60_000) {
+      console.log(`[tg-monitor] ${userId} — watchdog: reconnect proattivo anti-zombie (45min)`);
       clearInterval(watchdogId);
       activeWatchdogs.delete(userId);
       reloadUser(userId);
