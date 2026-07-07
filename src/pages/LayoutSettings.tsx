@@ -2365,48 +2365,36 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         </div>
       </div>
       {/* ── RIEPILOGO GIORNALIERO ── */}
-      <div className="stit">RIEPILOGO GIORNALIERO</div>
-      <div style={{ margin: '0 16px 8px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 14px 6px', fontSize: 11, color: 'var(--t3)' }}>
-          Pubblica automaticamente un post multiplo con i 6 prodotti con lo sconto maggiore della giornata, uno per ogni canale configurato.
-        </div>
-        {(s.channels.length > 0 ? s.channels : ['default']).map((ch, idx) => {
-          const key = ch === s.channels[0] && s.channels.length === 1 ? 'default' : ch;
-          const cfg = (s.dailyRecap?.[key] ?? { enabled: false, time: '20:00', title: 'I MIGLIORI POST DELLA GIORNATA' });
-          const setRecap = (patch: Partial<typeof cfg>) =>
-            setS(prev => ({
-              ...prev,
-              dailyRecap: { ...(prev.dailyRecap ?? {}), [key]: { ...cfg, ...patch } },
-            }));
-          return (
-            <div key={key} style={{ borderTop: idx > 0 ? '1px solid var(--bdr)' : undefined, padding: '10px 14px 12px' }}>
-              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: 'var(--t1)' }}>
-                {ch === 'default' ? '📢 Canale principale' : ch}
-              </div>
-              <ToggleRow
-                label="Attiva riepilogo"
-                sub="Pubblica i top-6 post del giorno all'orario scelto"
-                value={cfg.enabled}
-                onChange={v => setRecap({ enabled: v })}
-              />
-              {cfg.enabled && (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10, marginTop: 8 }}>
-                    <div className="fld" style={{ margin: 0 }}>
-                      <label className="lbl">Orario</label>
-                      <input type="time" className="inp" value={cfg.time} onChange={e => setRecap({ time: e.target.value })} />
-                    </div>
-                    <div className="fld" style={{ margin: 0 }}>
-                      <label className="lbl">Titolo del post</label>
-                      <input className="inp" value={cfg.title} placeholder="I MIGLIORI POST DELLA GIORNATA" onChange={e => setRecap({ title: e.target.value })} />
-                    </div>
+      {(() => {
+        const recapCfg = s.dailyRecap?.['default'] ?? { enabled: false, time: '20:00', title: 'I MIGLIORI POST DELLA GIORNATA' };
+        const setRecap = (patch: Partial<typeof recapCfg>) =>
+          setS(prev => ({ ...prev, dailyRecap: { ...(prev.dailyRecap ?? {}), default: { ...recapCfg, ...patch } } }));
+        return (
+          <>
+            <div className="stit">RIEPILOGO GIORNALIERO</div>
+            <ToggleRow
+              label="Riepilogo giornaliero"
+              sub="Pubblica i top-6 post con lo sconto maggiore della giornata"
+              value={recapCfg.enabled}
+              onChange={v => setRecap({ enabled: v })}
+            />
+            {recapCfg.enabled && (
+              <div style={{ margin: '0 16px 8px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10 }}>
+                  <div className="fld" style={{ margin: 0 }}>
+                    <label className="lbl">Orario</label>
+                    <input type="time" className="inp" value={recapCfg.time} onChange={e => setRecap({ time: e.target.value })} />
                   </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                  <div className="fld" style={{ margin: 0 }}>
+                    <label className="lbl">Titolo del post</label>
+                    <input className="inp" value={recapCfg.title} placeholder="I MIGLIORI POST DELLA GIORNATA" onChange={e => setRecap({ title: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       <div className="fld">
         <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>

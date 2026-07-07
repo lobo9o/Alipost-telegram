@@ -15,42 +15,42 @@ function currentHHMM() {
 export async function runDailyRecapCheck(serverPort: number) {
   const hhmm = currentHHMM();
 
-  // Carica tutti gli utenti con impostazioni
+  // Carica tutti i profili con impostazioni (inclusi profili secondari come "54225500:@canale")
   const settingRows = await sql<{ user_id: string; data: any }[]>`
     SELECT user_id, data FROM settings WHERE user_id NOT LIKE '%_dev'
   `.catch(() => [] as { user_id: string; data: any }[]);
 
   for (const row of settingRows) {
     const userId = row.user_id;
-    // Salta profili secondari (user_id con ":")
-    if (userId.includes(':')) continue;
+    const cfg = row.data?.dailyRecap?.['default'] as { enabled?: boolean; time?: string; title?: string } | undefined;
 
-    const recap = (row.data?.dailyRecap ?? {}) as Record<string, { enabled?: boolean; time?: string; title?: string }>;
+    if (!cfg?.enabled || cfg.time !== hhmm) continue;
 
-    for (const [channelKey, cfg] of Object.entries(recap)) {
-      if (!cfg?.enabled || cfg.time !== hhmm) continue;
+    const sentKey = userId;
+    if (sentToday.get(sentKey) === todayStr()) continue;
 
-      const sentKey = `${userId}:${channelKey}`;
-      if (sentToday.get(sentKey) === todayStr()) continue;
+    sentToday.set(sentKey, todayStr());
 
-      sentToday.set(sentKey, todayStr());
-
-      try {
-        await publishRecap(userId, channelKey, cfg.title ?? 'I MIGLIORI POST DELLA GIORNATA', serverPort);
-        console.log(`[daily-recap] pubblicato riepilogo per ${userId} canale=${channelKey}`);
-      } catch (e: any) {
-        console.error(`[daily-recap] errore per ${userId} canale=${channelKey}:`, e?.message ?? e);
-        // Rimuovi dal "già inviato" per riprovare al prossimo minuto
-        sentToday.delete(sentKey);
-      }
+    try {
+      await publishRecap(userId, cfg.title ?? 'I MIGLIORI POST DELLA GIORNATA', serverPort);
+      console.log(`[daily-recap] pubblicato riepilogo per ${userId}`);
+    } catch (e: any) {
+      console.error(`[daily-recap] errore per ${userId}:`, e?.message ?? e);
+      sentToday.delete(sentKey);
     }
   }
 }
 
-async function publishRecap(userId: string, channelKey: string, title: string, serverPort: number) {
-  const destChannel = channelKey === 'default' ? null : channelKey;
+async function publishRecap(userId: string, title: string, serverPort: number) {
+  // Ricava il dest_channel dal profilo: per profili secondari (es. "54225500:@canale")
+  // il canale di pubblicazione viene letto dalle impostazioni
+  const [settingRow] = await sql<{ data: any }[]>`
+    SELECT data FROM settings WHERE user_id = ${userId}
+  `.catch(() => []);
+  const channels: string[] = settingRow?.data?.channels ?? [];
+  const destChannel: string | null = channels[0] ?? null;
 
-  // Top 6 post singoli della giornata per questo canale, ordinati per sconto
+  // Top 6 post singoli della giornata per questo profilo, ordinati per sconto
   const posts = await sql<any[]>`
     SELECT id, platform, source_url, product_id, title, image,
            original_price, discounted_price, discount_percent,
@@ -60,11 +60,6 @@ async function publishRecap(userId: string, channelKey: string, title: string, s
       AND is_multi = false
       AND COALESCE(terminata, false) = false
       AND published_at >= now() - interval '24 hours'
-      AND (
-        ${destChannel} IS NULL
-          AND (dest_channel IS NULL OR dest_channel = '')
-        OR dest_channel = ${destChannel}
-      )
     ORDER BY discount_percent DESC
     LIMIT 6
   `;
@@ -133,7 +128,6 @@ async function publishRecap(userId: string, channelKey: string, title: string, s
 export default async function handler(req: any, res: any) {
   // Endpoint per trigger manuale (POST con userId opzionale nel body)
   const userId = req.body?.userId ?? req.query?.userId;
-  const channelKey = req.body?.channel ?? req.query?.channel ?? 'default';
   const serverPort = parseInt(process.env.PORT || '3000', 10);
 
   if (req.method === 'POST' && userId) {
@@ -141,12 +135,11 @@ export default async function handler(req: any, res: any) {
     const [settingRow] = await sql<{ data: any }[]>`
       SELECT data FROM settings WHERE user_id = ${userId}
     `.catch(() => []);
-    const recap = (settingRow?.data?.dailyRecap ?? {}) as Record<string, any>;
-    const cfg = recap[channelKey];
+    const cfg = settingRow?.data?.dailyRecap?.['default'];
     const title = cfg?.title ?? 'I MIGLIORI POST DELLA GIORNATA';
 
     try {
-      await publishRecap(userId, channelKey, title, serverPort);
+      await publishRecap(userId, title, serverPort);
       return res.json({ ok: true, message: 'Riepilogo inviato' });
     } catch (e: any) {
       return res.status(500).json({ error: e?.message ?? 'Errore' });
