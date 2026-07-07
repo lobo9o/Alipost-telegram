@@ -3,13 +3,18 @@ import sql from '../../lib/db.js';
 // Tiene traccia dei riepiloghi già pubblicati oggi per evitare doppioni (in-memory, reset al restart)
 const sentToday = new Map<string, string>(); // key: "userId:channel" → value: "YYYY-MM-DD"
 
+// Usa sempre il fuso Europe/Rome (ora italiana) indipendentemente dal server
 function todayStr() {
-  return new Date().toLocaleDateString('sv-SE'); // "2026-07-07" formato ISO
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 }
 
 function currentHHMM() {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return new Date().toLocaleTimeString('it-IT', {
+    timeZone: 'Europe/Rome',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).slice(0, 5); // "HH:MM"
 }
 
 export async function runDailyRecapCheck(serverPort: number) {
