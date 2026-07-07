@@ -88,4 +88,5 @@ export const INITIAL_SETTINGS: AppSettings = {
     telegramMode: 'keep' as const,
     telegramText: '❌ Offerta terminata',
   },
+  dailyRecap: {},
 };

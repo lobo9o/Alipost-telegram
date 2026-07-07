@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import cron from 'node-cron';
 import { initTgMonitor } from './api/tg-monitor/worker.js';
+import { runDailyRecapCheck } from './api/autopost/daily-recap.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -48,6 +49,7 @@ async function main() {
     tgMonitorChannelsHandler,
     channelInfoHandler,
     multiPreviewHandler,
+    dailyRecapHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -70,6 +72,7 @@ async function main() {
     loadHandler('api/tg-monitor/channels.ts'),
     loadHandler('api/channel-info.ts'),
     loadHandler('api/multi-preview.ts'),
+    loadHandler('api/autopost/daily-recap.ts'),
   ]);
 
   const app = express();
@@ -120,6 +123,7 @@ async function main() {
   app.all('/api/tg-monitor/channels/:id', withId(tgMonitorChannelsHandler));
   app.all('/api/channel-info', channelInfoHandler);
   app.all('/api/multi-preview', multiPreviewHandler);
+  app.all('/api/autopost/daily-recap', dailyRecapHandler);
 
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -130,6 +134,11 @@ async function main() {
   app.listen(PORT, () => {
     console.log(`[server] avviato su http://localhost:${PORT}`);
     initTgMonitor(PORT);
+  });
+
+  // Riepilogo giornaliero: check ogni minuto
+  cron.schedule('* * * * *', () => {
+    runDailyRecapCheck(PORT).catch(e => console.error('[cron daily-recap]', e));
   });
 
   // Autopost ogni minuto

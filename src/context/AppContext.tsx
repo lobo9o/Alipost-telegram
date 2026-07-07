@@ -100,6 +100,7 @@ function mergeSettings(fetched: unknown): AppSettings {
         merchantFilter: typeof r.dealSearch.amazon.merchantFilter === 'string' ? r.dealSearch.amazon.merchantFilter : 'all',
       } : undefined,
     },
+    dailyRecap: (r.dailyRecap && typeof r.dailyRecap === 'object') ? r.dailyRecap as Record<string, any> : {},
   };
 }
 

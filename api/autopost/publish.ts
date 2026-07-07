@@ -1135,6 +1135,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS terminata BOOLEAN DEFAULT false`.catch(() => {});
     await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS is_multi BOOLEAN DEFAULT false`.catch(() => {});
     await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS auto BOOLEAN DEFAULT false`.catch(() => {});
+    await sql`ALTER TABLE autopost_queue ADD COLUMN IF NOT EXISTS caption_prefix TEXT`.catch(() => {});
+    await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS dest_channel TEXT`.catch(() => {});
     // Pulizia storico prezzi oltre 180 giorni (fire-and-forget)
     sql`DELETE FROM price_history WHERE recorded_at < now() - interval '180 days'`.catch(() => {});
     migrationDone = true;
@@ -1240,7 +1242,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         : sql``;
 
       const [candidate] = await sql`
-        SELECT id, posts, silenzioso, dest_channel, COALESCE(immediate, false) AS immediate FROM autopost_queue
+        SELECT id, posts, silenzioso, dest_channel, caption_prefix, COALESCE(immediate, false) AS immediate FROM autopost_queue
         WHERE user_id = ${userId} AND status = 'draft' ${excludeClause}
         ORDER BY COALESCE(immediate, false) DESC, created_at ASC LIMIT 1
       `;
@@ -1840,6 +1842,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           messageText = perProductTexts.join('\n');
         }
 
+        // Titolo riepilogo: preposto al testo multiplo se presente (es. "I MIGLIORI POST DELLA GIORNATA")
+        const captionPrefix = (queueItem as any)?.caption_prefix as string | null | undefined;
+        if (captionPrefix?.trim()) {
+          messageText = `<b>${captionPrefix.trim()}</b>\n\n` + messageText;
+        }
+
         // Solo la tastiera del layout (se impostata), nessun pulsante prodotto hardcoded
         if (keyboardRow?.body) {
           replyMarkup = await buildKeyboard(keyboardRow.body, post, affiliateUrl)
@@ -1990,13 +1998,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           id, user_id, emoji, title, image,
           original_price, discounted_price, discount_percent,
           platform, source_url, product_id, custom_text,
-          layout_id, is_historical_low, is_multi, multi_items, chat_id, message_id, published_at, last_checked_at
+          layout_id, is_historical_low, is_multi, multi_items, chat_id, message_id, published_at, last_checked_at, dest_channel
         ) VALUES (
           ${post.id}, ${userId}, ${pubEmoji}, ${pubTitle}, ${post.image ?? ''},
           ${post.originalPrice ?? 0}, ${post.discountedPrice ?? 0}, ${post.discountPercent ?? 0},
           ${post.platform ?? 'amazon'}, ${post.sourceUrl ?? ''}, ${post.productId ?? ''},
           ${post.customText ?? ''}, ${post.layoutId ?? ''}, ${post.isHistoricalLow ?? false},
-          ${isMulti}, ${multiItemsForDB}, ${chatId}, ${messageId}, now(), now()
+          ${isMulti}, ${multiItemsForDB}, ${chatId}, ${messageId}, now(), now(), ${destCh ?? null}
         )
         ON CONFLICT (id) DO UPDATE SET
           chat_id = EXCLUDED.chat_id,

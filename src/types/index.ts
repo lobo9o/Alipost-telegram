@@ -304,17 +304,24 @@ export interface DealSearchSettings {
   autoMultiEvery?: number;
 }
 
+export interface DailyRecapChannelConfig {
+  enabled: boolean;
+  time: string;   // "HH:MM"
+  title: string;  // testo header del post (es. "I MIGLIORI POST DELLA GIORNATA")
+}
+
 export interface AppSettings {
   oraI: string;
   oraF: string;
   interv: number;
   attivo: boolean;
   channels: string[];
-  notifThreshold?: number; // sconto minimo % per pubblicare con notifica; undefined=sempre silenzioso
+  notifThreshold?: number;
   amazon: AmazonSettings;
   aliexpress: AliExpressSettings;
   terminata: TerminataConfig;
   dealSearch: DealSearchSettings;
+  dailyRecap: Record<string, DailyRecapChannelConfig>; // chiave: nome canale o "default"
 }
 
 export interface AppState {

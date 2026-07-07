@@ -2364,6 +2364,50 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
             : 'Vuoto = tutti i post silenziosissimi (usa il toggle per-post per forzare notifica)'}
         </div>
       </div>
+      {/* ── RIEPILOGO GIORNALIERO ── */}
+      <div className="stit">RIEPILOGO GIORNALIERO</div>
+      <div style={{ margin: '0 16px 8px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '10px 14px 6px', fontSize: 11, color: 'var(--t3)' }}>
+          Pubblica automaticamente un post multiplo con i 6 prodotti con lo sconto maggiore della giornata, uno per ogni canale configurato.
+        </div>
+        {(s.channels.length > 0 ? s.channels : ['default']).map((ch, idx) => {
+          const key = ch === s.channels[0] && s.channels.length === 1 ? 'default' : ch;
+          const cfg = (s.dailyRecap?.[key] ?? { enabled: false, time: '20:00', title: 'I MIGLIORI POST DELLA GIORNATA' });
+          const setRecap = (patch: Partial<typeof cfg>) =>
+            setS(prev => ({
+              ...prev,
+              dailyRecap: { ...(prev.dailyRecap ?? {}), [key]: { ...cfg, ...patch } },
+            }));
+          return (
+            <div key={key} style={{ borderTop: idx > 0 ? '1px solid var(--bdr)' : undefined, padding: '10px 14px 12px' }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: 'var(--t1)' }}>
+                {ch === 'default' ? '📢 Canale principale' : ch}
+              </div>
+              <ToggleRow
+                label="Attiva riepilogo"
+                sub="Pubblica i top-6 post del giorno all'orario scelto"
+                value={cfg.enabled}
+                onChange={v => setRecap({ enabled: v })}
+              />
+              {cfg.enabled && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10, marginTop: 8 }}>
+                    <div className="fld" style={{ margin: 0 }}>
+                      <label className="lbl">Orario</label>
+                      <input type="time" className="inp" value={cfg.time} onChange={e => setRecap({ time: e.target.value })} />
+                    </div>
+                    <div className="fld" style={{ margin: 0 }}>
+                      <label className="lbl">Titolo del post</label>
+                      <input className="inp" value={cfg.title} placeholder="I MIGLIORI POST DELLA GIORNATA" onChange={e => setRecap({ title: e.target.value })} />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       <div className="fld">
         <button className="btn bp bfull" onClick={save}>✅ Salva impostazioni</button>
         {saved && <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a2a0a', border: '1px solid #1a5c1a', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>✓ Impostazioni salvate con successo</div>}
