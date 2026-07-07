@@ -74,17 +74,11 @@ async function publishRecap(userId: string, title: string, serverPort: number) {
     return;
   }
 
-  // Carica layout multi-prodotto e keyboard dell'utente
+  // Carica layout multi-prodotto (la tastiera viene presa da keyboard_id del layout in publish.ts)
   const [layoutRow] = await sql<{ id: string; body: string }[]>`
     SELECT id, body FROM layouts
     WHERE user_id = ${userId} AND tipo = 'multi'
     ORDER BY created_at DESC NULLS LAST LIMIT 1
-  `.catch(() => []);
-
-  const [kbRow] = await sql<{ id: string }[]>`
-    SELECT id FROM keyboards
-    WHERE user_id = ${userId}
-    ORDER BY created_at ASC LIMIT 1
   `.catch(() => []);
 
   // Carica template per generare l'immagine multi
@@ -108,7 +102,7 @@ async function publishRecap(userId: string, title: string, serverPort: number) {
     isHistoricalLow: p.is_historical_low ?? false,
     templateId:      tplRow?.id ?? 'tpl1',
     layoutId:        layoutRow?.id ?? '',
-    keyboardId:      kbRow?.id ?? '',
+    keyboardId:      '',  // lascia che publish.ts usi la tastiera del layout multi
     emoji:           p.emoji ?? '📦',
   }));
 
