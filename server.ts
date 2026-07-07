@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import cron from 'node-cron';
 import { initTgMonitor } from './api/tg-monitor/worker.js';
 import { runDailyRecapCheck } from './api/autopost/daily-recap.js';
+import { runPriceWatchCheck } from './api/autopost/price-watch.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -50,6 +51,7 @@ async function main() {
     channelInfoHandler,
     multiPreviewHandler,
     dailyRecapHandler,
+    priceWatchHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -73,6 +75,7 @@ async function main() {
     loadHandler('api/channel-info.ts'),
     loadHandler('api/multi-preview.ts'),
     loadHandler('api/autopost/daily-recap.ts'),
+    loadHandler('api/autopost/price-watch.ts'),
   ]);
 
   const app = express();
@@ -124,6 +127,7 @@ async function main() {
   app.all('/api/channel-info', channelInfoHandler);
   app.all('/api/multi-preview', multiPreviewHandler);
   app.all('/api/autopost/daily-recap', dailyRecapHandler);
+  app.all('/api/autopost/price-watch', priceWatchHandler);
 
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -139,6 +143,11 @@ async function main() {
   // Riepilogo giornaliero: check ogni minuto
   cron.schedule('* * * * *', () => {
     runDailyRecapCheck(PORT).catch(e => console.error('[cron daily-recap]', e));
+  });
+
+  // Price watch per post con errore di prezzo: check ogni 2 minuti
+  cron.schedule('*/2 * * * *', () => {
+    runPriceWatchCheck().catch(e => console.error('[cron price-watch]', e));
   });
 
   // Autopost ogni minuto

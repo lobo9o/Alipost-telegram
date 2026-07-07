@@ -70,7 +70,7 @@ async function publishRecap(userId: string, title: string, serverPort: number) {
   `;
 
   if (posts.length < 2) {
-    console.log(`[daily-recap] ${userId} canale=${channelKey}: solo ${posts.length} post, riepilogo saltato`);
+    console.log(`[daily-recap] ${userId} canale=${destChannel}: solo ${posts.length} post, riepilogo saltato`);
     return;
   }
 
