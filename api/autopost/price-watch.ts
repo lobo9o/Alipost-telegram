@@ -1,4 +1,5 @@
 import sql from '../../lib/db.js';
+import { generateTerminataImageServer } from '../_imageServer.js';
 
 // In-memory: timestamp dell'ultimo check per ogni post (reset al riavvio)
 const lastChecked = new Map<string, number>(); // postId → ms
@@ -50,7 +51,8 @@ export async function runPriceWatchCheck() {
   const posts = await sql<any[]>`
     SELECT id, user_id, product_id AS "productId", platform,
            discounted_price::float AS "discountedPrice",
-           chat_id AS "chatId", message_id AS "messageId"
+           image, chat_id AS "chatId", message_id AS "messageId",
+           layout_id AS "layoutId"
     FROM published_posts
     WHERE NOT COALESCE(terminata, false)
       AND COALESCE(is_multi, false) = false
@@ -102,7 +104,8 @@ export async function runPriceWatchCheck() {
     }
 
     const tgBase = `https://api.telegram.org/bot${botToken}`;
-    const telegramMode = String(cfg.terminata?.telegramMode ?? 'keep');
+    const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
+    const telegramMode = String(termCfg.telegramMode ?? 'keep');
     const chatId = String(post.chatId ?? '');
     const msgId  = Number(post.messageId ?? 0);
 
@@ -115,29 +118,51 @@ export async function runPriceWatchCheck() {
     `.catch(() => [null]);
     const terminataText = String(termTagRow?.value ?? '❌ Offerta terminata');
 
+    // Genera immagine terminata (grayscale + overlay) rispettando le impostazioni template
+    let termImg: Buffer | null = null;
+    if (post.image && String(post.image).startsWith('http')) {
+      termImg = await generateTerminataImageServer(String(post.image), termCfg).catch((e: any) => {
+        console.warn('[price-watch] terminata img:', e?.message ?? e);
+        return null;
+      });
+    }
+
+    // Costruisce caption rispettando telegramMode
     let caption: string | undefined;
     if (telegramMode === 'only') {
       caption = terminataText;
     } else if (telegramMode === 'append') {
-      caption = terminataText; // fast path: solo testo terminata senza ricostruire layout
+      caption = terminataText; // fast path: solo testo terminata
     }
-    // 'keep' → caption undefined, non modifica il testo Telegram
+    // 'keep' → caption undefined, non modifica il testo
 
-    if (chatId && msgId && caption !== undefined) {
-      const tgBody = { chat_id: chatId, message_id: msgId, caption: caption.slice(0, 1024), parse_mode: 'HTML' };
-      const tgR = await fetch(`${tgBase}/editMessageCaption`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tgBody),
-      }).catch(() => null);
-      const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
-      if (!tgD.ok) {
-        // Fallback: prova editMessageText (post senza foto)
-        await fetch(`${tgBase}/editMessageText`, {
+    if (chatId && msgId) {
+      if (termImg) {
+        const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo', parse_mode: 'HTML' };
+        if (caption !== undefined) mediaObj.caption = caption.slice(0, 1024);
+        const form = new FormData();
+        form.append('chat_id', chatId);
+        form.append('message_id', String(msgId));
+        form.append('media', JSON.stringify(mediaObj));
+        form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
+        const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
+        const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
+        console.log(`[price-watch] Telegram: ok=${tgD.ok}${tgD.ok ? '' : ' err=' + tgD.description}`);
+      } else if (caption !== undefined) {
+        const tgBody = { chat_id: chatId, message_id: msgId, caption: caption.slice(0, 1024), parse_mode: 'HTML' };
+        const tgR = await fetch(`${tgBase}/editMessageCaption`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, message_id: msgId, text: terminataText.slice(0, 4096), parse_mode: 'HTML' }),
-        }).catch(() => {});
+          body: JSON.stringify(tgBody),
+        }).catch(() => null);
+        const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
+        if (!tgD.ok) {
+          await fetch(`${tgBase}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, message_id: msgId, text: terminataText.slice(0, 4096), parse_mode: 'HTML' }),
+          }).catch(() => {});
+        }
       }
     }
 
