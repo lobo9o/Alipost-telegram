@@ -1763,13 +1763,25 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             }
             return buildMessage(template, mp, mpUrl, mpCurrency, mpCustomTags);
           });
-          messageText = perProductTexts.join('\n');
+          // Prepend caption_prefix (es. titolo daily recap) e aggiungi prodotti uno a uno
+          // finché il testo visibile (senza tag HTML) rientra nei 1024 char di Telegram.
+          // In questo modo l'ultimo item rimane sempre completo, senza "…" di troncatura.
+          const captPfx = ((queueItem as any)?.caption_prefix as string | null | undefined)?.trim() ?? '';
+          const pfxHtml = captPfx ? `<b>${captPfx}</b>\n\n` : '';
+          const visLen = (s: string) => s.replace(/<[^>]+>/g, '').length;
+          let fittingTexts = perProductTexts;
+          while (fittingTexts.length > 1 && visLen(pfxHtml + fittingTexts.join('\n')) > 1024) {
+            fittingTexts = fittingTexts.slice(0, -1);
+          }
+          messageText = pfxHtml + fittingTexts.join('\n');
         }
 
-        // Titolo riepilogo: preposto al testo multiplo se presente (es. "I MIGLIORI POST DELLA GIORNATA")
-        const captionPrefix = (queueItem as any)?.caption_prefix as string | null | undefined;
-        if (captionPrefix?.trim()) {
-          messageText = `<b>${captionPrefix.trim()}</b>\n\n` + messageText;
+        // Per il path backward-compat {lista_prodotti}: aggiungi caption_prefix se presente
+        if (layoutRow?.body?.includes('{lista_prodotti}')) {
+          const captionPrefix = (queueItem as any)?.caption_prefix as string | null | undefined;
+          if (captionPrefix?.trim()) {
+            messageText = `<b>${captionPrefix.trim()}</b>\n\n` + messageText;
+          }
         }
 
         // Solo la tastiera del layout (se impostata), nessun pulsante prodotto hardcoded
