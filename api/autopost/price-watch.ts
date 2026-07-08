@@ -45,6 +45,78 @@ async function scrapeAmazonPrice(domain: string, asin: string): Promise<number |
   }
 }
 
+async function terminatePost(
+  post: any,
+  currentPrice: number,
+  cfg: Record<string, any>,
+) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) {
+    await sql`UPDATE published_posts SET terminata = true WHERE id = ${post.id}`.catch(() => {});
+    console.log(`[price-watch] terminato (no token) ${post.id}`);
+    return;
+  }
+
+  const tgBase = `https://api.telegram.org/bot${botToken}`;
+  const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
+  const telegramMode = String(termCfg.telegramMode ?? 'keep');
+  const chatId = String(post.chatId ?? '');
+  const msgId  = Number(post.messageId ?? 0);
+
+  const baseUserId = String(post.user_id).split(':')[0];
+  const [termTagRow] = await sql`
+    SELECT value FROM tags
+    WHERE name = '{terminata}' AND (user_id = ${post.user_id} OR user_id = ${baseUserId})
+    ORDER BY (user_id = ${post.user_id}) DESC LIMIT 1
+  `.catch(() => [null]);
+  const terminataText = String(termTagRow?.value ?? '❌ Offerta terminata');
+
+  let termImg: Buffer | null = null;
+  if (post.image && String(post.image).startsWith('http')) {
+    termImg = await generateTerminataImageServer(String(post.image), termCfg).catch((e: any) => {
+      console.warn('[price-watch] terminata img:', e?.message ?? e);
+      return null;
+    });
+  }
+
+  let caption: string | undefined;
+  if (telegramMode === 'only') caption = terminataText;
+  else if (telegramMode === 'append') caption = terminataText;
+
+  if (chatId && msgId) {
+    if (termImg) {
+      const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo', parse_mode: 'HTML' };
+      if (caption !== undefined) mediaObj.caption = caption.slice(0, 1024);
+      const form = new FormData();
+      form.append('chat_id', chatId);
+      form.append('message_id', String(msgId));
+      form.append('media', JSON.stringify(mediaObj));
+      form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
+      const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
+      const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
+      console.log(`[price-watch] Telegram: ok=${tgD.ok}${tgD.ok ? '' : ' err=' + tgD.description}`);
+    } else if (caption !== undefined) {
+      const tgBody = { chat_id: chatId, message_id: msgId, caption: caption.slice(0, 1024), parse_mode: 'HTML' };
+      const tgR = await fetch(`${tgBase}/editMessageCaption`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tgBody),
+      }).catch(() => null);
+      const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
+      if (!tgD.ok) {
+        await fetch(`${tgBase}/editMessageText`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, message_id: msgId, text: terminataText.slice(0, 4096), parse_mode: 'HTML' }),
+        }).catch(() => {});
+      }
+    }
+  }
+
+  await sql`UPDATE published_posts SET terminata = true WHERE id = ${post.id}`.catch(() => {});
+  console.log(`[price-watch] post terminato: ${post.id} (${post.productId} ${Number(post.discountedPrice)}→${currentPrice})`);
+}
+
 export async function runPriceWatchCheck() {
   const now = Date.now();
 
@@ -64,18 +136,17 @@ export async function runPriceWatchCheck() {
         custom_text ILIKE '%probabile%'
       )
     ORDER BY published_at DESC
-    LIMIT 20
+    LIMIT 30
   `.catch(() => []);
 
   if (posts.length === 0) return;
   console.log(`[price-watch] ${posts.length} post da monitorare`);
 
-  for (const post of posts) {
-    // Minimo 90s tra due check dello stesso post (evita sovrapposizioni)
-    const lastTime = lastChecked.get(post.id) ?? 0;
-    if (now - lastTime < 90_000) continue;
-    lastChecked.set(post.id, now);
+  // Cache locale al run: domain:asin → prezzo corrente (null = non aumentato/non disponibile)
+  // Evita di riscrape lo stesso ASIN più volte nello stesso ciclo (es. stesso prodotto su più canali)
+  const runPriceCache = new Map<string, number | null>();
 
+  for (const post of posts) {
     if (!post.productId) continue;
 
     const [cfgRow] = await sql<{ data: any }[]>`
@@ -84,90 +155,37 @@ export async function runPriceWatchCheck() {
     const cfg = cfgRow?.data ?? {};
     const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
     const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+    const cacheKey = `${domain}:${post.productId}`;
 
-    const currentPrice = await scrapeAmazonPrice(domain, String(post.productId));
-    const storedPrice = Number(post.discountedPrice);
+    let currentPrice: number | null;
 
-    console.log(`[price-watch] ${post.productId}: stored=${storedPrice} current=${currentPrice ?? '?'}`);
+    if (runPriceCache.has(cacheKey)) {
+      // Risultato già noto per questo ASIN nel run corrente — riusa senza scrape
+      currentPrice = runPriceCache.get(cacheKey) ?? null;
+      console.log(`[price-watch] ${post.productId}: cached current=${currentPrice ?? '?'}`);
+    } else {
+      // Primo incontro di questo ASIN: controlla il cooldown e scrapa
+      const lastTime = lastChecked.get(post.id) ?? 0;
+      if (now - lastTime < 90_000) continue;
+      lastChecked.set(post.id, now);
+
+      currentPrice = await scrapeAmazonPrice(domain, String(post.productId));
+      console.log(`[price-watch] ${post.productId}: stored=${post.discountedPrice} current=${currentPrice ?? '?'}`);
+
+      const storedPrice = Number(post.discountedPrice);
+      // Salva in cache solo se il prezzo è aumentato (null = non aumentato, non rischediamo per altri canali)
+      runPriceCache.set(cacheKey, (currentPrice !== null && currentPrice > storedPrice * 1.02) ? currentPrice : null);
+    }
 
     if (currentPrice === null) continue;
-    // 2% di tolleranza per variazioni di arrotondamento
+
+    const storedPrice = Number(post.discountedPrice);
     if (currentPrice <= storedPrice * 1.02) continue;
 
-    console.log(`[price-watch] PREZZO AUMENTATO ${post.productId}: ${storedPrice}→${currentPrice} — terminazione`);
+    // Aggiorna il cooldown anche per i post trovati tramite cache
+    lastChecked.set(post.id, now);
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) {
-      await sql`UPDATE published_posts SET terminata = true WHERE id = ${post.id}`.catch(() => {});
-      console.log(`[price-watch] terminato (no token) ${post.id}`);
-      continue;
-    }
-
-    const tgBase = `https://api.telegram.org/bot${botToken}`;
-    const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
-    const telegramMode = String(termCfg.telegramMode ?? 'keep');
-    const chatId = String(post.chatId ?? '');
-    const msgId  = Number(post.messageId ?? 0);
-
-    // Recupera il valore del tag {terminata} per questo utente
-    const baseUserId = String(post.user_id).split(':')[0];
-    const [termTagRow] = await sql`
-      SELECT value FROM tags
-      WHERE name = '{terminata}' AND (user_id = ${post.user_id} OR user_id = ${baseUserId})
-      ORDER BY (user_id = ${post.user_id}) DESC LIMIT 1
-    `.catch(() => [null]);
-    const terminataText = String(termTagRow?.value ?? '❌ Offerta terminata');
-
-    // Genera immagine terminata (grayscale + overlay) rispettando le impostazioni template
-    let termImg: Buffer | null = null;
-    if (post.image && String(post.image).startsWith('http')) {
-      termImg = await generateTerminataImageServer(String(post.image), termCfg).catch((e: any) => {
-        console.warn('[price-watch] terminata img:', e?.message ?? e);
-        return null;
-      });
-    }
-
-    // Costruisce caption rispettando telegramMode
-    let caption: string | undefined;
-    if (telegramMode === 'only') {
-      caption = terminataText;
-    } else if (telegramMode === 'append') {
-      caption = terminataText; // fast path: solo testo terminata
-    }
-    // 'keep' → caption undefined, non modifica il testo
-
-    if (chatId && msgId) {
-      if (termImg) {
-        const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo', parse_mode: 'HTML' };
-        if (caption !== undefined) mediaObj.caption = caption.slice(0, 1024);
-        const form = new FormData();
-        form.append('chat_id', chatId);
-        form.append('message_id', String(msgId));
-        form.append('media', JSON.stringify(mediaObj));
-        form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
-        const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
-        const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
-        console.log(`[price-watch] Telegram: ok=${tgD.ok}${tgD.ok ? '' : ' err=' + tgD.description}`);
-      } else if (caption !== undefined) {
-        const tgBody = { chat_id: chatId, message_id: msgId, caption: caption.slice(0, 1024), parse_mode: 'HTML' };
-        const tgR = await fetch(`${tgBase}/editMessageCaption`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(tgBody),
-        }).catch(() => null);
-        const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
-        if (!tgD.ok) {
-          await fetch(`${tgBase}/editMessageText`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, message_id: msgId, text: terminataText.slice(0, 4096), parse_mode: 'HTML' }),
-          }).catch(() => {});
-        }
-      }
-    }
-
-    await sql`UPDATE published_posts SET terminata = true WHERE id = ${post.id}`.catch(() => {});
-    console.log(`[price-watch] post terminato: ${post.id}`);
+    await terminatePost(post, currentPrice, cfg);
   }
 }
 
