@@ -810,6 +810,7 @@ function buildMessage(
   currency?: string,
   customTags: Record<string, string> = {},
   terminataValue?: string,
+  maxTitleLen = 60,
 ): string {
   const now = new Date();
   const giorni = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
@@ -818,7 +819,7 @@ function buildMessage(
   const discPrice = Number(post.discountedPrice).toFixed(2).replace('.', ',');
   const origPrice = Number(post.originalPrice).toFixed(2).replace('.', ',');
   const disc = Number(post.discountPercent);
-  const titleShort = (post.title || '').length > 60 ? (post.title || '').slice(0, 57) + '...' : (post.title || '');
+  const titleShort = (post.title || '').length > maxTitleLen ? (post.title || '').slice(0, maxTitleLen - 3) + '...' : (post.title || '');
 
   const tags: Record<string, string> = {
     // Tag personalizzati dal DB — le assegnazioni esplicite sotto hanno priorità
@@ -1747,29 +1748,38 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         } else {
           // Nuovo comportamento: ripeti il template per ogni prodotto
           const template = layoutText || defaultMultiLayout;
-          const perProductTexts = (postsArr as Record<string, any>[]).map(mp => {
-            let mpUrl = String(mp.sourceUrl ?? '');
-            if (!mpUrl && mp.platform === 'amazon' && mp.productId) {
-              const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
-              const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
-              mpUrl = `https://${domain}/dp/${mp.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}`;
-            }
-            const mpCurrency = mp.platform === 'aliexpress'
-              ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
-            const mpCustomTags: Record<string, string> = {};
-            for (const t of tagRows) {
-              const override = mp.tagOverrides?.[t.name as string];
-              mpCustomTags[t.name as string] = override !== undefined ? override : (t.value as string);
-            }
-            return buildMessage(template, mp, mpUrl, mpCurrency, mpCustomTags);
-          });
-          // Prepend caption_prefix (es. titolo daily recap) e aggiungi prodotti uno a uno
-          // finché il testo visibile (senza tag HTML) rientra nei 1024 char di Telegram.
-          // In questo modo l'ultimo item rimane sempre completo, senza "…" di troncatura.
+
+          // Helper: costruisce i testi per ogni prodotto con titoli troncati a maxTitleLen chars
+          const buildTexts = (maxTitleLen: number) =>
+            (postsArr as Record<string, any>[]).map(mp => {
+              let mpUrl = String(mp.sourceUrl ?? '');
+              if (!mpUrl && mp.platform === 'amazon' && mp.productId) {
+                const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
+                const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+                mpUrl = `https://${domain}/dp/${mp.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}`;
+              }
+              const mpCurrency = mp.platform === 'aliexpress'
+                ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
+              const mpCustomTags: Record<string, string> = {};
+              for (const t of tagRows) {
+                const override = mp.tagOverrides?.[t.name as string];
+                mpCustomTags[t.name as string] = override !== undefined ? override : (t.value as string);
+              }
+              return buildMessage(template, mp, mpUrl, mpCurrency, mpCustomTags, undefined, maxTitleLen);
+            });
+
           const captPfx = ((queueItem as any)?.caption_prefix as string | null | undefined)?.trim() ?? '';
           const pfxHtml = captPfx ? `<b>${captPfx}</b>\n\n` : '';
           const visLen = (s: string) => s.replace(/<[^>]+>/g, '').length;
-          let fittingTexts = perProductTexts;
+
+          // 1. Prova ad abbreviare i titoli (60→40→25) prima di rimuovere prodotti
+          let fittingTexts: string[] = buildTexts(60);
+          for (const tLen of [60, 40, 25]) {
+            const texts = buildTexts(tLen);
+            fittingTexts = texts;
+            if (visLen(pfxHtml + texts.join('\n')) <= 1024) break;
+          }
+          // 2. Se ancora troppo lungo (titoli già a 25), rimuovi items dalla fine
           while (fittingTexts.length > 1 && visLen(pfxHtml + fittingTexts.join('\n')) > 1024) {
             fittingTexts = fittingTexts.slice(0, -1);
           }
