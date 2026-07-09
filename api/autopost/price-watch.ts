@@ -1,5 +1,6 @@
 import sql from '../../lib/db.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
+import { buildMessage } from '../_buildMessage.js';
 import { checkPostPrice } from '../_priceCheck.js';
 
 // In-memory: timestamp dell'ultimo check per ogni post (reset al riavvio)
@@ -47,13 +48,10 @@ async function scrapeAmazonPrice(domain: string, asin: string): Promise<number |
 }
 
 // Ottieni prezzo corrente: prima PA API (via checkPostPrice), poi scraping HTML come fallback.
-// checkPostPrice è più affidabile perché usa l'API Amazon ufficiale e non soffre di cache HTML.
 async function getCurrentPrice(post: any, cfg: Record<string, any>): Promise<number | null> {
-  // checkPostPrice restituisce sempre currentPrice se riesce a ottenerlo, anche quando valid=true
   const check = await checkPostPrice(post, cfg).catch(() => null);
   if (check?.currentPrice != null) return check.currentPrice;
 
-  // Fallback: scraping HTML
   const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
   const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
   return scrapeAmazonPrice(domain, String(post.productId));
@@ -74,6 +72,8 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
   const msgId  = Number(post.messageId ?? 0);
 
   const baseUserId = String(post.user_id).split(':')[0];
+
+  // Recupera tag {terminata} per questo utente
   const [termTagRow] = await sql`
     SELECT value FROM tags
     WHERE name = '{terminata}' AND (user_id = ${post.user_id} OR user_id = ${baseUserId})
@@ -81,6 +81,7 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
   `.catch(() => [null]);
   const terminataText = String(termTagRow?.value ?? '❌ Offerta terminata');
 
+  // Genera immagine terminata (grayscale + overlay) rispettando le impostazioni template
   let termImg: Buffer | null = null;
   if (post.image && String(post.image).startsWith('http')) {
     termImg = await generateTerminataImageServer(String(post.image), termCfg).catch((e: any) => {
@@ -89,9 +90,38 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
     });
   }
 
+  // Costruisce caption rispettando telegramMode — identico alla terminata automatica di publish.ts
   let caption: string | undefined;
-  if (telegramMode === 'only') caption = terminataText;
-  else if (telegramMode === 'append') caption = terminataText;
+  if (telegramMode === 'only') {
+    caption = terminataText;
+  } else if (telegramMode === 'append') {
+    // Ricostruisce il testo completo del post con il layout, poi appende il testo terminata
+    const layoutIdToUse = post.layoutId ?? termCfg.layoutId ?? null;
+    const [termLayoutRow] = layoutIdToUse ? await sql`
+      SELECT body FROM layouts WHERE id = ${layoutIdToUse}
+        AND (user_id = ${post.user_id} OR user_id = ${baseUserId})
+    `.catch(() => [null]) : [null];
+
+    const tagRows = await sql`
+      SELECT name, value FROM tags
+      WHERE user_id = ${post.user_id} OR user_id = ${baseUserId}
+      ORDER BY (user_id = ${post.user_id}) ASC
+    `.catch(() => []);
+    const customTags: Record<string, string> = {};
+    for (const tr of tagRows) customTags[tr.name as string] = tr.value as string;
+
+    const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
+    const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+    const affUrl = post.sourceUrl
+      || (post.productId ? `https://${domain}/dp/${post.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}` : '');
+
+    const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato}{valuta} <s>{oldprezzo}{valuta}</s>\n🏷️ Sconto: -{sconto}%\n\n{_<b>{custom}</b>_}`;
+    const builtCaption = termLayoutRow?.body
+      ? buildMessage(String(termLayoutRow.body), post, affUrl, undefined, customTags, terminataText)
+      : '';
+    caption = builtCaption || terminataText;
+  }
+  // 'keep' → caption undefined, non modifica il testo Telegram
 
   if (chatId && msgId) {
     if (termImg) {
@@ -104,7 +134,7 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
       form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
       const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
       const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
-      console.log(`[price-watch] Telegram: ok=${tgD.ok}${tgD.ok ? '' : ' err=' + tgD.description}`);
+      console.log(`[price-watch] Telegram editMessageMedia: ok=${tgD.ok}${tgD.ok ? '' : ' err=' + tgD.description}`);
     } else if (caption !== undefined) {
       const tgBody = { chat_id: chatId, message_id: msgId, caption: caption.slice(0, 1024), parse_mode: 'HTML' };
       const tgR = await fetch(`${tgBase}/editMessageCaption`, {
@@ -134,6 +164,11 @@ export async function runPriceWatchCheck() {
     SELECT id, user_id, product_id AS "productId", platform,
            discounted_price::float AS "discountedPrice",
            original_price::float AS "originalPrice",
+           discount_percent AS "discountPercent",
+           title, source_url AS "sourceUrl",
+           custom_text AS "customText",
+           is_historical_low AS "isHistoricalLow",
+           emoji,
            image, chat_id AS "chatId", message_id AS "messageId",
            layout_id AS "layoutId"
     FROM published_posts
@@ -155,7 +190,7 @@ export async function runPriceWatchCheck() {
 
   // Cache locale al run: productId → prezzo corrente trovato.
   // Evita di riscrape lo stesso ASIN più volte nello stesso ciclo (es. stesso prodotto su più canali).
-  const runPriceCache = new Map<string, number | null>(); // productId → currentPrice o null
+  const runPriceCache = new Map<string, number | null>();
 
   for (const post of posts) {
     if (!post.productId) continue;
@@ -169,11 +204,9 @@ export async function runPriceWatchCheck() {
     let currentPrice: number | null;
 
     if (runPriceCache.has(post.productId)) {
-      // Prezzo già noto per questo ASIN nel run corrente
       currentPrice = runPriceCache.get(post.productId) ?? null;
       console.log(`[price-watch] ${post.productId}: cache current=${currentPrice ?? '?'}`);
     } else {
-      // Primo incontro di questo ASIN: rispetta il cooldown per post singoli
       const lastTime = lastChecked.get(post.id) ?? 0;
       if (now - lastTime < 90_000) continue;
       lastChecked.set(post.id, now);
@@ -181,7 +214,6 @@ export async function runPriceWatchCheck() {
       currentPrice = await getCurrentPrice(post, cfg);
       console.log(`[price-watch] ${post.productId}: stored=${storedPrice} current=${currentPrice ?? '?'}`);
 
-      // Salva in cache: il prezzo trovato se è aumentato, null altrimenti
       runPriceCache.set(
         post.productId,
         (currentPrice !== null && currentPrice > storedPrice * 1.02) ? currentPrice : null,
@@ -191,9 +223,7 @@ export async function runPriceWatchCheck() {
     if (currentPrice === null) continue;
     if (currentPrice <= storedPrice * 1.02) continue;
 
-    // Aggiorna il cooldown anche per i post trovati tramite cache
     lastChecked.set(post.id, now);
-
     await terminatePost(post, currentPrice, cfg);
   }
 }
