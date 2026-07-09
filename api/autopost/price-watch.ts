@@ -1,5 +1,6 @@
 import sql from '../../lib/db.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
+import { checkPostPrice } from '../_priceCheck.js';
 
 // In-memory: timestamp dell'ultimo check per ogni post (reset al riavvio)
 const lastChecked = new Map<string, number>(); // postId → ms
@@ -45,11 +46,20 @@ async function scrapeAmazonPrice(domain: string, asin: string): Promise<number |
   }
 }
 
-async function terminatePost(
-  post: any,
-  currentPrice: number,
-  cfg: Record<string, any>,
-) {
+// Ottieni prezzo corrente: prima PA API (via checkPostPrice), poi scraping HTML come fallback.
+// checkPostPrice è più affidabile perché usa l'API Amazon ufficiale e non soffre di cache HTML.
+async function getCurrentPrice(post: any, cfg: Record<string, any>): Promise<number | null> {
+  // checkPostPrice restituisce sempre currentPrice se riesce a ottenerlo, anche quando valid=true
+  const check = await checkPostPrice(post, cfg).catch(() => null);
+  if (check?.currentPrice != null) return check.currentPrice;
+
+  // Fallback: scraping HTML
+  const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
+  const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+  return scrapeAmazonPrice(domain, String(post.productId));
+}
+
+async function terminatePost(post: any, currentPrice: number, cfg: Record<string, any>) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) {
     await sql`UPDATE published_posts SET terminata = true WHERE id = ${post.id}`.catch(() => {});
@@ -114,7 +124,7 @@ async function terminatePost(
   }
 
   await sql`UPDATE published_posts SET terminata = true WHERE id = ${post.id}`.catch(() => {});
-  console.log(`[price-watch] post terminato: ${post.id} (${post.productId} ${Number(post.discountedPrice)}→${currentPrice})`);
+  console.log(`[price-watch] terminato: ${post.id} (${post.productId} ${Number(post.discountedPrice)}→${currentPrice})`);
 }
 
 export async function runPriceWatchCheck() {
@@ -123,13 +133,14 @@ export async function runPriceWatchCheck() {
   const posts = await sql<any[]>`
     SELECT id, user_id, product_id AS "productId", platform,
            discounted_price::float AS "discountedPrice",
+           original_price::float AS "originalPrice",
            image, chat_id AS "chatId", message_id AS "messageId",
            layout_id AS "layoutId"
     FROM published_posts
     WHERE NOT COALESCE(terminata, false)
       AND COALESCE(is_multi, false) = false
       AND platform = 'amazon'
-      AND published_at >= now() - interval '12 hours'
+      AND published_at >= now() - interval '24 hours'
       AND (
         custom_text ILIKE '%errore%' OR
         custom_text ILIKE '%attenzione%' OR
@@ -142,9 +153,9 @@ export async function runPriceWatchCheck() {
   if (posts.length === 0) return;
   console.log(`[price-watch] ${posts.length} post da monitorare`);
 
-  // Cache locale al run: domain:asin → prezzo corrente (null = non aumentato/non disponibile)
-  // Evita di riscrape lo stesso ASIN più volte nello stesso ciclo (es. stesso prodotto su più canali)
-  const runPriceCache = new Map<string, number | null>();
+  // Cache locale al run: productId → prezzo corrente trovato.
+  // Evita di riscrape lo stesso ASIN più volte nello stesso ciclo (es. stesso prodotto su più canali).
+  const runPriceCache = new Map<string, number | null>(); // productId → currentPrice o null
 
   for (const post of posts) {
     if (!post.productId) continue;
@@ -153,33 +164,31 @@ export async function runPriceWatchCheck() {
       SELECT data FROM settings WHERE user_id = ${post.user_id}
     `.catch(() => []);
     const cfg = cfgRow?.data ?? {};
-    const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
-    const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
-    const cacheKey = `${domain}:${post.productId}`;
 
+    const storedPrice = Number(post.discountedPrice);
     let currentPrice: number | null;
 
-    if (runPriceCache.has(cacheKey)) {
-      // Risultato già noto per questo ASIN nel run corrente — riusa senza scrape
-      currentPrice = runPriceCache.get(cacheKey) ?? null;
-      console.log(`[price-watch] ${post.productId}: cached current=${currentPrice ?? '?'}`);
+    if (runPriceCache.has(post.productId)) {
+      // Prezzo già noto per questo ASIN nel run corrente
+      currentPrice = runPriceCache.get(post.productId) ?? null;
+      console.log(`[price-watch] ${post.productId}: cache current=${currentPrice ?? '?'}`);
     } else {
-      // Primo incontro di questo ASIN: controlla il cooldown e scrapa
+      // Primo incontro di questo ASIN: rispetta il cooldown per post singoli
       const lastTime = lastChecked.get(post.id) ?? 0;
       if (now - lastTime < 90_000) continue;
       lastChecked.set(post.id, now);
 
-      currentPrice = await scrapeAmazonPrice(domain, String(post.productId));
-      console.log(`[price-watch] ${post.productId}: stored=${post.discountedPrice} current=${currentPrice ?? '?'}`);
+      currentPrice = await getCurrentPrice(post, cfg);
+      console.log(`[price-watch] ${post.productId}: stored=${storedPrice} current=${currentPrice ?? '?'}`);
 
-      const storedPrice = Number(post.discountedPrice);
-      // Salva in cache solo se il prezzo è aumentato (null = non aumentato, non rischediamo per altri canali)
-      runPriceCache.set(cacheKey, (currentPrice !== null && currentPrice > storedPrice * 1.02) ? currentPrice : null);
+      // Salva in cache: il prezzo trovato se è aumentato, null altrimenti
+      runPriceCache.set(
+        post.productId,
+        (currentPrice !== null && currentPrice > storedPrice * 1.02) ? currentPrice : null,
+      );
     }
 
     if (currentPrice === null) continue;
-
-    const storedPrice = Number(post.discountedPrice);
     if (currentPrice <= storedPrice * 1.02) continue;
 
     // Aggiorna il cooldown anche per i post trovati tramite cache
