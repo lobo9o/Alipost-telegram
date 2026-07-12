@@ -2,6 +2,7 @@ import sql from '../../lib/db.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
 import { buildMessage } from '../_buildMessage.js';
 import { checkPostPrice } from '../_priceCheck.js';
+import { generateTemplateImageServer, parseTemplateCfg } from './publish.js';
 
 // In-memory: timestamp dell'ultimo check per ogni post (reset al riavvio)
 const lastChecked = new Map<string, number>(); // postId → ms
@@ -82,9 +83,63 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
   const terminataText = String(termTagRow?.value ?? '❌ Offerta terminata');
 
   // Genera immagine terminata (grayscale + overlay) rispettando le impostazioni template
+  // Se overlayText non è configurato, usa il valore del tag {terminata} come fallback
+  const effectiveTermCfg: Record<string, any> = {
+    grayscale: true,
+    overlayTextColor: '#ff0000',
+    overlayTextSize: 7,
+    overlayTextX: 50,
+    overlayTextY: 50,
+    ...termCfg,
+    overlayText: termCfg.overlayText || terminataText,
+  };
   let termImg: Buffer | null = null;
   if (post.image && String(post.image).startsWith('http')) {
-    termImg = await generateTerminataImageServer(String(post.image), termCfg).catch((e: any) => {
+    // Prima genera l'immagine con il template (prezzi, logo, ecc.), poi applica B&N + overlay
+    let baseImage: string | Buffer = String(post.image);
+    try {
+      const [tplRow] = await sql`
+        SELECT id, config FROM templates
+        WHERE (user_id = ${post.user_id} OR user_id = ${baseUserId})
+          AND tipo NOT IN ('historical_low')
+        ORDER BY (user_id = ${post.user_id}) DESC, updated_at DESC NULLS LAST, created_at DESC LIMIT 1
+      `.catch(() => [null]);
+      console.log(`[price-watch] terminata: template trovato? id=${tplRow?.id ?? 'NO'} user_id=${post.user_id} baseUserId=${baseUserId}`);
+      const tplCfg = parseTemplateCfg(tplRow);
+      console.log(`[price-watch] terminata: parseTemplateCfg → ${tplCfg ? 'OK (keys=' + Object.keys(tplCfg).join(',') + ')' : 'null'}`);
+      if (tplCfg) {
+        const currSym = post.platform === 'aliexpress' ? '$' : '€';
+        let tplDataUrl: string | null = null;
+        try {
+          tplDataUrl = await generateTemplateImageServer(
+            tplCfg,
+            String(post.image),
+            String(post.platform ?? 'amazon'),
+            {
+              prezzo:           `${currSym}${Number(post.discountedPrice).toFixed(2)}`,
+              prezzoPrecedente: `${currSym}${Number(post.originalPrice).toFixed(2)}`,
+              sconto:           `-${Number(post.discountPercent)}%`,
+            },
+            Boolean(post.isHistoricalLow),
+          );
+          console.log(`[price-watch] terminata: generateTemplateImageServer → ${tplDataUrl ? 'OK (' + String(tplDataUrl).slice(0, 50) + '…)' : 'null'}`);
+        } catch (tplErr: any) {
+          console.warn(`[price-watch] terminata: generateTemplateImageServer ERRORE — ${tplErr?.message ?? tplErr}`);
+        }
+        if (tplDataUrl) {
+          const b64 = String(tplDataUrl).replace(/^data:image\/\w+;base64,/, '');
+          baseImage = Buffer.from(b64, 'base64');
+          console.log(`[price-watch] terminata: immagine template generata per ${post.productId} (${(baseImage as Buffer).length} bytes)`);
+        } else {
+          console.warn(`[price-watch] terminata: generateTemplateImageServer ha restituito null — uso immagine prodotto grezza`);
+        }
+      } else {
+        console.warn(`[price-watch] terminata: nessun template valido — uso immagine prodotto grezza`);
+      }
+    } catch (e: any) {
+      console.warn('[price-watch] terminata: errore generazione template —', e?.message ?? e);
+    }
+    termImg = await generateTerminataImageServer(baseImage, effectiveTermCfg).catch((e: any) => {
       console.warn('[price-watch] terminata img:', e?.message ?? e);
       return null;
     });
@@ -116,8 +171,11 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
       || (post.productId ? `https://${domain}/dp/${post.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}` : '');
 
     const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato}{valuta} <s>{oldprezzo}{valuta}</s>\n🏷️ Sconto: -{sconto}%\n\n{_<b>{custom}</b>_}`;
+    // customText è "errore di prezzo" — nel post terminato lo azzeriamo per non lasciare
+    // la dicitura originale accanto al testo terminata
+    const postForCaption = { ...post, customText: '' };
     const builtCaption = termLayoutRow?.body
-      ? buildMessage(String(termLayoutRow.body), post, affUrl, undefined, customTags, terminataText)
+      ? buildMessage(String(termLayoutRow.body), postForCaption, affUrl, undefined, customTags, terminataText)
       : '';
     caption = builtCaption || terminataText;
   }

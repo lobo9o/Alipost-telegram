@@ -1506,7 +1506,7 @@ const DEFAULT_TERMINATA: TerminataConfig = {
 
 function TerminataPanel() {
   const { settings, setSettings, layouts, templates } = useApp();
-  const [cfg, setCfg] = useState<TerminataConfig>(settings.terminata ?? DEFAULT_TERMINATA);
+  const [cfg, setCfg] = useState<TerminataConfig>({ ...DEFAULT_TERMINATA, ...(settings.terminata ?? {}) });
   const [saved, setSaved] = useState(false);
   const [terminataStep, setTerminataStep] = useState(1);
 

@@ -187,7 +187,7 @@ async function scrapeAmazonRating(asin: string, domain: string): Promise<{ stell
 
 // Genera immagine con template — prova canvas (rendering identico al browser),
 // fallback su sharp+SVG se canvas non è installato.
-async function generateTemplateImageServer(
+export async function generateTemplateImageServer(
   template: any,
   productImageUrl: string,
   platform: string,
@@ -800,7 +800,7 @@ function safeCaption(html: string, maxLen: number): string {
     }
   }
   for (let j = stack.length - 1; j >= 0; j--) out += `</${stack[j]}>`;
-  return out.trimEnd() + (html.length > maxLen ? '…' : '');
+  return out.trimEnd() + (visLen >= maxLen ? '…' : '');
 }
 
 function buildMessage(
@@ -1023,7 +1023,7 @@ let migrationDone = false;
 const publishingUsers = new Set<string>();
 
 // Legge config template dal DB e applica la migration store→storeAmazon/storeAliexpress
-function parseTemplateCfg(row: any): Record<string, any> | null {
+export function parseTemplateCfg(row: any): Record<string, any> | null {
   if (!row) return null;
   const raw = typeof row.config === 'string' ? JSON.parse(row.config) : (row.config ?? {});
   const cfg: Record<string, any> = { id: row.id, ...raw };
@@ -1421,7 +1421,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const mTplRow = await sql`SELECT id, config FROM templates WHERE (user_id = ${baseUserId} OR user_id = ${userId}) AND tipo NOT IN ('historical_low') ORDER BY (user_id = ${userId}) DESC, (tipo = 'normal') DESC, updated_at DESC NULLS LAST, (config->>'canvasW' IS NOT NULL) DESC, created_at DESC LIMIT 1`;
         const mTemplateId = mTplRow[0]?.id ?? 'tpl1';
         const mTemplateCfg = parseTemplateCfg(mTplRow[0]);
-        const mLayoutRows = await sql`SELECT id, keyboard_id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`.catch(() => []);
+        const mLayoutRows = await sql`SELECT id, keyboard_id FROM layouts WHERE (user_id = ${userId} OR user_id = ${baseUserId}) AND tipo = 'multi' ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`.catch(() => []);
         const mLayoutId = mLayoutRows[0]?.id ?? '';
         const mKeyboardId = String(mLayoutRows[0]?.keyboard_id ?? '');
         const CSYM_M: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
@@ -1650,7 +1650,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       // Per post multiplo usa il layout di tipo 'multi'; altrimenti usa layoutId del post (mai multi)
       let layoutRow: any = null;
       if (isMulti) {
-        [layoutRow] = await sql`SELECT body, keyboard_id FROM layouts WHERE user_id = ${userId} AND tipo = 'multi' ORDER BY created_at ASC LIMIT 1`;
+        // Usa il layoutId passato dal primo post (es. daily-recap usa il più recente)
+        const multiLayoutId = (postsArr[0] as any)?.layoutId;
+        if (multiLayoutId) {
+          [layoutRow] = await sql`SELECT body, keyboard_id FROM layouts WHERE id = ${multiLayoutId} AND (user_id = ${userId} OR user_id = ${baseUserId}) AND tipo = 'multi'`.catch(() => [null]);
+        }
+        if (!layoutRow) {
+          [layoutRow] = await sql`SELECT body, keyboard_id FROM layouts WHERE (user_id = ${userId} OR user_id = ${baseUserId}) AND tipo = 'multi' ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`.catch(() => [null]);
+        }
+        console.log(`[autopost] multi layout: id=${layoutRow?.id ?? 'null'} body="${String(layoutRow?.body ?? 'defaultMultiLayout').slice(0, 60).replace(/\n/g, '↵')}"`);
       } else if (post.layoutId) {
         // Prende il layout per ID solo se NON è di tipo multi
         [layoutRow] = await sql`SELECT body, keyboard_id FROM layouts WHERE id = ${post.layoutId} AND user_id = ${userId} AND tipo != 'multi'`;
@@ -1745,6 +1753,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             return `${i + 1}. ${mp.emoji || '📦'} ${shortTitle}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2).replace('.', ',')} (-${Number(mp.discountPercent)}%)`;
           }).join('\n\n');
           messageText = buildMessage(layoutText.replace('{lista_prodotti}', lista), post, affiliateUrl, aliCurrency, customTags);
+          console.log(`[autopost] multi lista_prodotti messageText (100ch): ${messageText.slice(0, 100).replace(/\n/g, '↵')}`);
         } else {
           // Nuovo comportamento: ripeti il template per ogni prodotto
           const template = layoutText || defaultMultiLayout;
@@ -1785,6 +1794,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           }
           messageText = pfxHtml + fittingTexts.join('\n');
         }
+        console.log(`[autopost] multi messageText (100ch): ${messageText.slice(0, 100).replace(/\n/g, '↵')}`);
 
         // Per il path backward-compat {lista_prodotti}: aggiungi caption_prefix se presente
         if (layoutRow?.body?.includes('{lista_prodotti}')) {
@@ -2056,6 +2066,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           console.log(`[autopost] offerta scaduta: ${String(pub.title ?? '').slice(0, 40)} — ${check.reason}`);
           const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
           const telegramMode = String(termCfg.telegramMode ?? 'keep');
+          // Se overlayText non è configurato, usa il valore del tag {terminata} come fallback
+          const effectiveTermCfg: Record<string, any> = {
+            grayscale: true, overlayTextColor: '#ff0000', overlayTextSize: 7, overlayTextX: 50, overlayTextY: 50,
+            ...termCfg,
+            overlayText: termCfg.overlayText || terminataTagValue,
+          };
 
           // Genera immagine terminata (grayscale + overlay) — uguale alla terminata manuale
           let termImg: Buffer | null = null;
@@ -2068,7 +2084,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
                 const compositeDataUrl = await generateMultiImageServer(imgUrls);
                 if (compositeDataUrl) {
                   const b64 = compositeDataUrl.replace(/^data:image\/\w+;base64,/, '');
-                  termImg = await generateTerminataImageServer(Buffer.from(b64, 'base64'), termCfg).catch((e: any) => {
+                  termImg = await generateTerminataImageServer(Buffer.from(b64, 'base64'), effectiveTermCfg).catch((e: any) => {
                     console.warn('[autopost] terminata multi img:', e?.message ?? e);
                     return null;
                   });
@@ -2107,7 +2123,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             } catch (e: any) {
               console.warn('[autopost] terminata: fallback a image URL grezzo —', e?.message ?? e);
             }
-            termImg = await generateTerminataImageServer(baseForTerm, termCfg).catch((e: any) => {
+            termImg = await generateTerminataImageServer(baseForTerm, effectiveTermCfg).catch((e: any) => {
               console.warn('[autopost] terminata img:', e?.message ?? e);
               return null;
             });
