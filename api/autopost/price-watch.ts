@@ -102,16 +102,15 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
         SELECT id, config FROM templates
         WHERE (user_id = ${post.user_id} OR user_id = ${baseUserId})
           AND tipo NOT IN ('historical_low')
-        ORDER BY (user_id = ${post.user_id}) DESC, updated_at DESC NULLS LAST, created_at DESC LIMIT 1
+        ORDER BY (user_id = ${post.user_id}) DESC, (tipo = 'normal') DESC, updated_at DESC NULLS LAST, created_at DESC LIMIT 1
       `.catch(() => [null]);
       console.log(`[price-watch] terminata: template trovato? id=${tplRow?.id ?? 'NO'} user_id=${post.user_id} baseUserId=${baseUserId}`);
-      const tplCfg = parseTemplateCfg(tplRow);
-      console.log(`[price-watch] terminata: parseTemplateCfg → ${tplCfg ? 'OK (keys=' + Object.keys(tplCfg).join(',') + ')' : 'null'}`);
-      if (tplCfg) {
-        const currSym = post.platform === 'aliexpress' ? '$' : '€';
-        let tplDataUrl: string | null = null;
-        try {
-          tplDataUrl = await generateTemplateImageServer(
+      if (tplRow) {
+        const tplCfg = parseTemplateCfg(tplRow);
+        console.log(`[price-watch] terminata: parseTemplateCfg → ${tplCfg ? 'OK (keys=' + Object.keys(tplCfg).join(',') + ')' : 'null'}`);
+        if (tplCfg) {
+          const currSym = post.platform === 'aliexpress' ? '$' : '€';
+          const tplDataUrl = await generateTemplateImageServer(
             tplCfg,
             String(post.image),
             String(post.platform ?? 'amazon'),
@@ -120,21 +119,23 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
               prezzoPrecedente: `${currSym}${Number(post.originalPrice).toFixed(2)}`,
               sconto:           `-${Number(post.discountPercent)}%`,
             },
-            Boolean(post.isHistoricalLow),
-          );
+          ).catch((tplErr: any) => {
+            console.warn(`[price-watch] terminata: generateTemplateImageServer ERRORE — ${tplErr?.message ?? tplErr}`);
+            return null;
+          });
           console.log(`[price-watch] terminata: generateTemplateImageServer → ${tplDataUrl ? 'OK (' + String(tplDataUrl).slice(0, 50) + '…)' : 'null'}`);
-        } catch (tplErr: any) {
-          console.warn(`[price-watch] terminata: generateTemplateImageServer ERRORE — ${tplErr?.message ?? tplErr}`);
-        }
-        if (tplDataUrl) {
-          const b64 = String(tplDataUrl).replace(/^data:image\/\w+;base64,/, '');
-          baseImage = Buffer.from(b64, 'base64');
-          console.log(`[price-watch] terminata: immagine template generata per ${post.productId} (${(baseImage as Buffer).length} bytes)`);
+          if (tplDataUrl) {
+            const b64 = String(tplDataUrl).replace(/^data:image\/\w+;base64,/, '');
+            baseImage = Buffer.from(b64, 'base64');
+            console.log(`[price-watch] terminata: immagine template generata per ${post.productId} (${(baseImage as Buffer).length} bytes)`);
+          } else {
+            console.warn(`[price-watch] terminata: generateTemplateImageServer ha restituito null — uso immagine prodotto grezza`);
+          }
         } else {
-          console.warn(`[price-watch] terminata: generateTemplateImageServer ha restituito null — uso immagine prodotto grezza`);
+          console.warn(`[price-watch] terminata: parseTemplateCfg null — uso immagine prodotto grezza`);
         }
       } else {
-        console.warn(`[price-watch] terminata: nessun template valido — uso immagine prodotto grezza`);
+        console.warn(`[price-watch] terminata: nessun template trovato in DB — uso immagine prodotto grezza`);
       }
     } catch (e: any) {
       console.warn('[price-watch] terminata: errore generazione template —', e?.message ?? e);
