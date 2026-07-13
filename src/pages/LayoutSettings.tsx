@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, KeyboardLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig, MultiBarConfig, MultiPriceConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId, INITIAL_LAYOUTS, INITIAL_KEYBOARDS } from '../data/mock';
-import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, tgMonitorApi, TgMonitorChannel } from '../lib/api';
+import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, tgMonitorApi, TgMonitorChannel, emojiIdsApi, EmojiEntry } from '../lib/api';
 import { SYSTEM_TAGS } from '../utils/tagUtils';
 
 // ============================================================
@@ -1952,7 +1952,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [openAmz, setOpenAmz] = useState(false);
   const [openAli, setOpenAli] = useState(false);
   const [subPage, setSubPage] = useState<null | 'general' | 'admin' | 'emoji'>(null);
-  const [emojiList, setEmojiList] = useState<{ emoji_char: string; custom_emoji_id: string }[]>([]);
+  const [emojiList, setEmojiList] = useState<EmojiEntry[]>([]);
   const [emojiLoaded, setEmojiLoaded] = useState(false);
   const [emojiLoading, setEmojiLoading] = useState(false);
   const [emojiStatus, setEmojiStatus] = useState('');
@@ -1961,8 +1961,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
 
   React.useEffect(() => {
     if (subPage === 'emoji' && !emojiLoaded) {
-      fetch('/api/emoji-ids', { credentials: 'include' })
-        .then(r => r.json())
+      emojiIdsApi.list()
         .then(d => { setEmojiList(d.emoji ?? []); setEmojiLoaded(true); })
         .catch(() => {});
     }
@@ -2282,13 +2281,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       setEmojiLoading(true);
       setEmojiStatus('');
       try {
-        const r = await fetch('/api/emoji-ids', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ action: 'discover' }),
-        });
-        const d = await r.json();
+        const d = await emojiIdsApi.discover();
         setEmojiList(d.emoji ?? []);
         setEmojiStatus(d.discovered > 0 ? `✅ Trovate ${d.discovered} nuove emoji` : '✓ Nessuna nuova emoji trovata');
       } catch {
@@ -2298,22 +2291,12 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       }
     };
     const doDelete = async (emojiChar: string) => {
-      await fetch('/api/emoji-ids', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ emoji_char: emojiChar }),
-      });
+      await emojiIdsApi.remove(emojiChar).catch(() => {});
       setEmojiList(prev => prev.filter(e => e.emoji_char !== emojiChar));
     };
     const doAddManual = async () => {
       if (!emojiManualChar || !emojiManualId) return;
-      await fetch('/api/emoji-ids', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ emoji_char: emojiManualChar, custom_emoji_id: emojiManualId }),
-      });
+      await emojiIdsApi.add(emojiManualChar, emojiManualId).catch(() => {});
       setEmojiList(prev => {
         const filtered = prev.filter(e => e.emoji_char !== emojiManualChar);
         return [{ emoji_char: emojiManualChar, custom_emoji_id: emojiManualId }, ...filtered];
