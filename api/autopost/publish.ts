@@ -1876,8 +1876,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         }
       }
 
-      // Applica emoji animate: sostituisce emoji char con <tg-emoji> se l'utente ha mappings
-      const emojiRows = await sql`SELECT emoji_char, custom_emoji_id FROM emoji_ids WHERE user_id = ${userId}`.catch(() => [] as any[]);
+      // Applica emoji animate: cerca per userId esatto O qualsiasi profilo dello stesso utente base
+      const emojiRows = await sql`
+        SELECT DISTINCT ON (emoji_char) emoji_char, custom_emoji_id
+        FROM emoji_ids
+        WHERE user_id = ${userId} OR user_id = ${baseUserId} OR user_id LIKE ${baseUserId + ':%'}
+        ORDER BY emoji_char, (user_id = ${userId}) DESC
+      `.catch(() => [] as any[]);
       if (emojiRows.length > 0) {
         for (const { emoji_char, custom_emoji_id } of emojiRows as { emoji_char: string; custom_emoji_id: string }[]) {
           if (emoji_char && custom_emoji_id && messageText.includes(emoji_char)) {

@@ -31,12 +31,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const savedOffset = Number(cfg.tgUpdateOffset ?? 0);
       const tgBase = `https://api.telegram.org/bot${botToken}`;
 
-      console.log(`[emoji-discover] userId=${userId} savedOffset=${savedOffset}`);
       const updRes = await fetch(
         `${tgBase}/getUpdates?offset=${savedOffset}&limit=100&timeout=0&allowed_updates=${encodeURIComponent('["message"]')}`,
       );
       const updData = await updRes.json() as any;
-      console.log(`[emoji-discover] getUpdates ok=${updData.ok} count=${updData.result?.length ?? 0} err=${updData.description ?? ''}`);
       if (!updData.ok) return res.status(500).json({ error: updData.description ?? 'Errore Telegram' });
 
       const updates: any[] = updData.result ?? [];
@@ -46,21 +44,17 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       for (const upd of updates) {
         newOffset = Math.max(newOffset, upd.update_id + 1);
         const msg = upd.message ?? upd.channel_post;
-        if (!msg) { console.log(`[emoji-discover] upd=${upd.update_id} no message`); continue; }
+        if (!msg) continue;
         const entities: any[] = [...(msg.entities ?? []), ...(msg.caption_entities ?? [])];
         const text: string = msg.text ?? msg.caption ?? '';
-        const entityTypes = entities.map((e: any) => e.type).join(',');
-        console.log(`[emoji-discover] upd=${upd.update_id} msg=${msg.message_id} chat=${msg.chat?.id} entities=[${entityTypes}] text="${text.slice(0,20)}"`);
         for (const entity of entities) {
           if (entity.type === 'custom_emoji' && entity.custom_emoji_id) {
             // Usa slice JS che lavora in UTF-16 — stesso sistema di Telegram
             const emojiChar = text.slice(entity.offset, entity.offset + entity.length);
-            console.log(`[emoji-discover] found custom_emoji char="${emojiChar}" id=${entity.custom_emoji_id}`);
             if (emojiChar) discovered.push({ emoji_char: emojiChar, custom_emoji_id: entity.custom_emoji_id });
           }
         }
       }
-      console.log(`[emoji-discover] discovered=${discovered.length}`);
 
       // Salva emoji trovate (upsert per char)
       for (const { emoji_char, custom_emoji_id } of discovered) {
