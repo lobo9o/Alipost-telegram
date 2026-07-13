@@ -225,6 +225,8 @@ function validateTelegramHtml(body: string): string | null {
 
   const VOID_TAGS = new Set(['br', 'img', 'hr']);
   const KNOWN_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a', 'span', 'tg-spoiler', 'tg-emoji', 'blockquote']);
+  // Tag di formattazione inline che Telegram non supporta nidificati tra loro
+  const INLINE_FMT = new Set(['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'tg-spoiler']);
   const stack: string[] = [];
   const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>/g;
   let m: RegExpExecArray | null;
@@ -236,6 +238,11 @@ function validateTelegramHtml(body: string): string | null {
     if (m[3].trim().endsWith('/')) continue; // self-closing
 
     if (!isClose) {
+      // Controlla nidificazione: Telegram non supporta tag inline dentro altri tag inline
+      const openInline = stack.filter(t => INLINE_FMT.has(t));
+      if (openInline.length > 0 && INLINE_FMT.has(tag)) {
+        return `Formattazione nidificata non valida: <${tag}> aperto dentro <${openInline[openInline.length - 1]}> — Telegram rifiuterà il messaggio. Usa i tag uno alla volta, non annidati`;
+      }
       stack.push(tag);
     } else {
       if (stack.length === 0) {
