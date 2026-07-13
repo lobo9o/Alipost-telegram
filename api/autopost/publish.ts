@@ -1883,12 +1883,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         WHERE user_id = ${userId} OR user_id = ${baseUserId} OR user_id LIKE ${baseUserId + ':%'}
         ORDER BY emoji_char, (user_id = ${userId}) DESC
       `.catch(() => [] as any[]);
+      console.log(`[emoji] rows=${emojiRows.length} userId=${userId} base=${baseUserId}`);
       if (emojiRows.length > 0) {
         for (const { emoji_char, custom_emoji_id } of emojiRows as { emoji_char: string; custom_emoji_id: string }[]) {
-          if (emoji_char && custom_emoji_id && messageText.includes(emoji_char)) {
+          const found = messageText.includes(emoji_char);
+          console.log(`[emoji] char="${emoji_char}" id=${custom_emoji_id} inText=${found}`);
+          if (emoji_char && custom_emoji_id && found) {
             messageText = messageText.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
           }
         }
+        console.log(`[emoji] messageText inizio: ${messageText.slice(0, 80).replace(/\n/g, '↵')}`);
       }
 
       const hasGeneratedImage = post.generatedImage && String(post.generatedImage).startsWith('data:image/');
