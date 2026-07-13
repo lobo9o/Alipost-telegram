@@ -218,6 +218,43 @@ const TIPO_LABEL: Record<LayoutType, string> = {
   amazon: 'Amazon',
 };
 
+function validateTelegramHtml(body: string): string | null {
+  // Espandi blocchi {_..._} e rimuovi placeholder {tag}
+  let text = body.replace(/\{_([\s\S]*?)_\}/g, '$1');
+  text = text.replace(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g, '');
+
+  const VOID_TAGS = new Set(['br', 'img', 'hr']);
+  const KNOWN_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a', 'span', 'tg-spoiler', 'tg-emoji', 'blockquote']);
+  const stack: string[] = [];
+  const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>/g;
+  let m: RegExpExecArray | null;
+
+  while ((m = tagRe.exec(text)) !== null) {
+    const isClose = m[1] === '/';
+    const tag = m[2].toLowerCase();
+    if (VOID_TAGS.has(tag) || !KNOWN_TAGS.has(tag)) continue;
+    if (m[3].trim().endsWith('/')) continue; // self-closing
+
+    if (!isClose) {
+      stack.push(tag);
+    } else {
+      if (stack.length === 0) {
+        return `Tag di chiusura </${tag}> senza apertura corrispondente`;
+      }
+      const expected = stack[stack.length - 1];
+      if (expected !== tag) {
+        return `Tag HTML non bilanciati: aperto <${expected}> ma chiuso con </${tag}> — Telegram rifiuterà il messaggio`;
+      }
+      stack.pop();
+    }
+  }
+
+  if (stack.length > 0) {
+    return `Tag non chiusi: ${stack.map(t => `<${t}>`).join(', ')} — aggiungi i tag di chiusura mancanti`;
+  }
+  return null;
+}
+
 function TextLayoutSection() {
   const { layouts, setLayouts, keyboards } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
@@ -249,6 +286,7 @@ function TextLayoutSection() {
   };
 
   if (editing) {
+    const htmlError = validateTelegramHtml(form.contenuto);
     return (
       <>
         <div className="stit">{editing === 'new' ? 'NUOVO LAYOUT' : 'MODIFICA LAYOUT'}</div>
@@ -266,6 +304,7 @@ function TextLayoutSection() {
         </div>
         <div className="fld">
           <label className="lbl">Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{countryflag}'}, {'{country}'}, {'{custom}'}</label>
+          {htmlError && <ErrorBanner>{htmlError}</ErrorBanner>}
           <textarea ref={taRef} className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={8} />
         </div>
         <div className="fld">
