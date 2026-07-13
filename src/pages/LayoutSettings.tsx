@@ -1951,7 +1951,22 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [saveErr, setSaveErr] = useState('');
   const [openAmz, setOpenAmz] = useState(false);
   const [openAli, setOpenAli] = useState(false);
-  const [subPage, setSubPage] = useState<null | 'general' | 'admin'>(null);
+  const [subPage, setSubPage] = useState<null | 'general' | 'admin' | 'emoji'>(null);
+  const [emojiList, setEmojiList] = useState<{ emoji_char: string; custom_emoji_id: string }[]>([]);
+  const [emojiLoaded, setEmojiLoaded] = useState(false);
+  const [emojiLoading, setEmojiLoading] = useState(false);
+  const [emojiStatus, setEmojiStatus] = useState('');
+  const [emojiManualChar, setEmojiManualChar] = useState('');
+  const [emojiManualId, setEmojiManualId] = useState('');
+
+  React.useEffect(() => {
+    if (subPage === 'emoji' && !emojiLoaded) {
+      fetch('/api/emoji-ids', { credentials: 'include' })
+        .then(r => r.json())
+        .then(d => { setEmojiList(d.emoji ?? []); setEmojiLoaded(true); })
+        .catch(() => {});
+    }
+  }, [subPage, emojiLoaded]);
 
   React.useEffect(() => { setS(settings); }, [settings]);
 
@@ -1989,6 +2004,11 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           icon="🔐" label="Admin"
           sub="Credenziali Amazon, AliExpress, canali Telegram"
           onClick={() => setSubPage('admin')}
+        />
+        <SettingsMenuItem
+          icon="✨" label="Emoji Animate"
+          sub="Sostituisci emoji con versioni animate nei post"
+          onClick={() => setSubPage('emoji')}
         />
       </div>
     </div>
@@ -2255,6 +2275,111 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       </div>
     </div>
   );
+
+  {/* ── SOTTO-PAGINA EMOJI ANIMATE ── */}
+  if (subPage === 'emoji') {
+    const doDiscover = async () => {
+      setEmojiLoading(true);
+      setEmojiStatus('');
+      try {
+        const r = await fetch('/api/emoji-ids', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ action: 'discover' }),
+        });
+        const d = await r.json();
+        setEmojiList(d.emoji ?? []);
+        setEmojiStatus(d.discovered > 0 ? `✅ Trovate ${d.discovered} nuove emoji` : '✓ Nessuna nuova emoji trovata');
+      } catch {
+        setEmojiStatus('❌ Errore durante la scoperta');
+      } finally {
+        setEmojiLoading(false);
+      }
+    };
+    const doDelete = async (emojiChar: string) => {
+      await fetch('/api/emoji-ids', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ emoji_char: emojiChar }),
+      });
+      setEmojiList(prev => prev.filter(e => e.emoji_char !== emojiChar));
+    };
+    const doAddManual = async () => {
+      if (!emojiManualChar || !emojiManualId) return;
+      await fetch('/api/emoji-ids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ emoji_char: emojiManualChar, custom_emoji_id: emojiManualId }),
+      });
+      setEmojiList(prev => {
+        const filtered = prev.filter(e => e.emoji_char !== emojiManualChar);
+        return [{ emoji_char: emojiManualChar, custom_emoji_id: emojiManualId }, ...filtered];
+      });
+      setEmojiManualChar('');
+      setEmojiManualId('');
+    };
+    return (
+      <div className="pg">
+        <PageHeader title="Emoji Animate" onBack={() => setSubPage(null)} />
+
+        <div style={{ padding: '0 16px' }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: '14px', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Come funziona</div>
+            <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.6 }}>
+              Invia emoji animate alla chat del bot, poi clicca <b>Scopri emoji</b>. I messaggi verranno eliminati automaticamente e le emoji salvate qui sotto. Nei post, ogni emoji verrà sostituita con la versione animata.
+            </div>
+          </div>
+
+          <button
+            className="btn bp bfull"
+            onClick={doDiscover}
+            disabled={emojiLoading}
+            style={{ marginBottom: 8 }}
+          >
+            {emojiLoading ? '⏳ Scoperta in corso...' : '🔍 Scopri emoji'}
+          </button>
+          {emojiStatus && (
+            <div style={{ padding: '8px 12px', background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
+              {emojiStatus}
+            </div>
+          )}
+
+          {/* Lista emoji salvate */}
+          {emojiList.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div className="stit" style={{ padding: '0 0 6px' }}>EMOJI SALVATE</div>
+              {emojiList.map(e => (
+                <div key={e.emoji_char} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
+                  <span style={{ fontSize: 22, lineHeight: 1, minWidth: 28 }}>{e.emoji_char}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: 'var(--t3)', wordBreak: 'break-all' }}>{e.custom_emoji_id}</div>
+                  </div>
+                  <button
+                    onClick={() => doDelete(e.emoji_char)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)', padding: '2px 6px', fontSize: 16 }}
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {emojiList.length === 0 && emojiLoaded && (
+            <div style={{ textAlign: 'center', color: 'var(--t3)', fontSize: 13, padding: '20px 0' }}>Nessuna emoji salvata</div>
+          )}
+
+          {/* Aggiunta manuale */}
+          <div className="stit" style={{ padding: '6px 0' }}>AGGIUNTA MANUALE</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <input className="inp" style={{ flex: '0 0 60px', textAlign: 'center', fontSize: 20 }} placeholder="😀" value={emojiManualChar} onChange={e => setEmojiManualChar(e.target.value)} maxLength={4} />
+            <input className="inp" style={{ flex: 1 }} placeholder="Custom emoji ID (es. 5368324170671202286)" value={emojiManualId} onChange={e => setEmojiManualId(e.target.value)} />
+          </div>
+          <button className="btn bp bfull" onClick={doAddManual} disabled={!emojiManualChar || !emojiManualId}>➕ Aggiungi</button>
+        </div>
+      </div>
+    );
+  }
 
   {/* ── SOTTO-PAGINA GENERALI: autopost, timing, deal search ── */}
   return (

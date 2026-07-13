@@ -1876,6 +1876,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         }
       }
 
+      // Applica emoji animate: sostituisce emoji char con <tg-emoji> se l'utente ha mappings
+      const emojiRows = await sql`SELECT emoji_char, custom_emoji_id FROM emoji_ids WHERE user_id = ${userId}`.catch(() => [] as any[]);
+      if (emojiRows.length > 0) {
+        for (const { emoji_char, custom_emoji_id } of emojiRows as { emoji_char: string; custom_emoji_id: string }[]) {
+          if (emoji_char && custom_emoji_id && messageText.includes(emoji_char)) {
+            messageText = messageText.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
+          }
+        }
+      }
+
       const hasGeneratedImage = post.generatedImage && String(post.generatedImage).startsWith('data:image/');
       const hasUrlImage = !hasGeneratedImage && post.image && post.image !== 'placeholder.jpg' && String(post.image).startsWith('http');
 

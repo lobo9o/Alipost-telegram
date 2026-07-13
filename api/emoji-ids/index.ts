@@ -66,6 +66,23 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         `;
       }
 
+      // Cancella i messaggi che contenevano emoji custom (mantiene la chat pulita)
+      const msgsToDelete: Array<{ chatId: number; messageId: number }> = [];
+      for (const upd of updates) {
+        const msg = upd.message ?? upd.channel_post;
+        if (!msg) continue;
+        const entities: any[] = [...(msg.entities ?? []), ...(msg.caption_entities ?? [])];
+        const hasCustomEmoji = entities.some((e: any) => e.type === 'custom_emoji');
+        if (hasCustomEmoji) msgsToDelete.push({ chatId: msg.chat.id, messageId: msg.message_id });
+      }
+      for (const { chatId, messageId } of msgsToDelete) {
+        await fetch(`${tgBase}/deleteMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+        }).catch(() => null);
+      }
+
       // Aggiorna offset in settings così i prossimi discover partono da qui
       if (newOffset > savedOffset) {
         await sql`
