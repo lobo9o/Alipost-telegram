@@ -1921,7 +1921,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
       const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
       console.log('[autopost]', channel, hasGeneratedImage ? 'genImg' : hasUrlImage ? 'urlImg' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
-      if (!tgData.ok) throw new Error(`Telegram: ${tgData.description ?? 'errore sconosciuto'}`);
+      if (!tgData.ok) {
+        if (String(tgData.description ?? '').includes('parse entities')) {
+          const msgBytes = Buffer.from(messageText, 'utf8');
+          const b45ctx = msgBytes.slice(Math.max(0, 40), Math.min(msgBytes.length, 55));
+          console.error(`[autopost] DEBUG HTML BYTES 40-55: ${b45ctx.toString('hex')} → ${JSON.stringify(b45ctx.toString('utf8'))}`);
+          console.error(`[autopost] DEBUG FULL MSG: ${JSON.stringify(messageText.slice(0, 300))}`);
+        }
+        throw new Error(`Telegram: ${tgData.description ?? 'errore sconosciuto'}`);
+      }
 
       const messageId = tgData.result?.message_id ?? 0;
       const chatId = String(tgData.result?.chat?.id ?? channel);
