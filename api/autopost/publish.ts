@@ -1778,7 +1778,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             });
 
           const captPfx = ((queueItem as any)?.caption_prefix as string | null | undefined)?.trim() ?? '';
-          const pfxHtml = captPfx ? `<b>${captPfx}</b>\n\n` : '';
+          // Se captPfx ha già tag HTML, usalo as-is; altrimenti avvolgi in <b>
+          const pfxHtml = captPfx ? (/<[a-zA-Z]/.test(captPfx) ? captPfx + '\n\n' : `<b>${captPfx}</b>\n\n`) : '';
           const visLen = (s: string) => s.replace(/<[^>]+>/g, '').length;
 
           // 1. Prova ad abbreviare i titoli (60→40→25) prima di rimuovere prodotti
@@ -1800,7 +1801,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         if (layoutRow?.body?.includes('{lista_prodotti}')) {
           const captionPrefix = (queueItem as any)?.caption_prefix as string | null | undefined;
           if (captionPrefix?.trim()) {
-            messageText = `<b>${captionPrefix.trim()}</b>\n\n` + messageText;
+            const pfx = captionPrefix.trim();
+            messageText = (/<[a-zA-Z]/.test(pfx) ? pfx : `<b>${pfx}</b>`) + '\n\n' + messageText;
           }
         }
 
@@ -1921,15 +1923,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
       const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
       console.log('[autopost]', channel, hasGeneratedImage ? 'genImg' : hasUrlImage ? 'urlImg' : 'text', tgRes.status, tgData.ok ? 'ok' : tgData.description);
-      if (!tgData.ok) {
-        if (String(tgData.description ?? '').includes('parse entities')) {
-          const msgBytes = Buffer.from(messageText, 'utf8');
-          const b45ctx = msgBytes.slice(Math.max(0, 40), Math.min(msgBytes.length, 55));
-          console.error(`[autopost] DEBUG HTML BYTES 40-55: ${b45ctx.toString('hex')} → ${JSON.stringify(b45ctx.toString('utf8'))}`);
-          console.error(`[autopost] DEBUG FULL MSG: ${JSON.stringify(messageText.slice(0, 300))}`);
-        }
-        throw new Error(`Telegram: ${tgData.description ?? 'errore sconosciuto'}`);
-      }
+      if (!tgData.ok) throw new Error(`Telegram: ${tgData.description ?? 'errore sconosciuto'}`);
 
       const messageId = tgData.result?.message_id ?? 0;
       const chatId = String(tgData.result?.chat?.id ?? channel);
