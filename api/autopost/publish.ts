@@ -3,6 +3,7 @@ import sql from '../../lib/db.js';
 import { withErrorHandler } from '../_utils.js';
 import { checkPostPrice } from '../_priceCheck.js';
 import { getProductEmoji } from '../_titleFormat.js';
+import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
 import crypto from 'crypto';
 
@@ -1942,6 +1943,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
       const messageId = tgData.result?.message_id ?? 0;
       const chatId = String(tgData.result?.chat?.id ?? channel);
+
+      // Edit MTProto per emoji animate (il Bot API le ignora, GramJS le applica)
+      if (messageId) {
+        const htmlForEdit = (hasGeneratedImage || hasUrlImage)
+          ? safeCaption(messageText, 1024)
+          : messageText.slice(0, 4096);
+        applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: htmlForEdit }).catch(() => {});
+      }
 
       // Salva in published_posts
       const multiItemsForDB = isMulti

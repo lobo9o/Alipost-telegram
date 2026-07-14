@@ -192,6 +192,10 @@ export function initTgMonitor(port: number) {
 // Debounce: più chiamate ravvicinate (es. swap di due canali) producono un solo reload
 const reloadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+export function getActiveClient(baseUserId: string) {
+  return activeClients.get(baseUserId);
+}
+
 export function reloadUser(userId: string) {
   const isDevInstance = serverPort === 3001;
   const isDevUser = userId.endsWith('_dev');

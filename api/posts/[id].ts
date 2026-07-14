@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { getProductEmoji } from '../_titleFormat.js';
+import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 
 async function generateMultiImageServer(
   imageUrls: string[],
@@ -755,5 +756,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   const messageId = tgData.result?.message_id ?? 0;
   const chatId = String(tgData.result?.chat?.id ?? channel);
+
+  // Edit MTProto per emoji animate (il Bot API le ignora, GramJS le applica)
+  if (messageId) {
+    const htmlForEdit = hasImage
+      ? safeCaption(messageText, 1024)
+      : messageText.slice(0, 4096);
+    applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: htmlForEdit }).catch(() => {});
+  }
+
   res.json({ ok: true, messageId, chatId });
 });
