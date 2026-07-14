@@ -22,15 +22,13 @@ export async function applyCustomEmoji(opts: {
   if (!htmlText.includes('<tg-emoji')) return;
 
   const client = getActiveClient(baseUserId);
-  if (!client?.connected) {
-    console.log(`[emoji-edit] nessun client MTProto attivo per ${baseUserId}, skip`);
+  console.log(`[emoji-edit] client per ${baseUserId}: ${client ? `trovato connected=${client.connected}` : 'non trovato'}`);
+  if (!client) {
+    console.log(`[emoji-edit] nessun client MTProto per ${baseUserId}, skip`);
     return;
   }
 
   try {
-    // GramJS converte automaticamente <tg-emoji emoji-id="...">char</tg-emoji>
-    // in Api.MessageEntityCustomEmoji — il replyMarkup (keyboard) viene preservato
-    // dall'API Telegram quando non viene ri-specificato nell'edit.
     await (client as any).editMessage(chatId, {
       message: messageId,
       text: htmlText,
