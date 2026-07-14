@@ -649,17 +649,12 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     FROM emoji_ids
     WHERE user_id = ${userId} OR user_id = ${baseUserId} OR user_id LIKE ${baseUserId + ':%'}
     ORDER BY emoji_char, (user_id = ${userId}) DESC
-  `.catch((e: any) => { console.log('[publish] emoji_ids query error:', e?.message); return [] as any[]; });
-  console.log(`[publish] emoji_ids found ${emojiRowsP.length} rows for userId=${userId} baseUserId=${baseUserId}`);
+  `.catch(() => [] as any[]);
   for (const { emoji_char, custom_emoji_id } of emojiRowsP as { emoji_char: string; custom_emoji_id: string }[]) {
-    const found = messageText.includes(emoji_char);
-    console.log(`[publish] emoji ${JSON.stringify(emoji_char)} id=${custom_emoji_id} found=${found}`);
-    if (emoji_char && custom_emoji_id && found) {
+    if (emoji_char && custom_emoji_id && messageText.includes(emoji_char)) {
       messageText = messageText.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
     }
   }
-
-  console.log('[publish] messageText after emoji sub (200ch):', JSON.stringify(messageText.slice(0, 200)));
 
   const replyMarkup = await buildKeyboard(keyboardContenuto, post, affiliateUrl)
     ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);

@@ -2,12 +2,13 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import cron from 'node-cron';
-import { initTgMonitor } from './api/tg-monitor/worker.js';
+import { initTgMonitor, getActiveClient } from './api/tg-monitor/worker.js';
 import { runDailyRecapCheck } from './api/autopost/daily-recap.js';
 import { runPriceWatchCheck } from './api/autopost/price-watch.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000', 10);
+(globalThis as any).__getTgClient = getActiveClient;
 
 async function loadHandler(relPath: string) {
   const abs = path.join(__dirname, relPath);
