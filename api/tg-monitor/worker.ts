@@ -193,6 +193,7 @@ export function initTgMonitor(port: number) {
 const reloadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export function getActiveClient(baseUserId: string) {
+  console.log(`[getActiveClient] cerca ${baseUserId}, chiavi nella mappa: [${[...activeClients.keys()].join(', ')}]`);
   return activeClients.get(baseUserId);
 }
 
