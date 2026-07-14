@@ -2312,7 +2312,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: '14px', marginBottom: 12 }}>
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Come funziona</div>
             <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.6 }}>
-              Invia emoji animate alla chat del bot, poi clicca <b>Scopri emoji</b>. I messaggi verranno eliminati automaticamente e le emoji salvate qui sotto. Nei post, ogni emoji verrà sostituita con la versione animata.
+              Invia emoji animate nel tuo <b>canale</b> (es. @erroriflash) dove il bot è admin, poi clicca <b>Scopri emoji</b>. I messaggi vengono eliminati automaticamente dal canale e le emoji salvate qui sotto. Nei post, ogni emoji verrà sostituita con la versione animata.<br /><small style={{ color: 'var(--t3)' }}>Nota: dalla chat privata col bot non funziona la cancellazione automatica (limite Telegram).</small>
             </div>
           </div>
 

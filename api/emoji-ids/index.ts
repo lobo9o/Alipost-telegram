@@ -32,7 +32,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const tgBase = `https://api.telegram.org/bot${botToken}`;
 
       const updRes = await fetch(
-        `${tgBase}/getUpdates?offset=${savedOffset}&limit=100&timeout=0&allowed_updates=${encodeURIComponent('["message"]')}`,
+        `${tgBase}/getUpdates?offset=${savedOffset}&limit=100&timeout=0&allowed_updates=${encodeURIComponent('["message","channel_post"]')}`,
       );
       const updData = await updRes.json() as any;
       if (!updData.ok) return res.status(500).json({ error: updData.description ?? 'Errore Telegram' });
