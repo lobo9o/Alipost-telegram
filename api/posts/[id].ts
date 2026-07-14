@@ -658,6 +658,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
   }
 
+  console.log('[publish] messageText after emoji sub (200ch):', JSON.stringify(messageText.slice(0, 200)));
+
   const replyMarkup = await buildKeyboard(keyboardContenuto, post, affiliateUrl)
     ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
 
