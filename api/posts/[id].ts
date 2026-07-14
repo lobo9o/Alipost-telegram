@@ -640,7 +640,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     customTags[tr.name as string] = tr.value as string;
   }
 
-  const messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl, aliCurrency, customTags);
+  let messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl, aliCurrency, customTags);
+
+  // Applica emoji animate (stessa logica di autopost/publish.ts)
+  const emojiRowsP = await sql`
+    SELECT DISTINCT ON (emoji_char) emoji_char, custom_emoji_id
+    FROM emoji_ids
+    WHERE user_id = ${userId} OR user_id = ${baseUserId} OR user_id LIKE ${baseUserId + ':%'}
+    ORDER BY emoji_char, (user_id = ${userId}) DESC
+  `.catch(() => [] as any[]);
+  for (const { emoji_char, custom_emoji_id } of emojiRowsP as { emoji_char: string; custom_emoji_id: string }[]) {
+    if (emoji_char && custom_emoji_id && messageText.includes(emoji_char)) {
+      messageText = messageText.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
+    }
+  }
 
   const replyMarkup = await buildKeyboard(keyboardContenuto, post, affiliateUrl)
     ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
