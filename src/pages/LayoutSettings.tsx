@@ -2309,6 +2309,17 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         <PageHeader title="Emoji Animate" onBack={() => setSubPage(null)} />
 
         <div style={{ padding: '0 16px' }}>
+          <ToggleRow
+            label="Emoji animate attive"
+            sub="Sostituisce le emoji nei post con le versioni animate"
+            value={s.emojiAnimated?.enabled !== false}
+            onChange={async v => {
+              const updated = { ...s, emojiAnimated: { enabled: v } };
+              setS(updated);
+              await settingsApi.save(updated).catch(() => {});
+            }}
+          />
+
           <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: '14px', marginBottom: 12 }}>
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Come funziona</div>
             <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.6 }}>

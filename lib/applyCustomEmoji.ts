@@ -3,8 +3,10 @@ export async function applyCustomEmoji(opts: {
   chatId: string;
   messageId: number;
   htmlText: string;
+  enabled?: boolean;
 }): Promise<void> {
-  const { baseUserId, chatId, messageId, htmlText } = opts;
+  const { baseUserId, chatId, messageId, htmlText, enabled = true } = opts;
+  if (!enabled) return;
   if (!messageId || !chatId || !htmlText) return;
 
   if (!htmlText.includes('<tg-emoji')) return;

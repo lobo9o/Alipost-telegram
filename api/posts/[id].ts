@@ -757,7 +757,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const htmlForEdit = hasImage
       ? safeCaption(messageText, 1024)
       : messageText.slice(0, 4096);
-    applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: htmlForEdit }).catch(() => {});
+    applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: htmlForEdit, enabled: cfg.emojiAnimated?.enabled !== false }).catch(() => {});
   }
 
   res.json({ ok: true, messageId, chatId });

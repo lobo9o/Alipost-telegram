@@ -322,6 +322,7 @@ export interface AppSettings {
   terminata: TerminataConfig;
   dealSearch: DealSearchSettings;
   dailyRecap: Record<string, DailyRecapChannelConfig>; // chiave: nome canale o "default"
+  emojiAnimated?: { enabled: boolean };
 }
 
 export interface AppState {

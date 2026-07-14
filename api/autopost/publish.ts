@@ -1949,7 +1949,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const htmlForEdit = (hasGeneratedImage || hasUrlImage)
           ? safeCaption(messageText, 1024)
           : messageText.slice(0, 4096);
-        applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: htmlForEdit }).catch(() => {});
+        applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: htmlForEdit, enabled: cfg.emojiAnimated?.enabled !== false }).catch(() => {});
       }
 
       // Salva in published_posts
@@ -2204,6 +2204,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               }
             }
             await sql`UPDATE published_posts SET terminata = true WHERE id = ${pub.id}`.catch(() => {});
+            if (termCaption !== undefined && cfg.emojiAnimated?.enabled !== false) {
+              applyCustomEmoji({ baseUserId, chatId: chatIdStr, messageId: msgIdNum, htmlText: termCaption.slice(0, 1024), enabled: true }).catch(() => {});
+            }
           }
         }
       }

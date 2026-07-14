@@ -3,6 +3,7 @@ import { generateTerminataImageServer } from '../_imageServer.js';
 import { buildMessage } from '../_buildMessage.js';
 import { checkPostPrice } from '../_priceCheck.js';
 import { generateTemplateImageServer, parseTemplateCfg } from './publish.js';
+import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 
 // In-memory: timestamp dell'ultimo check per ogni post (reset al riavvio)
 const lastChecked = new Map<string, number>(); // postId → ms
@@ -213,6 +214,9 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
   }
 
   await sql`UPDATE published_posts SET terminata = true WHERE id = ${post.id}`.catch(() => {});
+  if (caption !== undefined && chatId && msgId && cfg.emojiAnimated?.enabled !== false) {
+    applyCustomEmoji({ baseUserId, chatId: String(chatId), messageId: Number(msgId), htmlText: caption.slice(0, 1024), enabled: true }).catch(() => {});
+  }
   console.log(`[price-watch] terminato: ${post.id} (${post.productId} ${Number(post.discountedPrice)}→${currentPrice})`);
 }
 

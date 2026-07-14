@@ -89,4 +89,5 @@ export const INITIAL_SETTINGS: AppSettings = {
     telegramText: '❌ Offerta terminata',
   },
   dailyRecap: {},
+  emojiAnimated: { enabled: true },
 };
