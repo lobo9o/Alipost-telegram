@@ -881,6 +881,8 @@ function buildMessage(
     if (!(tagName in tags)) tags[tagName] = val || '';
   }
 
+  console.log(`[dbg-testo_sconto] customRaw="${(customTags['{testo_sconto}']||'').slice(0,40)}" disc=${disc} resolved="${(tags['{testo_sconto}']||'').slice(0,40)}"`);
+
   const SENTINEL = '\x01';
   const knownTagNames = new Set(Object.keys(tags));
 
