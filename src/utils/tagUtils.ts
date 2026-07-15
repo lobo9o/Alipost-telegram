@@ -11,12 +11,29 @@ export const SYSTEM_TAGS = new Set([
   '{terminata}',
   '{custom}',
   '{store}', '{storeup}', '{store_emoji_amz}', '{store_emoji_ali}',
+  '{testo_sconto}',
   '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
   '{coupon}', '{boxcoupon}', '{checkout}',
   '{emojicat}',
 ]);
+
+// Risolve un tag JSON range-based (es. {"0-10":"ANCORA DISPONIBILE","60-70":"SUPERSCONTO"}) in base a una percentuale
+export function resolveRangeTag(jsonValue: string, percent: number): string {
+  try {
+    const ranges = JSON.parse(jsonValue) as Record<string, string>;
+    for (const [range, text] of Object.entries(ranges)) {
+      const parts = range.split('-');
+      const min = Number(parts[0]);
+      const max = Number(parts[1]);
+      if (percent >= min && (max >= 100 ? percent <= max : percent < max)) {
+        return text || '';
+      }
+    }
+  } catch {}
+  return '';
+}
 
 // Sentinel usato internamente: riga che conteneva solo un blocco {_ _} vuoto → verrà rimossa
 const SENTINEL = '\x01';
@@ -136,6 +153,9 @@ export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]
   // altrimenti '' (il blocco {__terminata} resta nascosto durante la pubblicazione normale)
   const terminataText = terminataValue ?? '';
   const builtIn = computedTags(post, currency, minimoCustom, terminataText);
+  // {testo_sconto}: valore JSON con range percentuali → risolto in base alla % di sconto
+  const testoScontoTag = tags.find(t => t.name === '{testo_sconto}');
+  builtIn['{testo_sconto}'] = testoScontoTag ? resolveRangeTag(testoScontoTag.value, post.discountPercent) : '';
   // Override per-post: i tagOverrides del post hanno priorità sui valori globali dei tag custom
   const effectiveTags = tags.map(t =>
     post.tagOverrides?.[t.name] !== undefined

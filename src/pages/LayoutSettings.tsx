@@ -35,13 +35,15 @@ const READONLY_SYSTEM_TAG_ORDER = [
   '{link_affiliato}', '{link}', '{addtocart}', '{buynow}',
   '{coupon}', '{boxcoupon}', '{checkout}', '{custom}',
   '{store}', '{storeup}', '{store_emoji_amz}', '{store_emoji_ali}',
+  '{testo_sconto}',
   '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
   '{emojicat}',
 ];
-// {store_emoji_amz} e {store_emoji_ali} non sono readonly: l'utente imposta il valore emoji
-const READONLY_SYSTEM_TAG_SET = new Set(READONLY_SYSTEM_TAG_ORDER.filter(t => t !== '{store_emoji_amz}' && t !== '{store_emoji_ali}'));
+// Tag modificabili: non readonly (l'utente imposta il valore)
+const EDITABLE_PINNED_NAMES = new Set(['{store_emoji_amz}', '{store_emoji_ali}', '{testo_sconto}']);
+const READONLY_SYSTEM_TAG_SET = new Set(READONLY_SYSTEM_TAG_ORDER.filter(t => !EDITABLE_PINNED_NAMES.has(t)));
 
 const TAG_DESCRIPTIONS: Record<string, string> = {
   '{titolo}':          'Titolo completo del prodotto',
@@ -65,6 +67,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   '{storeup}':         'Nome del negozio in MAIUSCOLO — AMAZON oppure ALIEXPRESS (automatico in base alla piattaforma)',
   '{store_emoji_amz}': 'Emoji Amazon — visibile solo nei post Amazon, vuoto per AliExpress. Imposta il valore in TAG MODIFICABILI',
   '{store_emoji_ali}': 'Emoji AliExpress — visibile solo nei post AliExpress, vuoto per Amazon. Imposta il valore in TAG MODIFICABILI',
+  '{testo_sconto}':    'Testo variabile in base alla percentuale di sconto — es. "SUPERSCONTO" per sconti 60-70%. Configura gli intervalli in TAG MODIFICABILI',
   '{countryflag}':     'Bandiera emoji del paese di spedizione — es. 🇨🇳',
   '{country}':         'Nome del paese di spedizione — es. Cina',
   '{countryup}':       'Nome del paese in MAIUSCOLO — es. CINA',
@@ -86,6 +89,7 @@ function TagsSection() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editValue, setEditValue] = useState('');
+  const [rangeMap, setRangeMap] = useState<Record<string, string>>({});
   const fmt = (n: string) => n.trim().startsWith('{') ? n.trim() : `{${n.trim()}}`;
 
   const addTag = () => {
@@ -111,7 +115,7 @@ function TagsSection() {
   const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name));
 
   // Tag predefiniti che appaiono sempre in TAG MODIFICABILI anche senza record DB
-  const PINNED_EDITABLE = ['{store_emoji_amz}', '{store_emoji_ali}'];
+  const PINNED_EDITABLE = ['{store_emoji_amz}', '{store_emoji_ali}', '{testo_sconto}'];
   const pinnedTags = PINNED_EDITABLE.map(name => {
     const existing = tags.find(t => t.name === name);
     return existing ?? { id: `__pinned__${name}`, name, value: '' };
@@ -119,17 +123,27 @@ function TagsSection() {
   // Evita duplicati: rimuovi i pinned dall'elenco editableSystemTags normale
   const editableSystemTagsFiltered = editableSystemTags.filter(t => !PINNED_EDITABLE.includes(t.name));
 
-  const savePinned = async (t: Tag) => {
+  const savePinnedValue = async (t: Tag, value: string) => {
     const existing = tags.find(x => x.name === t.name);
     if (existing) {
-      tagsApi.update(existing.id, { name: t.name, value: editValue }).catch(() => {});
-      setTags(ts => ts.map(x => x.id === existing.id ? { ...x, value: editValue } : x));
+      tagsApi.update(existing.id, { name: t.name, value }).catch(() => {});
+      setTags(ts => ts.map(x => x.id === existing.id ? { ...x, value } : x));
     } else {
-      const newTag: Tag = { id: genId(), name: t.name, value: editValue };
+      const newTag: Tag = { id: genId(), name: t.name, value };
       await tagsApi.create(newTag).catch(() => {});
       setTags(ts => [...ts, newTag]);
     }
     setEditId(null);
+  };
+
+  const DISCOUNT_RANGES = ['0-10', '10-20', '20-30', '30-40', '40-50', '50-60', '60-70', '70-80', '80-90', '90-100'];
+
+  const testoScontoSummary = (value: string): string | null => {
+    try {
+      const obj = JSON.parse(value) as Record<string, string>;
+      const filled = Object.values(obj).filter(v => v && v.trim()).length;
+      return filled > 0 ? `${filled} interval${filled === 1 ? 'lo' : 'li'} configurato${filled === 1 ? '' : 'i'}` : null;
+    } catch { return value || null; }
   };
 
   const renderEditableTag = (t: Tag, isCustom: boolean) => (
@@ -186,14 +200,40 @@ function TagsSection() {
       </div>
       {pinnedTags.map(t => (
         <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
-          {editId === t.id ? (
+          {editId === t.id && t.name === '{testo_sconto}' ? (
+            <>
+              <div style={{ padding: '2px 0 4px', fontSize: 13, fontWeight: 600, color: 'var(--a1)' }}>{t.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 8 }}>
+                Scrivi il testo da mostrare per ogni intervallo di sconto. Lascia vuoto per non mostrare nulla.
+              </div>
+              {DISCOUNT_RANGES.map(r => (
+                <div key={r} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--a1)', width: 60, flexShrink: 0 }}>{r}%</span>
+                  <input
+                    className="inp"
+                    value={rangeMap[r] || ''}
+                    onChange={e => setRangeMap(m => ({ ...m, [r]: e.target.value }))}
+                    placeholder="es. SUPERSCONTO"
+                    style={{ marginBottom: 0, flex: 1 }}
+                  />
+                </div>
+              ))}
+              <div className="irow" style={{ marginTop: 8 }}>
+                <button className="btn bp bsm" onClick={() => {
+                  const filtered = Object.fromEntries(Object.entries(rangeMap).filter(([, v]) => v && v.trim()));
+                  savePinnedValue(t, JSON.stringify(filtered));
+                }} style={{ flex: 1 }}>✓ Salva</button>
+                <button className="btn bs bsm" onClick={() => setEditId(null)} style={{ flex: 1 }}>× Annulla</button>
+              </div>
+            </>
+          ) : editId === t.id ? (
             <>
               <div style={{ padding: '2px 0 4px', fontSize: 13, fontWeight: 600, color: 'var(--a1)' }}>{t.name}</div>
               <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 6 }}>{TAG_DESCRIPTIONS[t.name] ?? ''}</div>
               <input className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
                 placeholder="es. 🟠 oppure 🛒" style={{ marginBottom: 6 }} />
               <div className="irow">
-                <button className="btn bp bsm" onClick={() => savePinned(t)} style={{ flex: 1 }}>✓ Salva</button>
+                <button className="btn bp bsm" onClick={() => savePinnedValue(t, editValue)} style={{ flex: 1 }}>✓ Salva</button>
                 <button className="btn bs bsm" onClick={() => setEditId(null)} style={{ flex: 1 }}>× Annulla</button>
               </div>
             </>
@@ -201,10 +241,20 @@ function TagsSection() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="tag-pill" style={{ flexShrink: 0 }}>{t.name}</span>
               <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1 }}>
-                {t.value ? t.value : <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>non impostato</span>}
+                {t.name === '{testo_sconto}'
+                  ? (testoScontoSummary(t.value) ?? <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>non configurato</span>)
+                  : (t.value ? t.value : <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>non impostato</span>)
+                }
               </span>
               <button className="btn bgh bsm" style={{ padding: '3px 8px' }}
-                onClick={() => { setEditId(t.id); setEditValue(t.value); }}>✏️</button>
+                onClick={() => {
+                  if (t.name === '{testo_sconto}') {
+                    try { setRangeMap(JSON.parse(t.value)); } catch { setRangeMap({}); }
+                  } else {
+                    setEditValue(t.value);
+                  }
+                  setEditId(t.id);
+                }}>✏️</button>
             </div>
           )}
         </div>
