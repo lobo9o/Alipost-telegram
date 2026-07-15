@@ -27,7 +27,7 @@ export function LayoutPage({ nav }: { nav: (p: NavPage) => void }) {
 }
 
 
-// Tag di sistema non-modificabili (compilati automaticamente dal bot), in ordine fisso
+// Tutti i tag di sistema mostrati nella lista (con descrizione), in ordine fisso
 const READONLY_SYSTEM_TAG_ORDER = [
   '{titolo}', '{titoloup}', '{titoloshort}',
   '{prezzo}', '{oldprezzo}', '{prezzo_scontato}',
@@ -60,8 +60,8 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   '{boxcoupon}':       'Mostra testo "Abilita il coupon prima di acquistare" per link con coupon da abilitare nella pagina Amazon',
   '{checkout}':        'Testo "Sconto automatico al check-out" per prodotti con sconto applicato automaticamente al pagamento (senza box da spuntare)',
   '{custom}':          'Testo personalizzato inserito nel post',
-  '{store}':           'Nome del negozio — Amazon oppure AliExpress',
-  '{storeup}':         'Nome del negozio in MAIUSCOLO — AMAZON oppure ALIEXPRESS',
+  '{store}':           'Nome del negozio — Amazon oppure AliExpress (automatico in base alla piattaforma)',
+  '{storeup}':         'Nome del negozio in MAIUSCOLO — AMAZON oppure ALIEXPRESS (automatico in base alla piattaforma)',
   '{countryflag}':     'Bandiera emoji del paese di spedizione — es. 🇨🇳',
   '{country}':         'Nome del paese di spedizione — es. Cina',
   '{countryup}':       'Nome del paese in MAIUSCOLO — es. CINA',
@@ -83,8 +83,6 @@ function TagsSection() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editValue, setEditValue] = useState('');
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
-
   const fmt = (n: string) => n.trim().startsWith('{') ? n.trim() : `{${n.trim()}}`;
 
   const addTag = () => {
@@ -148,25 +146,14 @@ function TagsSection() {
   return (
     <>
       <div className="stit">TAG DI SISTEMA</div>
-      <div style={{ margin: '0 16px 8px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
-        Compilati automaticamente dal bot. Clicca un tag per vedere cosa contiene.
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 6px' }}>
+      <div style={{ margin: '0 16px 10px' }}>
         {READONLY_SYSTEM_TAG_ORDER.map(name => (
-          <span
-            key={name}
-            className="tag-pill"
-            style={{ cursor: 'pointer', opacity: selectedTag && selectedTag !== name ? 0.5 : 1, outline: selectedTag === name ? '2px solid var(--a1)' : 'none', outlineOffset: 2 }}
-            onClick={() => setSelectedTag(prev => prev === name ? null : name)}
-          >{name}</span>
+          <div key={name} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bdr)' }}>
+            <span className="tag-pill" style={{ flexShrink: 0, fontSize: 11 }}>{name}</span>
+            <span style={{ fontSize: 11, color: 'var(--t3)', lineHeight: 1.4 }}>{TAG_DESCRIPTIONS[name] ?? ''}</span>
+          </div>
         ))}
       </div>
-      {selectedTag && TAG_DESCRIPTIONS[selectedTag] && (
-        <div style={{ margin: '0 16px 10px', padding: '8px 12px', background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.3)', borderRadius: 8, fontSize: 12, color: 'var(--t1)' }}>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--a1)', marginRight: 6 }}>{selectedTag}</span>
-          {TAG_DESCRIPTIONS[selectedTag]}
-        </div>
-      )}
 
       <div className="stit" style={{ marginTop: 4 }}>TAG MODIFICABILI ({editableSystemTags.length})</div>
       <div style={{ margin: '0 16px 8px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
