@@ -110,6 +110,28 @@ function TagsSection() {
   const editableSystemTags = tags.filter(t => SYSTEM_TAGS.has(t.name) && !READONLY_SYSTEM_TAG_SET.has(t.name));
   const customTags = tags.filter(t => !SYSTEM_TAGS.has(t.name));
 
+  // Tag predefiniti che appaiono sempre in TAG MODIFICABILI anche senza record DB
+  const PINNED_EDITABLE = ['{store_emoji_amz}', '{store_emoji_ali}'];
+  const pinnedTags = PINNED_EDITABLE.map(name => {
+    const existing = tags.find(t => t.name === name);
+    return existing ?? { id: `__pinned__${name}`, name, value: '' };
+  });
+  // Evita duplicati: rimuovi i pinned dall'elenco editableSystemTags normale
+  const editableSystemTagsFiltered = editableSystemTags.filter(t => !PINNED_EDITABLE.includes(t.name));
+
+  const savePinned = async (t: Tag) => {
+    const existing = tags.find(x => x.name === t.name);
+    if (existing) {
+      tagsApi.update(existing.id, { name: t.name, value: editValue }).catch(() => {});
+      setTags(ts => ts.map(x => x.id === existing.id ? { ...x, value: editValue } : x));
+    } else {
+      const newTag: Tag = { id: genId(), name: t.name, value: editValue };
+      await tagsApi.create(newTag).catch(() => {});
+      setTags(ts => [...ts, newTag]);
+    }
+    setEditId(null);
+  };
+
   const renderEditableTag = (t: Tag, isCustom: boolean) => (
     <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
       {editId === t.id ? (
@@ -158,14 +180,36 @@ function TagsSection() {
         ))}
       </div>
 
-      <div className="stit" style={{ marginTop: 4 }}>TAG MODIFICABILI ({editableSystemTags.length})</div>
+      <div className="stit" style={{ marginTop: 4 }}>TAG MODIFICABILI</div>
       <div style={{ margin: '0 16px 8px', padding: '7px 12px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: 10, fontSize: 11, color: 'var(--t2)' }}>
         Tag di sistema con valore personalizzabile. Premi ✏️ per cambiare il testo.
       </div>
-      {editableSystemTags.length === 0 && (
-        <div style={{ padding: '4px 16px 8px', fontSize: 12, color: 'var(--t3)' }}>Nessuno.</div>
-      )}
-      {editableSystemTags.map(t => renderEditableTag(t, false))}
+      {pinnedTags.map(t => (
+        <div key={t.id} className="card" style={{ margin: '0 16px 6px', padding: '9px 12px' }}>
+          {editId === t.id ? (
+            <>
+              <div style={{ padding: '2px 0 4px', fontSize: 13, fontWeight: 600, color: 'var(--a1)' }}>{t.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 6 }}>{TAG_DESCRIPTIONS[t.name] ?? ''}</div>
+              <input className="inp" value={editValue} onChange={e => setEditValue(e.target.value)}
+                placeholder="es. 🟠 oppure 🛒" style={{ marginBottom: 6 }} />
+              <div className="irow">
+                <button className="btn bp bsm" onClick={() => savePinned(t)} style={{ flex: 1 }}>✓ Salva</button>
+                <button className="btn bs bsm" onClick={() => setEditId(null)} style={{ flex: 1 }}>× Annulla</button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="tag-pill" style={{ flexShrink: 0 }}>{t.name}</span>
+              <span style={{ fontSize: 12, color: 'var(--t2)', flex: 1 }}>
+                {t.value ? t.value : <span style={{ fontStyle: 'italic', color: 'var(--t3)' }}>non impostato</span>}
+              </span>
+              <button className="btn bgh bsm" style={{ padding: '3px 8px' }}
+                onClick={() => { setEditId(t.id); setEditValue(t.value); }}>✏️</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {editableSystemTagsFiltered.map(t => renderEditableTag(t, false))}
 
       <div className="stit" style={{ marginTop: 8 }}>TAG PERSONALIZZATI ({customTags.length})</div>
       {customTags.length === 0 && (
