@@ -34,13 +34,14 @@ const READONLY_SYSTEM_TAG_ORDER = [
   '{sconto}', '{perc}', '{valuta}',
   '{link_affiliato}', '{link}', '{addtocart}', '{buynow}',
   '{coupon}', '{boxcoupon}', '{checkout}', '{custom}',
-  '{store}', '{storeup}',
+  '{store}', '{storeup}', '{store_emoji_amz}', '{store_emoji_ali}',
   '{countryflag}', '{country}', '{countryup}',
   '{giorno}', '{ora}', '{data}',
   '{stelle}', '{recensioni}', '{cat}', '{author}',
   '{emojicat}',
 ];
-const READONLY_SYSTEM_TAG_SET = new Set(READONLY_SYSTEM_TAG_ORDER);
+// {store_emoji_amz} e {store_emoji_ali} non sono readonly: l'utente imposta il valore emoji
+const READONLY_SYSTEM_TAG_SET = new Set(READONLY_SYSTEM_TAG_ORDER.filter(t => t !== '{store_emoji_amz}' && t !== '{store_emoji_ali}'));
 
 const TAG_DESCRIPTIONS: Record<string, string> = {
   '{titolo}':          'Titolo completo del prodotto',
@@ -62,6 +63,8 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   '{custom}':          'Testo personalizzato inserito nel post',
   '{store}':           'Nome del negozio — Amazon oppure AliExpress (automatico in base alla piattaforma)',
   '{storeup}':         'Nome del negozio in MAIUSCOLO — AMAZON oppure ALIEXPRESS (automatico in base alla piattaforma)',
+  '{store_emoji_amz}': 'Emoji Amazon — visibile solo nei post Amazon, vuoto per AliExpress. Imposta il valore in TAG MODIFICABILI',
+  '{store_emoji_ali}': 'Emoji AliExpress — visibile solo nei post AliExpress, vuoto per Amazon. Imposta il valore in TAG MODIFICABILI',
   '{countryflag}':     'Bandiera emoji del paese di spedizione — es. 🇨🇳',
   '{country}':         'Nome del paese di spedizione — es. Cina',
   '{countryup}':       'Nome del paese in MAIUSCOLO — es. CINA',

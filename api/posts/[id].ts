@@ -181,6 +181,8 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{custom}':          esc(post.customText || ''),
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
+    '{store_emoji_amz}': post.platform === 'amazon' ? (customTags['{store_emoji_amz}'] || '') : '',
+    '{store_emoji_ali}': post.platform === 'aliexpress' ? (customTags['{store_emoji_ali}'] || '') : '',
     '{countryflag}':     post.shipFromCountry ? codeToFlag(post.shipFromCountry) : (post.platform === 'aliexpress' ? '' : '🇮🇹'),
     '{country}':         post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? '' : 'Italia'),
     '{countryup}':       (post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? '' : 'Italia')).toUpperCase(),

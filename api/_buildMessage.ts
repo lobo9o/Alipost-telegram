@@ -63,6 +63,8 @@ export function buildMessage(
     '{custom}':          esc(post.customText || ''),
     '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
+    '{store_emoji_amz}': post.platform === 'amazon' ? (customTags['{store_emoji_amz}'] || '') : '',
+    '{store_emoji_ali}': post.platform === 'aliexpress' ? (customTags['{store_emoji_ali}'] || '') : '',
     '{countryflag}':     codeToFlag(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '' : '🇮🇹'),
     '{country}':         codeToCountryName(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '' : 'Italia'),
     '{countryup}':       (codeToCountryName(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '' : 'Italia')).toUpperCase(),
