@@ -804,6 +804,21 @@ function safeCaption(html: string, maxLen: number): string {
   return out.trimEnd() + (visLen >= maxLen ? '…' : '');
 }
 
+function resolveDiscountRangeTag(jsonValue: string, percent: number): string {
+  try {
+    const ranges = JSON.parse(jsonValue) as Record<string, string>;
+    for (const [range, text] of Object.entries(ranges)) {
+      const parts = range.split('-');
+      const min = Number(parts[0]);
+      const max = Number(parts[1]);
+      if (percent >= min && (max >= 100 ? percent <= max : percent < max)) {
+        return text || '';
+      }
+    }
+  } catch {}
+  return '';
+}
+
 function buildMessage(
   contenuto: string,
   post: Record<string, any>,
@@ -844,6 +859,7 @@ function buildMessage(
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
     '{store_emoji_amz}': post.platform === 'amazon' ? (customTags['{store_emoji_amz}'] || '') : '',
     '{store_emoji_ali}': post.platform === 'aliexpress' ? (customTags['{store_emoji_ali}'] || '') : '',
+    '{testo_sconto}':    resolveDiscountRangeTag(customTags['{testo_sconto}'] || '', disc),
     '{countryflag}':     codeToFlag(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '' : '🇮🇹'),
     '{country}':         codeToCountryName(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '' : 'Italia'),
     '{countryup}':       (codeToCountryName(post.shipFromCountry) ?? (post.platform === 'aliexpress' ? '' : 'Italia')).toUpperCase(),
