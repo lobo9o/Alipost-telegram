@@ -32,7 +32,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const tgBase = `https://api.telegram.org/bot${botToken}`;
 
       const updRes = await fetch(
-        `${tgBase}/getUpdates?offset=${savedOffset}&limit=100&timeout=0&allowed_updates=${encodeURIComponent('["message","channel_post"]')}`,
+        `${tgBase}/getUpdates?offset=${savedOffset}&limit=100&timeout=0&allowed_updates=${encodeURIComponent('["message"]')}`,
       );
       const updData = await updRes.json() as any;
       if (!updData.ok) return res.status(500).json({ error: updData.description ?? 'Errore Telegram' });
@@ -43,13 +43,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
       for (const upd of updates) {
         newOffset = Math.max(newOffset, upd.update_id + 1);
-        const msg = upd.message ?? upd.channel_post;
-        if (!msg) continue;
+        // Solo messaggi privati al bot — mai channel_post per non rischiare di cancellare post dal canale
+        const msg = upd.message;
+        if (!msg || msg.chat?.type !== 'private') continue;
         const entities: any[] = [...(msg.entities ?? []), ...(msg.caption_entities ?? [])];
         const text: string = msg.text ?? msg.caption ?? '';
         for (const entity of entities) {
           if (entity.type === 'custom_emoji' && entity.custom_emoji_id) {
-            // Usa slice JS che lavora in UTF-16 — stesso sistema di Telegram
             const emojiChar = text.slice(entity.offset, entity.offset + entity.length);
             if (emojiChar) discovered.push({ emoji_char: emojiChar, custom_emoji_id: entity.custom_emoji_id });
           }
@@ -66,11 +66,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         `;
       }
 
-      // Cancella i messaggi che contenevano emoji custom (mantiene la chat pulita)
+      // Cancella solo i messaggi privati al bot che contenevano emoji custom
       const msgsToDelete: Array<{ chatId: number; messageId: number }> = [];
       for (const upd of updates) {
-        const msg = upd.message ?? upd.channel_post;
-        if (!msg) continue;
+        const msg = upd.message;
+        if (!msg || msg.chat?.type !== 'private') continue;
         const entities: any[] = [...(msg.entities ?? []), ...(msg.caption_entities ?? [])];
         const hasCustomEmoji = entities.some((e: any) => e.type === 'custom_emoji');
         if (hasCustomEmoji) msgsToDelete.push({ chatId: msg.chat.id, messageId: msg.message_id });
