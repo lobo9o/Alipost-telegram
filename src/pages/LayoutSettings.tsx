@@ -253,6 +253,7 @@ function TextLayoutSection() {
   const { layouts, setLayouts, keyboards } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<TextLayout, 'id'>>({ nome: '', tipo: 'normal', contenuto: '', keyboardId: undefined });
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const startNew = () => { setForm({ nome: '', tipo: 'normal', contenuto: '', keyboardId: undefined }); setEditing('new'); };
@@ -297,7 +298,30 @@ function TextLayoutSection() {
           </select>
         </div>
         <div className="fld">
-          <label className="lbl">Contenuto — usa tag come {'{titolo}'}, {'{prezzo_scontato}'}, {'{countryflag}'}, {'{country}'}, {'{custom}'}</label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <label className="lbl" style={{ margin: 0 }}>Contenuto</label>
+            <button
+              className="btn bgh bsm"
+              style={{ fontSize: 11, padding: '3px 10px' }}
+              onClick={() => setTagMenuOpen(o => !o)}
+            >{tagMenuOpen ? '▲ Chiudi tag' : '▼ Tag disponibili'}</button>
+          </div>
+          {tagMenuOpen && (
+            <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, marginBottom: 8, maxHeight: 220, overflowY: 'auto' }}>
+              {READONLY_SYSTEM_TAG_ORDER.map(name => (
+                <div
+                  key={name}
+                  onClick={() => { insertTag(name); setTagMenuOpen(false); }}
+                  style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '5px 10px', borderBottom: '1px solid var(--bdr)', cursor: 'pointer' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '')}
+                >
+                  <span className="tag-pill" style={{ fontSize: 11, flexShrink: 0 }}>{name}</span>
+                  <span style={{ fontSize: 11, color: 'var(--t3)', lineHeight: 1.4 }}>{TAG_DESCRIPTIONS[name] ?? ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {htmlError && <ErrorBanner>{htmlError}</ErrorBanner>}
           <textarea ref={taRef} className="txta" value={form.contenuto} onChange={e => setForm({ ...form, contenuto: e.target.value })} rows={8} />
         </div>
