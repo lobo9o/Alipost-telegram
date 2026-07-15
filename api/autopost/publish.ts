@@ -805,7 +805,6 @@ function safeCaption(html: string, maxLen: number): string {
 }
 
 function resolveDiscountRangeTag(jsonValue: string, percent: number): string {
-  console.log(`[testo_sconto] resolveDiscountRangeTag called: percent=${percent} json=${jsonValue?.slice(0,80)}`);
   try {
     const ranges = JSON.parse(jsonValue) as Record<string, string>;
     for (const [range, text] of Object.entries(ranges)) {
@@ -813,12 +812,10 @@ function resolveDiscountRangeTag(jsonValue: string, percent: number): string {
       const min = Number(parts[0]);
       const max = Number(parts[1]);
       if (percent >= min && (max >= 100 ? percent <= max : percent < max)) {
-        console.log(`[testo_sconto] match range=${range} → "${text}"`);
         return text || '';
       }
     }
-    console.log(`[testo_sconto] nessun range matched per percent=${percent}`);
-  } catch (e: any) { console.log(`[testo_sconto] JSON.parse error: ${e.message}`); }
+  } catch {}
   return '';
 }
 
@@ -1728,7 +1725,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
       const emojiTagsInDb = Object.keys(customTags).filter(k => k.startsWith('{emoji_'));
       console.log(`[autopost] userId=${userId} totalTags=${tagRows.length} emojiTags(${emojiTagsInDb.length}):`, emojiTagsInDb);
-      console.log(`[testo_sconto] userId=${userId} db_value="${(customTags['{testo_sconto}'] ?? 'NOT_FOUND').slice(0,80)}"`);
 
       // Costruisce URL affiliato (primo post)
       let affiliateUrl: string = post.sourceUrl ?? '';
