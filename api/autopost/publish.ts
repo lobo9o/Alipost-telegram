@@ -1728,6 +1728,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       }
       const emojiTagsInDb = Object.keys(customTags).filter(k => k.startsWith('{emoji_'));
       console.log(`[autopost] userId=${userId} totalTags=${tagRows.length} emojiTags(${emojiTagsInDb.length}):`, emojiTagsInDb);
+      console.log(`[testo_sconto] userId=${userId} db_value="${(customTags['{testo_sconto}'] ?? 'NOT_FOUND').slice(0,80)}"`);
 
       // Costruisce URL affiliato (primo post)
       let affiliateUrl: string = post.sourceUrl ?? '';
