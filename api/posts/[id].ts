@@ -151,6 +151,21 @@ function codeToCountryName(code?: string): string {
   return COUNTRY_IT[upper] ?? upper;
 }
 
+function resolveDiscountRangeTag(jsonValue: string, percent: number): string {
+  try {
+    const ranges = JSON.parse(jsonValue) as Record<string, string>;
+    for (const [range, text] of Object.entries(ranges)) {
+      const parts = range.split('-');
+      const min = Number(parts[0]);
+      const max = Number(parts[1]);
+      if (percent >= min && (max >= 100 ? percent <= max : percent < max)) {
+        return text || '';
+      }
+    }
+  } catch {}
+  return '';
+}
+
 function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string, currency?: string, customTags: Record<string, string> = {}, terminataValue?: string): string {
   const now = new Date();
   const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
@@ -183,6 +198,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
     '{store_emoji_amz}': post.platform === 'amazon' ? (customTags['{store_emoji_amz}'] || '') : '',
     '{store_emoji_ali}': post.platform === 'aliexpress' ? (customTags['{store_emoji_ali}'] || '') : '',
+    '{testo_sconto}':    resolveDiscountRangeTag(customTags['{testo_sconto}'] || '', disc),
     '{countryflag}':     post.shipFromCountry ? codeToFlag(post.shipFromCountry) : (post.platform === 'aliexpress' ? '' : '🇮🇹'),
     '{country}':         post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? '' : 'Italia'),
     '{countryup}':       (post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? '' : 'Italia')).toUpperCase(),
@@ -645,12 +661,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   let messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl, aliCurrency, customTags);
 
-  // Applica emoji animate (stessa logica di autopost/publish.ts)
+  // Applica emoji animate: solo per il profilo/canale corrente (userId esatto)
   const emojiRowsP = await sql`
-    SELECT DISTINCT ON (emoji_char) emoji_char, custom_emoji_id
+    SELECT emoji_char, custom_emoji_id
     FROM emoji_ids
-    WHERE user_id = ${userId} OR user_id = ${baseUserId} OR user_id LIKE ${baseUserId + ':%'}
-    ORDER BY emoji_char, (user_id = ${userId}) DESC
+    WHERE user_id = ${userId}
   `.catch(() => [] as any[]);
   for (const { emoji_char, custom_emoji_id } of emojiRowsP as { emoji_char: string; custom_emoji_id: string }[]) {
     if (emoji_char && custom_emoji_id && messageText.includes(emoji_char)) {
