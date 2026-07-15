@@ -805,6 +805,7 @@ function safeCaption(html: string, maxLen: number): string {
 }
 
 function resolveDiscountRangeTag(jsonValue: string, percent: number): string {
+  console.log(`[testo_sconto] resolveDiscountRangeTag called: percent=${percent} json=${jsonValue?.slice(0,80)}`);
   try {
     const ranges = JSON.parse(jsonValue) as Record<string, string>;
     for (const [range, text] of Object.entries(ranges)) {
@@ -812,10 +813,12 @@ function resolveDiscountRangeTag(jsonValue: string, percent: number): string {
       const min = Number(parts[0]);
       const max = Number(parts[1]);
       if (percent >= min && (max >= 100 ? percent <= max : percent < max)) {
+        console.log(`[testo_sconto] match range=${range} → "${text}"`);
         return text || '';
       }
     }
-  } catch {}
+    console.log(`[testo_sconto] nessun range matched per percent=${percent}`);
+  } catch (e: any) { console.log(`[testo_sconto] JSON.parse error: ${e.message}`); }
   return '';
 }
 
