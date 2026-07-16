@@ -1714,10 +1714,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         if (firstKb) keyboardRow = firstKb;
       }
 
-      // Carica tag personalizzati: prima 'legacy' (vecchio default), poi user-specifici (sovrascrivono)
+      // Carica tag personalizzati: prima 'legacy', poi profili secondari, poi base user (priorità più alta)
       const tagRows = await sql`
         SELECT name, value FROM tags
-        WHERE user_id = ${userId} OR user_id = 'legacy'
+        WHERE user_id = ${userId} OR user_id LIKE ${baseUserId + ':%'} OR user_id = 'legacy'
         ORDER BY (user_id = ${userId}) ASC
       `;
       const customTags: Record<string, string> = {};
