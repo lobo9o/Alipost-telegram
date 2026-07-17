@@ -260,6 +260,35 @@ export const emojiIdsApi = {
 };
 
 // ── Channel Info (foto + nome canale) ────────────────────────────────────────
+// ── Custom Posts ──────────────────────────────────────────────────────────────
+export interface CustomPostSchedule {
+  id: string;
+  days: number[];
+  time: string;
+  channel: string;
+  active: boolean;
+  lastSentDate?: string;
+}
+
+export interface CustomPost {
+  id: string;
+  title: string;
+  image: string;
+  body: string;
+  keyboard: string;
+  schedules: CustomPostSchedule[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const customPostsApi = {
+  list: () => req<CustomPost[]>('GET', '/api/custom-posts'),
+  create: (data: Omit<CustomPost, 'id' | 'created_at' | 'updated_at'>) => req<CustomPost>('POST', '/api/custom-posts', data),
+  update: (id: string, data: Partial<Omit<CustomPost, 'id'>>) => req<CustomPost>('PUT', `/api/custom-posts/${id}`, data),
+  delete: (id: string) => req<{ ok: boolean }>('DELETE', `/api/custom-posts/${id}`),
+  publishNow: (id: string, channel: string) => req<{ ok: boolean; messageId?: number; chatId?: string; error?: string }>('POST', `/api/custom-posts/${id}`, { channel }),
+};
+
 export interface ChannelInfo { title: string; photoUrl: string | null; username?: string; }
 export const channelInfoApi = {
   get: (channelId: string) => req<ChannelInfo>('GET', `/api/channel-info?channelId=${encodeURIComponent(channelId)}`),

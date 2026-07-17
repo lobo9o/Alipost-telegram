@@ -5,6 +5,7 @@ import cron from 'node-cron';
 import { initTgMonitor, getActiveClient } from './api/tg-monitor/worker.js';
 import { runDailyRecapCheck } from './api/autopost/daily-recap.js';
 import { runPriceWatchCheck } from './api/autopost/price-watch.js';
+import { runCustomPostScheduler } from './api/custom-posts/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -54,6 +55,8 @@ async function main() {
     dailyRecapHandler,
     priceWatchHandler,
     adminDashboardHandler,
+    customPostsHandler,
+    customPostsIdHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -79,6 +82,8 @@ async function main() {
     loadHandler('api/autopost/daily-recap.ts'),
     loadHandler('api/autopost/price-watch.ts'),
     loadHandler('api/admin/dashboard.ts'),
+    loadHandler('api/custom-posts/index.ts'),
+    loadHandler('api/custom-posts/[id].ts'),
   ]);
 
   const app = express();
@@ -132,6 +137,8 @@ async function main() {
   app.all('/api/autopost/daily-recap', dailyRecapHandler);
   app.all('/api/autopost/price-watch', priceWatchHandler);
   app.all('/admin', adminDashboardHandler);
+  app.all('/api/custom-posts', customPostsHandler);
+  app.all('/api/custom-posts/:id', withId(customPostsIdHandler));
 
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -147,6 +154,11 @@ async function main() {
   // Riepilogo giornaliero: check ogni minuto
   cron.schedule('* * * * *', () => {
     runDailyRecapCheck(PORT).catch(e => console.error('[cron daily-recap]', e));
+  });
+
+  // Scheduler post personalizzati: check ogni minuto
+  cron.schedule('* * * * *', () => {
+    runCustomPostScheduler().catch(e => console.error('[cron custom-scheduler]', e));
   });
 
   // Price watch per post con errore di prezzo: check ogni 2 minuti
