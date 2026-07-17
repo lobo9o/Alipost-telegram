@@ -24,7 +24,7 @@ async function resolveChannel(id: string): Promise<{ name: string; username?: st
 
 async function getData() {
   const [settingsRows, postStats, lastPublished] = await Promise.all([
-    sql`SELECT user_id, data, created_at FROM settings ORDER BY user_id`,
+    sql`SELECT user_id, data, updated_at FROM settings ORDER BY user_id`,
     sql`
       SELECT
         SPLIT_PART(user_id, ':', 1) AS root_id,
@@ -316,8 +316,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(401).json({ error: 'Password errata' });
       return;
     }
-    const data = await getData();
-    res.json(data);
+    try {
+      const data = await getData();
+      res.json(data);
+    } catch (e: any) {
+      console.error('[admin] errore getData:', e?.message ?? e);
+      res.status(500).json({ error: 'Errore interno: ' + (e?.message ?? 'unknown') });
+    }
     return;
   }
 
