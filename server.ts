@@ -53,6 +53,7 @@ async function main() {
     multiPreviewHandler,
     dailyRecapHandler,
     priceWatchHandler,
+    adminDashboardHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -77,6 +78,7 @@ async function main() {
     loadHandler('api/multi-preview.ts'),
     loadHandler('api/autopost/daily-recap.ts'),
     loadHandler('api/autopost/price-watch.ts'),
+    loadHandler('api/admin/dashboard.ts'),
   ]);
 
   const app = express();
@@ -129,6 +131,7 @@ async function main() {
   app.all('/api/multi-preview', multiPreviewHandler);
   app.all('/api/autopost/daily-recap', dailyRecapHandler);
   app.all('/api/autopost/price-watch', priceWatchHandler);
+  app.all('/admin', adminDashboardHandler);
 
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
