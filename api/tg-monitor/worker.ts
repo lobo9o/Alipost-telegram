@@ -23,6 +23,7 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
   // per evitare che importi come "-15,00€" vengano scambiati per il prezzo del prodotto
   const priceText = text.split('\n')
     .filter(line => !/paypal|cashback|rimborso|sconto\s+extra|sconto\s+aggiuntivo|bonus|credito/i.test(line))
+    .filter(line => !/a\s+confezione|al?\s+pezzo|per\s+(?:confezione|pezzo|unit[àa]|snack|barr[ae]|biscotto|cialda|bustina|capsula|compressa|tablet|dose)|cadauno|l[''']uno|l[''']una|\bunit(?:à|a)\b/i.test(line))
     .join('\n');
 
   // Prezzi con € o $ sia dopo (12,99€ / 1.234,56€) sia prima (€12.99 / $1,234.56)
