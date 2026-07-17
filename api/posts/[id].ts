@@ -480,6 +480,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           tgD = await tgR.json() as { ok: boolean; description?: string };
         }
         if (!tgD.ok) { res.status(500).json({ error: `Telegram: ${tgD.description ?? 'errore'}` }); return; }
+        // Riapplica emoji animate dopo edit testo
+        const baseUserIdEp = userId.includes(':') ? userId.split(':')[0] : userId;
+        applyCustomEmoji({ baseUserId: baseUserIdEp, chatId: String(chatId), messageId: Number(messageId), htmlText: String(newCaption), enabled: true }).catch(() => {});
       }
       res.json({ ok: true });
       return;
@@ -584,6 +587,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
 
     if (!tgData.ok) { res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore'}` }); return; }
+
+    // Riapplica emoji animate dopo ogni edit (editMessageCaption le perde)
+    if (caption !== undefined && messageId) {
+      const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+      applyCustomEmoji({ baseUserId, chatId: String(chatId), messageId: Number(messageId), htmlText: caption, enabled: true }).catch(() => {});
+    }
+
     res.json({ ok: true });
     return;
   }
