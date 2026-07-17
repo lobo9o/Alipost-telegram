@@ -22,7 +22,6 @@ const NAV_ITEMS: { id: NavPage; label: string }[] = [
   { id: 'search', label: 'Cerca' },
   { id: 'newpost', label: 'Post' },
   { id: 'queue', label: 'Coda' },
-  { id: 'promo', label: 'Promo' },
   { id: 'layout', label: 'Layout' },
   { id: 'settings', label: 'Config' },
 ];
