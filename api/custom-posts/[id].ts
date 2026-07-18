@@ -9,16 +9,23 @@ function safeCaption(html: string, max: number): string {
   return html.length <= max ? html : html.slice(0, max - 1) + '…';
 }
 
+const KEYBOARD_COLOR_MAP: Record<string, string> = { g: 'success', r: 'danger', b: 'primary' };
+
 async function buildKeyboard(body: string, links: Record<string, string> = {}): Promise<object | undefined> {
   if (!body?.trim()) return undefined;
   const rows = body.trim().split('\n').filter(r => r.trim());
   const keyboard = rows.map(row =>
     row.split('&&').map(b => b.trim()).filter(Boolean).map(btn => {
-      const m = btn.match(/^(.*)\s*-\s*(https?:\/\/.+)$/) ?? btn.match(/^(.*)\s+-\s+(.+)$/);
+      const colorMatch = btn.match(/^#([grb])\s+/);
+      const style = colorMatch ? KEYBOARD_COLOR_MAP[colorMatch[1]] : undefined;
+      const clean = colorMatch ? btn.slice(colorMatch[0].length) : btn;
+      const m = clean.match(/^(.*)\s*-\s*(https?:\/\/.+)$/) ?? clean.match(/^(.*)\s+-\s+(.+)$/);
       if (!m) return null;
       let url = m[2].trim();
       for (const [tag, val] of Object.entries(links)) url = url.split(tag).join(val);
-      return { text: m[1].trim(), url };
+      const text = m[1].trim();
+      if (!text) return null;
+      return { text, url, ...(style ? { style } : {}) };
     }).filter(Boolean)
   ).filter(r => r.length > 0);
   return keyboard.length ? { inline_keyboard: keyboard } : undefined;

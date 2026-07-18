@@ -2,9 +2,28 @@ import React, { useState, useEffect, useRef, Component } from 'react';
 import { NavPage } from '../types';
 import { useApp } from '../context/AppContext';
 import { PageHeader, EmptyState, ErrorBanner } from '../components/Shared';
-import { customPostsApi, CustomPost, CustomPostSchedule } from '../lib/api';
+import { customPostsApi, CustomPost, CustomPostSchedule, emojiIdsApi, EmojiEntry } from '../lib/api';
 
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+
+const KB_COLOR_MAP: Record<string, string> = { g: 'success', r: 'danger', b: 'primary' };
+const KB_COLOR_STYLES: Record<string, { bg: string; color: string }> = {
+  success: { bg: 'rgba(16,185,129,0.18)', color: '#34d399' },
+  danger:  { bg: 'rgba(239,68,68,0.18)',  color: '#f87171' },
+  primary: { bg: 'rgba(6,182,212,0.18)',  color: '#22d3ee' },
+};
+
+function parseKbRows(keyboard: string) {
+  return (keyboard || '').split('\n').filter(l => l.trim()).map(row =>
+    row.split('&&').map(b => b.trim()).filter(Boolean).map(btn => {
+      const cm = btn.match(/^#([grb])\s+/);
+      const style = cm ? KB_COLOR_MAP[cm[1]] : undefined;
+      const clean = cm ? btn.slice(cm[0].length) : btn;
+      const m = clean.match(/^(.*?)\s+-\s+https?:\/\/.+$/) ?? clean.match(/^(.*?)\s+-\s+.+$/);
+      return { text: (m ? m[1] : clean.split(' - ')[0] ?? clean).trim(), style };
+    })
+  ).filter(r => r.length);
+}
 
 function safeSchedules(schedules: any): CustomPostSchedule[] {
   if (!Array.isArray(schedules)) return [];
@@ -35,14 +54,9 @@ class PageErrorBoundary extends Component<{ children: React.ReactNode; onReset: 
     if (this.state.error) {
       return (
         <div style={{ padding: 24, color: 'var(--re)' }}>
-          <div style={{ marginBottom: 12, fontWeight: 700 }}>Errore nella pagina</div>
+          <div style={{ marginBottom: 8, fontWeight: 700 }}>Errore nella pagina</div>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 16 }}>{this.state.error}</div>
-          <button
-            className="btn bp"
-            onClick={() => { this.setState({ error: null }); this.props.onReset(); }}
-          >
-            Ricarica
-          </button>
+          <button className="btn bp" onClick={() => { this.setState({ error: null }); this.props.onReset(); }}>Ricarica</button>
         </div>
       );
     }
@@ -50,33 +64,46 @@ class PageErrorBoundary extends Component<{ children: React.ReactNode; onReset: 
   }
 }
 
+// ── Emoji Picker ──────────────────────────────────────────────
+function EmojiPicker({ emojiList, onInsert }: { emojiList: EmojiEntry[]; onInsert: (char: string, id: string) => void }) {
+  if (!emojiList.length) return null;
+  return (
+    <div>
+      <span className="lbl">Emoji animate (clicca per inserire nel testo)</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 0 4px' }}>
+        {emojiList.map(e => (
+          <button
+            key={e.custom_emoji_id}
+            style={{
+              fontSize: 22, lineHeight: 1, padding: '4px 6px', borderRadius: 8,
+              background: 'var(--bg4)', border: '1px solid var(--bd)',
+              cursor: 'pointer',
+            }}
+            title={`ID: ${e.custom_emoji_id}`}
+            onClick={() => onInsert(e.emoji_char, e.custom_emoji_id)}
+          >
+            {e.emoji_char}
+          </button>
+        ))}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 12 }}>
+        Inserisce <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>&lt;tg-emoji emoji-id="..."&gt;</code> — animata su Telegram
+      </div>
+    </div>
+  );
+}
+
 // ── Preview ───────────────────────────────────────────────────
 function PostPreview({ image, body, keyboard }: { image: string; body: string; keyboard: string }) {
-  const rows = (keyboard || '')
-    .split('\n')
-    .filter(l => l.trim())
-    .map(row =>
-      row.split('&&')
-        .map(b => b.trim())
-        .filter(Boolean)
-        .map(btn => {
-          const m = btn.match(/^(.*?)\s+-\s+https?:\/\/.+$/);
-          return m ? m[1].trim() : btn.split(' - ')[0]?.trim() ?? btn;
-        })
-    )
-    .filter(r => r.length);
+  const kbRows = parseKbRows(keyboard);
 
   return (
     <div className="pvbox" style={{ margin: '0 16px 12px' }}>
       <span className="pvbdg">PREVIEW TELEGRAM</span>
       {image ? (
         <div style={{ width: '100%', marginBottom: 10, borderRadius: 8, overflow: 'hidden', background: 'var(--bg4)', maxHeight: 200 }}>
-          <img
-            src={image}
-            alt=""
-            style={{ width: '100%', objectFit: 'cover', display: 'block' }}
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
+          <img src={image} alt="" style={{ width: '100%', objectFit: 'cover', display: 'block' }}
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         </div>
       ) : (
         <div style={{ width: '100%', height: 80, borderRadius: 8, background: 'var(--bg4)', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)', fontSize: 12 }}>
@@ -87,11 +114,21 @@ function PostPreview({ image, body, keyboard }: { image: string; body: string; k
         className="pvmsg"
         dangerouslySetInnerHTML={{ __html: (body || '<i>Nessun testo</i>').replace(/\n/g, '<br>') }}
       />
-      {rows.map((row, ri) => (
+      {kbRows.map((row, ri) => (
         <div key={ri} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-          {row.map((b, bi) => (
-            <div key={bi} className="tgbtn" style={{ flex: 1, textAlign: 'center' }}>{b}</div>
-          ))}
+          {row.map((b, bi) => {
+            const cs = b.style ? KB_COLOR_STYLES[b.style] : null;
+            return (
+              <div
+                key={bi}
+                className="tgbtn"
+                style={{
+                  flex: 1, textAlign: 'center',
+                  ...(cs ? { background: cs.bg, color: cs.color } : {}),
+                }}
+              >{b.text}</div>
+            );
+          })}
         </div>
       ))}
     </div>
@@ -100,82 +137,53 @@ function PostPreview({ image, body, keyboard }: { image: string; body: string; k
 
 // ── Schedule Item ─────────────────────────────────────────────
 function ScheduleItem({
-  sched,
-  channels,
-  onChange,
-  onDelete,
+  sched, channels, onChange, onDelete,
 }: {
-  sched: CustomPostSchedule;
-  channels: string[];
-  onChange: (s: CustomPostSchedule) => void;
-  onDelete: () => void;
+  sched: CustomPostSchedule; channels: string[];
+  onChange: (s: CustomPostSchedule) => void; onDelete: () => void;
 }) {
   const days = Array.isArray(sched.days) ? sched.days : [];
-
   return (
     <div className="card" style={{ margin: '0 0 10px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '.5px' }}>Programmazione</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div
-            className={`tgl ${sched.active ? 'on' : ''}`}
-            onClick={() => onChange({ ...sched, active: !sched.active })}
-          >
+          <div className={`tgl ${sched.active ? 'on' : ''}`} onClick={() => onChange({ ...sched, active: !sched.active })}>
             <div className="tgl-k" />
           </div>
           <button className="btn bre" style={{ padding: '4px 10px', fontSize: 13, lineHeight: 1 }} onClick={onDelete}>✕</button>
         </div>
       </div>
-
       <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
         {DAYS.map((d, i) => {
           const sel = days.includes(i);
           return (
-            <button
-              key={i}
-              style={{
-                padding: '5px 10px', fontSize: 12, fontWeight: 700, borderRadius: 20,
-                background: sel ? 'var(--a1)' : 'var(--bg4)',
-                color: sel ? '#fff' : 'var(--t2)',
-                border: sel ? '1px solid var(--a1)' : '1px solid var(--bd)',
-                cursor: 'pointer',
-              }}
-              onClick={() => {
-                const next = sel ? days.filter(x => x !== i) : [...days, i].sort((a, b) => a - b);
-                onChange({ ...sched, days: next });
-              }}
-            >{d}</button>
+            <button key={i} style={{
+              padding: '5px 10px', fontSize: 12, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
+              background: sel ? 'var(--a1)' : 'var(--bg4)', color: sel ? '#fff' : 'var(--t2)',
+              border: sel ? '1px solid var(--a1)' : '1px solid var(--bd)',
+            }} onClick={() => {
+              const next = sel ? days.filter(x => x !== i) : [...days, i].sort((a, b) => a - b);
+              onChange({ ...sched, days: next });
+            }}>{d}</button>
           );
         })}
       </div>
-
       <div className="irow">
         <div style={{ flex: '0 0 110px' }}>
           <span className="lbl">Orario</span>
-          <input
-            type="time"
-            className="inp"
-            value={sched.time || '09:00'}
-            onChange={e => onChange({ ...sched, time: e.target.value })}
-          />
+          <input type="time" className="inp" value={sched.time || '09:00'} onChange={e => onChange({ ...sched, time: e.target.value })} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <span className="lbl">Canale</span>
-          <select
-            className="sel"
-            value={sched.channel || ''}
-            onChange={e => onChange({ ...sched, channel: e.target.value })}
-          >
+          <select className="sel" value={sched.channel || ''} onChange={e => onChange({ ...sched, channel: e.target.value })}>
             <option value="">Seleziona...</option>
             {channels.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
       </div>
-
       {sched.lastSentDate && (
-        <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 8 }}>
-          Ultimo invio: {sched.lastSentDate}
-        </div>
+        <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 8 }}>Ultimo invio: {sched.lastSentDate}</div>
       )}
     </div>
   );
@@ -183,15 +191,10 @@ function ScheduleItem({
 
 // ── Editor ────────────────────────────────────────────────────
 function PostEditor({
-  initial,
-  channels,
-  onSave,
-  onBack,
+  initial, channels, emojiList, onSave, onBack,
 }: {
-  initial: CustomPost | null;
-  channels: string[];
-  onSave: (post: CustomPost) => void;
-  onBack: () => void;
+  initial: CustomPost | null; channels: string[]; emojiList: EmojiEntry[];
+  onSave: (post: CustomPost) => void; onBack: () => void;
 }) {
   const [form, setForm] = useState<Omit<CustomPost, 'id' | 'created_at' | 'updated_at'>>(
     initial
@@ -202,6 +205,7 @@ function PostEditor({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const set = (k: keyof typeof form, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -211,6 +215,20 @@ function PostEditor({
     const reader = new FileReader();
     reader.onload = ev => set('image', ev.target?.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const insertEmoji = (char: string, id: string) => {
+    const tag = `<tg-emoji emoji-id="${id}">${char}</tg-emoji>`;
+    const ta = bodyRef.current;
+    if (ta) {
+      const s = ta.selectionStart ?? form.body.length;
+      const e2 = ta.selectionEnd ?? s;
+      const newVal = form.body.slice(0, s) + tag + form.body.slice(e2);
+      set('body', newVal);
+      setTimeout(() => { ta.setSelectionRange(s + tag.length, s + tag.length); ta.focus(); }, 10);
+    } else {
+      set('body', form.body + tag);
+    }
   };
 
   const handleSave = async () => {
@@ -230,10 +248,10 @@ function PostEditor({
     }
   };
 
-  const TABS: { id: 'edit' | 'preview' | 'schedule'; label: string }[] = [
-    { id: 'edit', label: '✏️ Testo' },
-    { id: 'preview', label: '👁 Preview' },
-    { id: 'schedule', label: `📅 Orari${form.schedules.length ? ` (${form.schedules.length})` : ''}` },
+  const TABS = [
+    { id: 'edit' as const, label: '✏️ Testo' },
+    { id: 'preview' as const, label: '👁 Preview' },
+    { id: 'schedule' as const, label: `📅 Orari${form.schedules.length ? ` (${form.schedules.length})` : ''}` },
   ];
 
   return (
@@ -247,21 +265,13 @@ function PostEditor({
           </button>
         }
       />
-
       <div style={{ display: 'flex', margin: '0 16px 14px', background: 'var(--bg3)', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--bd)' }}>
         {TABS.map(t => (
-          <button
-            key={t.id}
-            style={{
-              flex: 1, padding: '9px 4px', fontSize: 11, fontWeight: 600,
-              background: tab === t.id ? 'var(--a1)' : 'transparent',
-              color: tab === t.id ? '#fff' : 'var(--t2)',
-              border: 'none', cursor: 'pointer',
-            }}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
+          <button key={t.id} style={{
+            flex: 1, padding: '9px 4px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer',
+            background: tab === t.id ? 'var(--a1)' : 'transparent',
+            color: tab === t.id ? '#fff' : 'var(--t2)',
+          }} onClick={() => setTab(t.id)}>{t.label}</button>
         ))}
       </div>
 
@@ -270,62 +280,45 @@ function PostEditor({
       {tab === 'edit' && (
         <div style={{ padding: '0 16px' }}>
           <span className="lbl">Titolo (interno, non pubblicato)</span>
-          <input
-            className="inp"
-            style={{ marginBottom: 12 }}
-            placeholder="Es. Promo Prime Day"
-            value={form.title}
-            onChange={e => set('title', e.target.value)}
-          />
+          <input className="inp" style={{ marginBottom: 12 }} placeholder="Es. Promo Prime Day"
+            value={form.title} onChange={e => set('title', e.target.value)} />
 
           <span className="lbl">Immagine</span>
           <div className="irow" style={{ marginBottom: 8 }}>
-            <input
-              className="inp"
-              placeholder="https://..."
-              value={form.image.startsWith('data:') ? '' : form.image}
-              onChange={e => set('image', e.target.value)}
-              style={{ flex: 1 }}
-            />
-            <button className="btn bs" style={{ padding: '0 14px', flexShrink: 0 }} onClick={() => fileRef.current?.click()}>
-              📷
-            </button>
+            <input className="inp" placeholder="https://..." value={form.image.startsWith('data:') ? '' : form.image}
+              onChange={e => set('image', e.target.value)} style={{ flex: 1 }} />
+            <button className="btn bs" style={{ padding: '0 14px', flexShrink: 0 }} onClick={() => fileRef.current?.click()}>📷</button>
           </div>
           {form.image && (
             <div style={{ position: 'relative', marginBottom: 12, borderRadius: 8, overflow: 'hidden', maxHeight: 150, background: 'var(--bg4)' }}>
-              <img
-                src={form.image}
-                alt=""
-                style={{ width: '100%', objectFit: 'cover', display: 'block' }}
-                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-              <button
-                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', border: 'none', borderRadius: 20, padding: '3px 9px', fontSize: 13, cursor: 'pointer' }}
-                onClick={() => set('image', '')}
-              >✕</button>
+              <img src={form.image} alt="" style={{ width: '100%', objectFit: 'cover', display: 'block' }}
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <button style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', border: 'none', borderRadius: 20, padding: '3px 9px', fontSize: 13, cursor: 'pointer' }}
+                onClick={() => set('image', '')}>✕</button>
             </div>
           )}
           <input type="file" accept="image/*" ref={fileRef} style={{ display: 'none' }} onChange={handleImageFile} />
 
           <span className="lbl">Testo (HTML Telegram)</span>
-          <textarea
-            className="txta"
-            style={{ height: 130, marginBottom: 12, fontFamily: 'monospace', fontSize: 12 }}
-            placeholder={'<b>🎉 PROMO PRIME DAY!</b>\n\nDescrizione della promozione...'}
-            value={form.body}
-            onChange={e => set('body', e.target.value)}
-          />
+          <textarea ref={bodyRef} className="txta"
+            style={{ height: 120, marginBottom: 10, fontFamily: 'monospace', fontSize: 12 }}
+            placeholder={'<b>🎉 PROMO PRIME DAY!</b>\n\nDescrizione...'}
+            value={form.body} onChange={e => set('body', e.target.value)} />
+
+          <EmojiPicker emojiList={emojiList} onInsert={insertEmoji} />
 
           <span className="lbl">Tastiera (bottoni)</span>
-          <textarea
-            className="txta"
+          <textarea className="txta"
             style={{ height: 80, fontFamily: 'monospace', fontSize: 12, marginBottom: 6 }}
-            placeholder={'🛒 Acquista - https://...\n📦 Offerta 2 - https://... && 📋 Altro - https://...'}
-            value={form.keyboard}
-            onChange={e => set('keyboard', e.target.value)}
-          />
-          <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 16, lineHeight: 1.5 }}>
-            Una riga = una fila. Separa bottoni nella stessa fila con <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>&&</code>. Formato: Testo - URL
+            placeholder={'🛒 Acquista - https://...\n#g 🟢 Verde - https://... && #r 🔴 Rosso - https://...'}
+            value={form.keyboard} onChange={e => set('keyboard', e.target.value)} />
+          <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 4, lineHeight: 1.6 }}>
+            Colori: <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>#g</code> verde &nbsp;
+            <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>#r</code> rosso &nbsp;
+            <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>#b</code> blu
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 16, lineHeight: 1.6 }}>
+            Separa bottoni stessa fila con <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>&&</code>. Formato: Testo - URL
           </div>
         </div>
       )}
@@ -342,19 +335,12 @@ function PostEditor({
             </div>
           )}
           {form.schedules.map((s, i) => (
-            <ScheduleItem
-              key={s.id || i}
-              sched={s}
-              channels={channels}
+            <ScheduleItem key={s.id || i} sched={s} channels={channels}
               onChange={updated => set('schedules', form.schedules.map((x, xi) => xi === i ? updated : x))}
-              onDelete={() => set('schedules', form.schedules.filter((_, xi) => xi !== i))}
-            />
+              onDelete={() => set('schedules', form.schedules.filter((_, xi) => xi !== i))} />
           ))}
-          <button
-            className="btn bs"
-            style={{ width: '100%' }}
-            onClick={() => set('schedules', [...form.schedules, newSchedule(channels[0] ?? '')])}
-          >
+          <button className="btn bs" style={{ width: '100%' }}
+            onClick={() => set('schedules', [...form.schedules, newSchedule(channels[0] ?? '')])}>
             + Aggiungi programmazione
           </button>
         </div>
@@ -365,46 +351,28 @@ function PostEditor({
 
 // ── Post Card ─────────────────────────────────────────────────
 function PostCard({
-  post,
-  channels,
-  onEdit,
-  onDelete,
-  onPublish,
+  post, channels, onEdit, onDelete, onPublish,
 }: {
-  post: CustomPost;
-  channels: string[];
-  onEdit: () => void;
-  onDelete: () => void;
+  post: CustomPost; channels: string[];
+  onEdit: () => void; onDelete: () => void;
   onPublish: (channel: string) => Promise<void>;
 }) {
   const [publishChannel, setPublishChannel] = useState(channels[0] ?? '');
   const [publishing, setPublishing] = useState(false);
-
   const schedules = safeSchedules(post.schedules);
   const activeSchedules = schedules.filter(s => s.active);
-
-  const handlePublish = async () => {
-    if (!publishChannel) return;
-    setPublishing(true);
-    await onPublish(publishChannel);
-    setPublishing(false);
-  };
 
   return (
     <div className="card">
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
         <div style={{ width: 52, height: 52, borderRadius: 8, background: 'var(--bg4)', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-          {post.image ? (
-            <img
-              src={post.image}
-              alt=""
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          ) : '📢'}
+          {post.image
+            ? <img src={post.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            : '📢'}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2, color: 'var(--t1)' }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>
             {post.title || <em style={{ color: 'var(--t3)', fontWeight: 400 }}>Senza titolo</em>}
           </div>
           {post.body && (
@@ -418,10 +386,7 @@ function PostCard({
       {activeSchedules.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
           {activeSchedules.map((s, i) => (
-            <span
-              key={s.id || i}
-              style={{ fontSize: 10, background: 'rgba(6,182,212,0.12)', color: 'var(--a1)', border: '1px solid rgba(6,182,212,0.22)', borderRadius: 20, padding: '2px 8px', fontWeight: 600 }}
-            >
+            <span key={s.id || i} style={{ fontSize: 10, background: 'rgba(6,182,212,0.12)', color: 'var(--a1)', border: '1px solid rgba(6,182,212,0.22)', borderRadius: 20, padding: '2px 8px', fontWeight: 600 }}>
               {(Array.isArray(s.days) ? s.days : []).map(d => DAYS[d]).join(' ')} {s.time}
             </span>
           ))}
@@ -432,17 +397,13 @@ function PostCard({
         <button className="btn bs" style={{ flex: 1, padding: '8px 0', fontSize: 12 }} onClick={onEdit}>✏️ Modifica</button>
         <button className="btn bre" style={{ padding: '8px 12px', fontSize: 13 }} onClick={onDelete}>🗑</button>
       </div>
-
       <div className="irow">
         <select className="sel" style={{ flex: 1, fontSize: 12 }} value={publishChannel} onChange={e => setPublishChannel(e.target.value)}>
           {channels.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <button
-          className="btn bgr"
-          style={{ padding: '0 14px', flexShrink: 0, fontSize: 12 }}
-          onClick={handlePublish}
-          disabled={publishing || !publishChannel}
-        >
+        <button className="btn bgr" style={{ padding: '0 14px', flexShrink: 0, fontSize: 12 }}
+          onClick={async () => { setPublishing(true); await onPublish(publishChannel); setPublishing(false); }}
+          disabled={publishing || !publishChannel}>
           {publishing ? '...' : '▶ Invia ora'}
         </button>
       </div>
@@ -456,23 +417,22 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
   const channels = allChannels.length ? allChannels : (settings.channels ?? []);
 
   const [posts, setPosts] = useState<CustomPost[]>([]);
+  const [emojiList, setEmojiList] = useState<EmojiEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<CustomPost | null | 'new'>(null);
   const [err, setErr] = useState('');
 
-  const load = () => {
-    setLoading(true);
-    setErr('');
-    customPostsApi.list()
-      .then(data => {
-        const list = Array.isArray(data) ? data : [];
-        setPosts(list.map(p => ({ ...p, schedules: safeSchedules(p.schedules) })));
-      })
-      .catch(e => setErr(e.message || 'Errore caricamento'))
+  useEffect(() => {
+    Promise.all([
+      customPostsApi.list(),
+      emojiIdsApi.list().catch(() => ({ emoji: [] })),
+    ]).then(([data, emojiData]) => {
+      const list = Array.isArray(data) ? data : [];
+      setPosts(list.map(p => ({ ...p, schedules: safeSchedules(p.schedules) })));
+      setEmojiList(emojiData.emoji ?? []);
+    }).catch(e => setErr(e.message || 'Errore caricamento'))
       .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, []);
+  }, []);
 
   const handleSave = (saved: CustomPost) => {
     const safe = { ...saved, schedules: safeSchedules(saved.schedules) };
@@ -504,6 +464,7 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
       <PostEditor
         initial={editing === 'new' ? null : editing}
         channels={channels}
+        emojiList={emojiList}
         onSave={handleSave}
         onBack={() => setEditing(null)}
       />
@@ -512,10 +473,7 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
 
   return (
     <div className="pg">
-      <PageHeader
-        title="Post Promo"
-        onBack={() => nav('dash')}
-        badge={posts.length || undefined}
+      <PageHeader title="Post Promo" onBack={() => nav('dash')} badge={posts.length || undefined}
         right={
           <button className="btn bp" style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => setEditing('new')}>
             + Nuovo
@@ -524,30 +482,18 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
       />
 
       {err && <ErrorBanner>{err}</ErrorBanner>}
-
-      {loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--t3)' }}>Caricamento...</div>
-      )}
+      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--t3)' }}>Caricamento...</div>}
 
       {!loading && posts.length === 0 && !err && (
-        <EmptyState
-          icon="📢"
-          text="Nessun post promo salvato"
-          action={
-            <button className="btn bp" onClick={() => setEditing('new')}>+ Crea il primo post</button>
-          }
-        />
+        <EmptyState icon="📢" text="Nessun post promo salvato"
+          action={<button className="btn bp" onClick={() => setEditing('new')}>+ Crea il primo post</button>} />
       )}
 
       {posts.map(post => (
-        <PostCard
-          key={post.id}
-          post={post}
-          channels={channels}
+        <PostCard key={post.id} post={post} channels={channels}
           onEdit={() => setEditing(post)}
           onDelete={() => handleDelete(post.id)}
-          onPublish={channel => handlePublish(post, channel)}
-        />
+          onPublish={channel => handlePublish(post, channel)} />
       ))}
     </div>
   );
