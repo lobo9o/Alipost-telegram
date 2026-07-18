@@ -9,6 +9,12 @@ function safeCaption(html: string, max: number): string {
   return html.length <= max ? html : html.slice(0, max - 1) + '…';
 }
 
+// Bot API non supporta <tg-emoji>: li strippiamo prima dell'invio,
+// poi ri-applichiamo via MTProto con applyCustomEmoji
+function stripTgEmoji(html: string): string {
+  return html.replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/g, '$1');
+}
+
 const KEYBOARD_COLOR_MAP: Record<string, string> = { g: 'success', r: 'danger', b: 'primary' };
 
 async function buildKeyboard(body: string, links: Record<string, string> = {}): Promise<object | undefined> {
@@ -34,29 +40,34 @@ async function buildKeyboard(body: string, links: Record<string, string> = {}): 
 async function sendCustomPost(post: Record<string, any>, channel: string, userId: string): Promise<{ ok: boolean; messageId?: number; chatId?: string; error?: string }> {
   if (!BOT_TOKEN) return { ok: false, error: 'BOT_TOKEN mancante' };
   const tgBase = `https://api.telegram.org/bot${BOT_TOKEN}`;
-  const caption = safeCaption(post.body || '', 1024);
-  const replyMarkup = await buildKeyboard(post.keyboard || '');
+  const rawBody = post.body || '';
+  const isBase64 = post.image && String(post.image).startsWith('data:');
   const hasImage = post.image && String(post.image).startsWith('http');
+  const maxLen = (isBase64 || hasImage) ? 1024 : 4096;
+  // Versione senza tg-emoji per Bot API, versione originale per MTProto
+  const captionBotApi = safeCaption(stripTgEmoji(rawBody), maxLen);
+  const captionMtProto = safeCaption(rawBody, maxLen);
+  const replyMarkup = await buildKeyboard(post.keyboard || '');
 
   let tgRes: Response;
-  if (post.image && String(post.image).startsWith('data:')) {
+  if (isBase64) {
     const base64 = String(post.image).replace(/^data:image\/\w+;base64,/, '');
     const form = new FormData();
     form.append('chat_id', channel);
     form.append('photo', new Blob([Buffer.from(base64, 'base64')], { type: 'image/jpeg' }), 'post.jpg');
-    form.append('caption', caption);
+    form.append('caption', captionBotApi);
     form.append('parse_mode', 'HTML');
     if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
     tgRes = await fetch(`${tgBase}/sendPhoto`, { method: 'POST', body: form });
   } else if (hasImage) {
     tgRes = await fetch(`${tgBase}/sendPhoto`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: channel, photo: post.image, caption, parse_mode: 'HTML', ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
+      body: JSON.stringify({ chat_id: channel, photo: post.image, caption: captionBotApi, parse_mode: 'HTML', ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
     });
   } else {
     tgRes = await fetch(`${tgBase}/sendMessage`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: channel, text: safeCaption(post.body || '', 4096), parse_mode: 'HTML', ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
+      body: JSON.stringify({ chat_id: channel, text: captionBotApi, parse_mode: 'HTML', ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
     });
   }
   const tgData = await tgRes.json() as { ok: boolean; result?: { message_id: number; chat?: { id: number } }; description?: string };
@@ -64,7 +75,7 @@ async function sendCustomPost(post: Record<string, any>, channel: string, userId
   const messageId = tgData.result?.message_id ?? 0;
   const chatId = String(tgData.result?.chat?.id ?? channel);
   const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
-  if (messageId) applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: caption, enabled: true }).catch(() => {});
+  if (messageId) applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: captionMtProto, enabled: true }).catch(() => {});
   return { ok: true, messageId, chatId };
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Component } from 'react';
+import React, { useState, useEffect, useRef, Component, useLayoutEffect } from 'react';
 import { NavPage } from '../types';
 import { useApp } from '../context/AppContext';
 import { PageHeader, EmptyState, ErrorBanner } from '../components/Shared';
@@ -68,29 +68,39 @@ class PageErrorBoundary extends Component<{ children: React.ReactNode; onReset: 
 function EmojiPicker({ emojiList, onInsert }: { emojiList: EmojiEntry[]; onInsert: (char: string, id: string) => void }) {
   if (!emojiList.length) return null;
   return (
-    <div>
-      <span className="lbl">Emoji animate (clicca per inserire nel testo)</span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 0 4px' }}>
+    <div style={{ marginBottom: 12 }}>
+      <span className="lbl">Emoji animate ✨ — clicca per inserire nel testo</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 0 4px' }}>
         {emojiList.map(e => (
           <button
             key={e.custom_emoji_id}
             style={{
-              fontSize: 22, lineHeight: 1, padding: '4px 6px', borderRadius: 8,
-              background: 'var(--bg4)', border: '1px solid var(--bd)',
-              cursor: 'pointer',
+              position: 'relative', lineHeight: 1, padding: '5px 7px', borderRadius: 8,
+              background: 'var(--bg4)', border: '1px solid var(--bd)', cursor: 'pointer',
             }}
-            title={`ID: ${e.custom_emoji_id}`}
             onClick={() => onInsert(e.emoji_char, e.custom_emoji_id)}
           >
-            {e.emoji_char}
+            {/* Render via tg-emoji nel picker stesso (Telegram Mini App lo anima) */}
+            <span dangerouslySetInnerHTML={{ __html: `<tg-emoji emoji-id="${e.custom_emoji_id}">${e.emoji_char}</tg-emoji>` }} style={{ fontSize: 22, display: 'block' }} />
           </button>
         ))}
       </div>
-      <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 12 }}>
-        Inserisce <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>&lt;tg-emoji emoji-id="..."&gt;</code> — animata su Telegram
+      <div style={{ fontSize: 10, color: 'var(--t3)', lineHeight: 1.5 }}>
+        Nel testo inserisce <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>&lt;tg-emoji&gt;</code> — animata nel post e nella preview Telegram
       </div>
     </div>
   );
+}
+
+// ── Animated body text (usa ref+innerHTML per far processare <tg-emoji> a Telegram)
+function AnimatedBody({ html }: { html: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (ref.current) {
+      ref.current.innerHTML = (html || '<i>Nessun testo</i>').replace(/\n/g, '<br>');
+    }
+  }, [html]);
+  return <div ref={ref} className="pvmsg" />;
 }
 
 // ── Preview ───────────────────────────────────────────────────
@@ -110,23 +120,15 @@ function PostPreview({ image, body, keyboard }: { image: string; body: string; k
           Nessuna immagine
         </div>
       )}
-      <div
-        className="pvmsg"
-        dangerouslySetInnerHTML={{ __html: (body || '<i>Nessun testo</i>').replace(/\n/g, '<br>') }}
-      />
+      <AnimatedBody html={body} />
       {kbRows.map((row, ri) => (
         <div key={ri} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
           {row.map((b, bi) => {
             const cs = b.style ? KB_COLOR_STYLES[b.style] : null;
             return (
-              <div
-                key={bi}
-                className="tgbtn"
-                style={{
-                  flex: 1, textAlign: 'center',
-                  ...(cs ? { background: cs.bg, color: cs.color } : {}),
-                }}
-              >{b.text}</div>
+              <div key={bi} className="tgbtn" style={{ flex: 1, textAlign: 'center', ...(cs ? { background: cs.bg, color: cs.color } : {}) }}>
+                {b.text}
+              </div>
             );
           })}
         </div>
