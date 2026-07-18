@@ -37,6 +37,17 @@ function safeSchedules(schedules: any): CustomPostSchedule[] {
   }));
 }
 
+// Normalizza l'HTML estratto da contentEditable al formato Telegram (<br> per a capo)
+function normalizeBody(html: string): string {
+  let v = html;
+  v = v.replace(/<div><br\s*\/?><\/div>/gi, '<br>');
+  v = v.replace(/<\/div>\s*<div>/gi, '<br>');
+  v = v.replace(/<div>/gi, '');
+  v = v.replace(/<\/div>/gi, '<br>');
+  v = v.replace(/(<br\s*\/?>){3,}/gi, '<br><br>');
+  return v.trim();
+}
+
 function newSchedule(channel: string): CustomPostSchedule {
   return { id: crypto.randomUUID(), days: [], time: '09:00', channel, active: true };
 }
@@ -64,40 +75,146 @@ class PageErrorBoundary extends Component<{ children: React.ReactNode; onReset: 
   }
 }
 
-// ── Emoji Picker ──────────────────────────────────────────────
-function EmojiPicker({ emojiList, onInsert }: { emojiList: EmojiEntry[]; onInsert: (char: string, id: string) => void }) {
-  if (!emojiList.length) return null;
+// ── Body Editor (contenteditable — mostra emoji animate direttamente) ─────────
+function BodyEditor({ value, onChange, emojiList }: {
+  value: string;
+  onChange: (v: string) => void;
+  emojiList: EmojiEntry[];
+}) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const isInit = useRef(false);
+  const [focused, setFocused] = useState(false);
+
+  // Inizializza una volta sola
+  useLayoutEffect(() => {
+    if (!isInit.current && editorRef.current) {
+      editorRef.current.innerHTML = value || '';
+      isInit.current = true;
+    }
+  });
+
+  // Risincronizza se il valore cambia dall'esterno (es. caricamento post esistente)
+  // ma solo se l'editor non è focalizzato (per non spostare il cursore)
+  useEffect(() => {
+    const el = editorRef.current;
+    if (el && !el.contains(document.activeElement) && el.innerHTML !== value) {
+      el.innerHTML = value || '';
+    }
+  }, [value]);
+
+  const readHtml = () => normalizeBody(editorRef.current?.innerHTML ?? '');
+
+  const handleInput = () => onChange(readHtml());
+
+  // Intercetta Enter → inserisce <br> (non <div>) per compatibilità Telegram
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.execCommand('insertLineBreak');
+      handleInput();
+    }
+  };
+
+  // Incolla come testo semplice (evita HTML estranei)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+    handleInput();
+  };
+
+  // Inserisce <tg-emoji> al cursore senza perdere il focus sull'editor
+  const insertEmoji = (char: string, id: string) => {
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    const tgEl = document.createElement('tg-emoji');
+    tgEl.setAttribute('emoji-id', id);
+    tgEl.textContent = char;
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(tgEl);
+      const newRange = document.createRange();
+      newRange.setStartAfter(tgEl);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    } else {
+      el.appendChild(tgEl);
+    }
+    onChange(readHtml());
+  };
+
+  const isVisuallyEmpty = !value || value.replace(/<br\s*\/?>/gi, '').replace(/<[^>]*>/g, '').trim() === '';
+
   return (
-    <div style={{ marginBottom: 12 }}>
-      <span className="lbl">Emoji animate ✨ — clicca per inserire nel testo</span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 0 4px' }}>
-        {emojiList.map(e => (
-          <button
-            key={e.custom_emoji_id}
-            style={{
-              position: 'relative', lineHeight: 1, padding: '5px 7px', borderRadius: 8,
-              background: 'var(--bg4)', border: '1px solid var(--bd)', cursor: 'pointer',
-            }}
-            onClick={() => onInsert(e.emoji_char, e.custom_emoji_id)}
-          >
-            {/* Render via tg-emoji nel picker stesso (Telegram Mini App lo anima) */}
-            <span dangerouslySetInnerHTML={{ __html: `<tg-emoji emoji-id="${e.custom_emoji_id}">${e.emoji_char}</tg-emoji>` }} style={{ fontSize: 22, display: 'block' }} />
-          </button>
-        ))}
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ position: 'relative' }}>
+        {isVisuallyEmpty && !focused && (
+          <div style={{ position: 'absolute', top: 10, left: 12, pointerEvents: 'none', color: 'var(--t3)', fontSize: 12, lineHeight: 1.6 }}>
+            Scrivi il testo del post...<br />
+            <span style={{ opacity: 0.7 }}>Puoi usare &lt;b&gt;grassetto&lt;/b&gt;, &lt;i&gt;corsivo&lt;/i&gt;</span>
+          </div>
+        )}
+        <div
+          ref={editorRef}
+          contentEditable
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          suppressContentEditableWarning
+          style={{
+            minHeight: 130, background: 'var(--bg3)', borderRadius: 8, padding: '10px 12px',
+            fontSize: 14, lineHeight: 1.7, color: 'var(--t1)', wordBreak: 'break-word',
+            outline: 'none', marginBottom: 8,
+            border: `1px solid ${focused ? 'var(--a1)' : 'var(--bd)'}`,
+            transition: 'border-color .15s',
+          }}
+        />
       </div>
-      <div style={{ fontSize: 10, color: 'var(--t3)', lineHeight: 1.5 }}>
-        Nel testo inserisce <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>&lt;tg-emoji&gt;</code> — animata nel post e nella preview Telegram
-      </div>
+
+      {emojiList.length > 0 && (
+        <div style={{ marginBottom: 4 }}>
+          <span className="lbl">✨ Emoji animate — clicca per inserire</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, paddingTop: 4 }}>
+            {emojiList.map(e => (
+              <button
+                key={e.custom_emoji_id}
+                onMouseDown={ev => ev.preventDefault()} // non perdere il focus sull'editor
+                onClick={() => insertEmoji(e.emoji_char, e.custom_emoji_id)}
+                style={{
+                  width: 40, height: 40, borderRadius: 8, cursor: 'pointer',
+                  background: 'var(--bg4)', border: '1px solid var(--bd)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {/* tg-emoji nel picker → Telegram Mini App lo anima */}
+                <span
+                  style={{ fontSize: 24, lineHeight: 1 }}
+                  dangerouslySetInnerHTML={{ __html: `<tg-emoji emoji-id="${e.custom_emoji_id}">${e.emoji_char}</tg-emoji>` }}
+                />
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 4 }}>
+            Le emoji animate appaiono animate nel post pubblicato e nella preview qui sopra
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Animated body text (usa ref+innerHTML per far processare <tg-emoji> a Telegram)
+// ── Animated body (usa ref per far processare <tg-emoji> a Telegram Mini App) ─
 function AnimatedBody({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (ref.current) {
-      ref.current.innerHTML = (html || '<i>Nessun testo</i>').replace(/\n/g, '<br>');
+      ref.current.innerHTML = (html || '<i style="color:var(--t3)">Nessun testo</i>').replace(/\n/g, '<br>');
     }
   }, [html]);
   return <div ref={ref} className="pvmsg" />;
@@ -106,7 +223,6 @@ function AnimatedBody({ html }: { html: string }) {
 // ── Preview ───────────────────────────────────────────────────
 function PostPreview({ image, body, keyboard }: { image: string; body: string; keyboard: string }) {
   const kbRows = parseKbRows(keyboard);
-
   return (
     <div className="pvbox" style={{ margin: '0 16px 12px' }}>
       <span className="pvbdg">PREVIEW TELEGRAM</span>
@@ -116,7 +232,7 @@ function PostPreview({ image, body, keyboard }: { image: string; body: string; k
             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         </div>
       ) : (
-        <div style={{ width: '100%', height: 80, borderRadius: 8, background: 'var(--bg4)', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)', fontSize: 12 }}>
+        <div style={{ width: '100%', height: 70, borderRadius: 8, background: 'var(--bg4)', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)', fontSize: 12 }}>
           Nessuna immagine
         </div>
       )}
@@ -138,9 +254,7 @@ function PostPreview({ image, body, keyboard }: { image: string; body: string; k
 }
 
 // ── Schedule Item ─────────────────────────────────────────────
-function ScheduleItem({
-  sched, channels, onChange, onDelete,
-}: {
+function ScheduleItem({ sched, channels, onChange, onDelete }: {
   sched: CustomPostSchedule; channels: string[];
   onChange: (s: CustomPostSchedule) => void; onDelete: () => void;
 }) {
@@ -153,7 +267,7 @@ function ScheduleItem({
           <div className={`tgl ${sched.active ? 'on' : ''}`} onClick={() => onChange({ ...sched, active: !sched.active })}>
             <div className="tgl-k" />
           </div>
-          <button className="btn bre" style={{ padding: '4px 10px', fontSize: 13, lineHeight: 1 }} onClick={onDelete}>✕</button>
+          <button className="btn bre" style={{ padding: '4px 10px', fontSize: 13 }} onClick={onDelete}>✕</button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -192,9 +306,7 @@ function ScheduleItem({
 }
 
 // ── Editor ────────────────────────────────────────────────────
-function PostEditor({
-  initial, channels, emojiList, onSave, onBack,
-}: {
+function PostEditor({ initial, channels, emojiList, onSave, onBack }: {
   initial: CustomPost | null; channels: string[]; emojiList: EmojiEntry[];
   onSave: (post: CustomPost) => void; onBack: () => void;
 }) {
@@ -207,7 +319,6 @@ function PostEditor({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const set = (k: keyof typeof form, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -219,25 +330,10 @@ function PostEditor({
     reader.readAsDataURL(file);
   };
 
-  const insertEmoji = (char: string, id: string) => {
-    const tag = `<tg-emoji emoji-id="${id}">${char}</tg-emoji>`;
-    const ta = bodyRef.current;
-    if (ta) {
-      const s = ta.selectionStart ?? form.body.length;
-      const e2 = ta.selectionEnd ?? s;
-      const newVal = form.body.slice(0, s) + tag + form.body.slice(e2);
-      set('body', newVal);
-      setTimeout(() => { ta.setSelectionRange(s + tag.length, s + tag.length); ta.focus(); }, 10);
-    } else {
-      set('body', form.body + tag);
-    }
-  };
-
   const handleSave = async () => {
-    setSaving(true);
-    setErr('');
+    setSaving(true); setErr('');
     try {
-      const payload = { ...form, schedules: safeSchedules(form.schedules) };
+      const payload = { ...form, body: normalizeBody(form.body), schedules: safeSchedules(form.schedules) };
       const saved = initial
         ? await customPostsApi.update(initial.id, payload)
         : await customPostsApi.create(payload);
@@ -281,7 +377,7 @@ function PostEditor({
 
       {tab === 'edit' && (
         <div style={{ padding: '0 16px' }}>
-          <span className="lbl">Titolo (interno, non pubblicato)</span>
+          <span className="lbl">Titolo (interno)</span>
           <input className="inp" style={{ marginBottom: 12 }} placeholder="Es. Promo Prime Day"
             value={form.title} onChange={e => set('title', e.target.value)} />
 
@@ -301,26 +397,19 @@ function PostEditor({
           )}
           <input type="file" accept="image/*" ref={fileRef} style={{ display: 'none' }} onChange={handleImageFile} />
 
-          <span className="lbl">Testo (HTML Telegram)</span>
-          <textarea ref={bodyRef} className="txta"
-            style={{ height: 120, marginBottom: 10, fontFamily: 'monospace', fontSize: 12 }}
-            placeholder={'<b>🎉 PROMO PRIME DAY!</b>\n\nDescrizione...'}
-            value={form.body} onChange={e => set('body', e.target.value)} />
-
-          <EmojiPicker emojiList={emojiList} onInsert={insertEmoji} />
+          <span className="lbl">Testo del post</span>
+          <BodyEditor value={form.body} onChange={v => set('body', v)} emojiList={emojiList} />
 
           <span className="lbl">Tastiera (bottoni)</span>
           <textarea className="txta"
-            style={{ height: 80, fontFamily: 'monospace', fontSize: 12, marginBottom: 6 }}
+            style={{ height: 80, fontFamily: 'monospace', fontSize: 12, marginBottom: 4 }}
             placeholder={'🛒 Acquista - https://...\n#g 🟢 Verde - https://... && #r 🔴 Rosso - https://...'}
             value={form.keyboard} onChange={e => set('keyboard', e.target.value)} />
-          <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 4, lineHeight: 1.6 }}>
-            Colori: <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>#g</code> verde &nbsp;
-            <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>#r</code> rosso &nbsp;
-            <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>#b</code> blu
-          </div>
           <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 16, lineHeight: 1.6 }}>
-            Separa bottoni stessa fila con <code style={{ background: 'var(--bg4)', padding: '1px 4px', borderRadius: 3 }}>&&</code>. Formato: Testo - URL
+            Colori: <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>#g</code> verde &nbsp;
+            <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>#r</code> rosso &nbsp;
+            <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>#b</code> blu &nbsp;·&nbsp;
+            Separa bottoni stessa fila con <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>&&</code>
           </div>
         </div>
       )}
@@ -352,9 +441,7 @@ function PostEditor({
 }
 
 // ── Post Card ─────────────────────────────────────────────────
-function PostCard({
-  post, channels, onEdit, onDelete, onPublish,
-}: {
+function PostCard({ post, channels, onEdit, onDelete, onPublish }: {
   post: CustomPost; channels: string[];
   onEdit: () => void; onDelete: () => void;
   onPublish: (channel: string) => Promise<void>;
@@ -476,11 +563,7 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
   return (
     <div className="pg">
       <PageHeader title="Post Promo" onBack={() => nav('dash')} badge={posts.length || undefined}
-        right={
-          <button className="btn bp" style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => setEditing('new')}>
-            + Nuovo
-          </button>
-        }
+        right={<button className="btn bp" style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => setEditing('new')}>+ Nuovo</button>}
       />
 
       {err && <ErrorBanner>{err}</ErrorBanner>}
