@@ -36,7 +36,7 @@ export async function runCustomPostScheduler(): Promise<void> {
     }
 
     if (changed) {
-      await sql`UPDATE custom_posts SET schedules = ${JSON.stringify(schedules)}::jsonb WHERE id = ${post.id}`.catch(() => {});
+      await sql`UPDATE custom_posts SET schedules = ${sql.json(schedules)} WHERE id = ${post.id}`.catch(() => {});
     }
   }
 }

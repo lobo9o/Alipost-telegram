@@ -97,7 +97,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const [row] = await sql`
     UPDATE custom_posts SET
       title = ${title ?? ''}, image = ${image ?? ''}, body = ${body ?? ''},
-      keyboard = ${keyboard ?? ''}, schedules = ${JSON.stringify(schedules ?? [])}::jsonb,
+      keyboard = ${keyboard ?? ''}, schedules = ${sql.json(schedules ?? [])},
       updated_at = NOW()
     WHERE id = ${id} AND user_id = ${userId}
     RETURNING id, title, image, body, keyboard, schedules, created_at, updated_at

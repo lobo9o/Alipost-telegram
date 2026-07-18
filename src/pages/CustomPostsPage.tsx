@@ -1,10 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component } from 'react';
 import { NavPage } from '../types';
 import { useApp } from '../context/AppContext';
 import { PageHeader, EmptyState, ErrorBanner } from '../components/Shared';
 import { customPostsApi, CustomPost, CustomPostSchedule } from '../lib/api';
 
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+
+function safeSchedules(schedules: any): CustomPostSchedule[] {
+  if (!Array.isArray(schedules)) return [];
+  return schedules.map(s => ({
+    id: s.id ?? crypto.randomUUID(),
+    days: Array.isArray(s.days) ? s.days : [],
+    time: s.time ?? '09:00',
+    channel: s.channel ?? '',
+    active: s.active !== false,
+    lastSentDate: s.lastSentDate,
+  }));
+}
 
 function newSchedule(channel: string): CustomPostSchedule {
   return { id: crypto.randomUUID(), days: [], time: '09:00', channel, active: true };
@@ -14,9 +26,33 @@ function emptyForm(): Omit<CustomPost, 'id' | 'created_at' | 'updated_at'> {
   return { title: '', image: '', body: '', keyboard: '', schedules: [] };
 }
 
+// ── Error Boundary ────────────────────────────────────────────
+class PageErrorBoundary extends Component<{ children: React.ReactNode; onReset: () => void }, { error: string | null }> {
+  state = { error: null as string | null };
+  static getDerivedStateFromError(err: Error) { return { error: err.message }; }
+  componentDidCatch(err: Error) { console.error('[CustomPostsPage]', err); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 24, color: 'var(--re)' }}>
+          <div style={{ marginBottom: 12, fontWeight: 700 }}>Errore nella pagina</div>
+          <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 16 }}>{this.state.error}</div>
+          <button
+            className="btn bp"
+            onClick={() => { this.setState({ error: null }); this.props.onReset(); }}
+          >
+            Ricarica
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Preview ───────────────────────────────────────────────────
 function PostPreview({ image, body, keyboard }: { image: string; body: string; keyboard: string }) {
-  const rows = keyboard
+  const rows = (keyboard || '')
     .split('\n')
     .filter(l => l.trim())
     .map(row =>
@@ -74,6 +110,8 @@ function ScheduleItem({
   onChange: (s: CustomPostSchedule) => void;
   onDelete: () => void;
 }) {
+  const days = Array.isArray(sched.days) ? sched.days : [];
+
   return (
     <div className="card" style={{ margin: '0 0 10px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -91,7 +129,7 @@ function ScheduleItem({
 
       <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
         {DAYS.map((d, i) => {
-          const sel = sched.days.includes(i);
+          const sel = days.includes(i);
           return (
             <button
               key={i}
@@ -103,8 +141,8 @@ function ScheduleItem({
                 cursor: 'pointer',
               }}
               onClick={() => {
-                const days = sel ? sched.days.filter(x => x !== i) : [...sched.days, i].sort((a, b) => a - b);
-                onChange({ ...sched, days });
+                const next = sel ? days.filter(x => x !== i) : [...days, i].sort((a, b) => a - b);
+                onChange({ ...sched, days: next });
               }}
             >{d}</button>
           );
@@ -117,7 +155,7 @@ function ScheduleItem({
           <input
             type="time"
             className="inp"
-            value={sched.time}
+            value={sched.time || '09:00'}
             onChange={e => onChange({ ...sched, time: e.target.value })}
           />
         </div>
@@ -125,7 +163,7 @@ function ScheduleItem({
           <span className="lbl">Canale</span>
           <select
             className="sel"
-            value={sched.channel}
+            value={sched.channel || ''}
             onChange={e => onChange({ ...sched, channel: e.target.value })}
           >
             <option value="">Seleziona...</option>
@@ -157,7 +195,7 @@ function PostEditor({
 }) {
   const [form, setForm] = useState<Omit<CustomPost, 'id' | 'created_at' | 'updated_at'>>(
     initial
-      ? { title: initial.title, image: initial.image, body: initial.body, keyboard: initial.keyboard, schedules: initial.schedules }
+      ? { title: initial.title || '', image: initial.image || '', body: initial.body || '', keyboard: initial.keyboard || '', schedules: safeSchedules(initial.schedules) }
       : emptyForm()
   );
   const [tab, setTab] = useState<'edit' | 'preview' | 'schedule'>('edit');
@@ -179,10 +217,12 @@ function PostEditor({
     setSaving(true);
     setErr('');
     try {
+      const payload = { ...form, schedules: safeSchedules(form.schedules) };
       const saved = initial
-        ? await customPostsApi.update(initial.id, form)
-        : await customPostsApi.create(form);
-      onSave(saved);
+        ? await customPostsApi.update(initial.id, payload)
+        : await customPostsApi.create(payload);
+      if (!saved || typeof saved !== 'object') throw new Error('Risposta server non valida');
+      onSave({ ...saved, schedules: safeSchedules(saved.schedules) });
     } catch (e: any) {
       setErr(e.message || 'Errore salvataggio');
     } finally {
@@ -208,7 +248,6 @@ function PostEditor({
         }
       />
 
-      {/* Tabs */}
       <div style={{ display: 'flex', margin: '0 16px 14px', background: 'var(--bg3)', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--bd)' }}>
         {TABS.map(t => (
           <button
@@ -304,7 +343,7 @@ function PostEditor({
           )}
           {form.schedules.map((s, i) => (
             <ScheduleItem
-              key={s.id}
+              key={s.id || i}
               sched={s}
               channels={channels}
               onChange={updated => set('schedules', form.schedules.map((x, xi) => xi === i ? updated : x))}
@@ -341,7 +380,8 @@ function PostCard({
   const [publishChannel, setPublishChannel] = useState(channels[0] ?? '');
   const [publishing, setPublishing] = useState(false);
 
-  const activeSchedules = post.schedules.filter(s => s.active);
+  const schedules = safeSchedules(post.schedules);
+  const activeSchedules = schedules.filter(s => s.active);
 
   const handlePublish = async () => {
     if (!publishChannel) return;
@@ -369,7 +409,7 @@ function PostCard({
           </div>
           {post.body && (
             <div style={{ fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {post.body.replace(/<[^>]+>/g, '')}
+              {String(post.body).replace(/<[^>]+>/g, '')}
             </div>
           )}
         </div>
@@ -377,12 +417,12 @@ function PostCard({
 
       {activeSchedules.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
-          {activeSchedules.map(s => (
+          {activeSchedules.map((s, i) => (
             <span
-              key={s.id}
+              key={s.id || i}
               style={{ fontSize: 10, background: 'rgba(6,182,212,0.12)', color: 'var(--a1)', border: '1px solid rgba(6,182,212,0.22)', borderRadius: 20, padding: '2px 8px', fontWeight: 600 }}
             >
-              {s.days.map(d => DAYS[d]).join(' ')} {s.time}
+              {(Array.isArray(s.days) ? s.days : []).map(d => DAYS[d]).join(' ')} {s.time}
             </span>
           ))}
         </div>
@@ -411,26 +451,34 @@ function PostCard({
 }
 
 // ── Main Page ─────────────────────────────────────────────────
-export function CustomPostsPage({ nav }: { nav: (p: NavPage) => void }) {
+function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
   const { allChannels, settings } = useApp();
-  const channels = (allChannels.length ? allChannels : (settings.channels ?? []));
+  const channels = allChannels.length ? allChannels : (settings.channels ?? []);
 
   const [posts, setPosts] = useState<CustomPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<CustomPost | null | 'new'>(null);
   const [err, setErr] = useState('');
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setErr('');
     customPostsApi.list()
-      .then(data => setPosts(Array.isArray(data) ? data : []))
+      .then(data => {
+        const list = Array.isArray(data) ? data : [];
+        setPosts(list.map(p => ({ ...p, schedules: safeSchedules(p.schedules) })));
+      })
       .catch(e => setErr(e.message || 'Errore caricamento'))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
 
   const handleSave = (saved: CustomPost) => {
+    const safe = { ...saved, schedules: safeSchedules(saved.schedules) };
     setPosts(prev => {
-      const idx = prev.findIndex(p => p.id === saved.id);
-      return idx >= 0 ? prev.map(p => p.id === saved.id ? saved : p) : [saved, ...prev];
+      const idx = prev.findIndex(p => p.id === safe.id);
+      return idx >= 0 ? prev.map(p => p.id === safe.id ? safe : p) : [safe, ...prev];
     });
     setEditing(null);
   };
@@ -502,5 +550,14 @@ export function CustomPostsPage({ nav }: { nav: (p: NavPage) => void }) {
         />
       ))}
     </div>
+  );
+}
+
+export function CustomPostsPage({ nav }: { nav: (p: NavPage) => void }) {
+  const [key, setKey] = useState(0);
+  return (
+    <PageErrorBoundary onReset={() => setKey(k => k + 1)}>
+      <CustomPostsInner key={key} nav={nav} />
+    </PageErrorBoundary>
   );
 }

@@ -22,7 +22,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const { title = '', image = '', body = '', keyboard = '', schedules = [] } = req.body ?? {};
   const [row] = await sql`
     INSERT INTO custom_posts (user_id, title, image, body, keyboard, schedules)
-    VALUES (${userId}, ${title}, ${image}, ${body}, ${keyboard}, ${JSON.stringify(schedules)}::jsonb)
+    VALUES (${userId}, ${title}, ${image}, ${body}, ${keyboard}, ${sql.json(schedules ?? [])})
     RETURNING id, title, image, body, keyboard, schedules, created_at, updated_at
   `;
   res.json(row);
