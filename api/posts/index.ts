@@ -152,8 +152,8 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{recensioni}':      post.recensioni || '',
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
-    '{coupon}':          post.coupon || '',
-    '{boxcoupon}':       (post as any).boxcoupon || '',
+    '{coupon}':          (post as any).boxcoupon ? '' : (post.coupon || ''),
+    '{boxcoupon}':       (post as any).boxcoupon ? 'Abilita il coupon prima di acquistare' : '',
   };
 
   const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;

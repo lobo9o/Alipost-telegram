@@ -210,7 +210,7 @@ function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
     '{coupon}':          (post as any).boxcoupon ? '' : (post.coupon || ''),
-    '{boxcoupon}':       (post as any).boxcoupon || '',
+    '{boxcoupon}':       (post as any).boxcoupon ? (customTags['{boxcoupon}'] || 'Abilita il coupon prima di acquistare') : '',
     '{checkout}':        (post as any).checkout || '',
     '{emojicat}':        getProductEmoji(post.title || '', post.cat || ''),
   };
