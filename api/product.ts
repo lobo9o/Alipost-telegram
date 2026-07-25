@@ -85,6 +85,7 @@ async function creatorsGetItem(
       'browseNodeInfo.browseNodes',
       'offersV2.listings.dealDetails',
       'offersV2.listings.type',
+      'offersV2.listings.promotions',
     ],
   };
 
@@ -908,6 +909,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const cat = browseNodes?.[0] ? String(pick(browseNodes[0], 'displayName', 'DisplayName') ?? '') : '';
 
     const dealDetails = pick(listings, 'dealDetails', 'DealDetails') as any;
+    const promotions = (pick(listings, 'promotions', 'Promotions') as any[]) ?? [];
     let coupon = '';
     let couponBox = false;
     let couponIsPercent = false;
@@ -920,8 +922,25 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         coupon = displayAmount || displayPerc || 'coupon';
         couponIsPercent = !displayAmount && !!displayPerc;
         couponBox = true;
+        if (coupon === 'coupon') console.log('[product] dealDetails coupon senza valore:', JSON.stringify(dealDetails));
       } else if (displayAmount || displayPerc) {
         coupon = displayAmount || displayPerc;
+      }
+    }
+    // Cerca coupon nelle promotions (offersV2.listings.promotions)
+    if (!couponBox && promotions.length > 0) {
+      console.log('[product] promotions trovate:', JSON.stringify(promotions).slice(0, 400));
+      for (const promo of promotions) {
+        const promoType = String(pick(promo, 'type', 'Type', 'promotionType', 'PromotionType') ?? '').toLowerCase();
+        if (promoType.includes('coupon') || promoType.includes('clip')) {
+          const promoAmt = String(pick(promo, 'displayAmount', 'DisplayAmount', 'amount', 'Amount', 'savingsAmount', 'SavingsAmount') ?? '');
+          const promoPct = String(pick(promo, 'displayPercentage', 'DisplayPercentage', 'percentage', 'Percentage', 'savingsPercentage', 'SavingsPercentage') ?? '');
+          coupon = promoAmt || promoPct || 'coupon';
+          couponIsPercent = !promoAmt && !!promoPct;
+          couponBox = true;
+          console.log('[product] coupon da promotions:', coupon, 'type:', promoType);
+          break;
+        }
       }
     }
     // Fallback: cerca coupon nei listing S&S esclusi (il coupon box è a livello di prodotto, non listing)
