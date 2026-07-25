@@ -324,6 +324,13 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
       const genericAmt = text.match(/coupon[^€\d]*(?:€|EUR\s*)?([\d,\.]+)/i);
       if (genericAmt) { clipCoupon = genericAmt[1].replace(',', '.') + '€'; break; }
     }
+    // Fallback: Amazon nuovo formato — badge "Coupon:" senza valore numerico (valore JS-rendered).
+    // Se c'è il badge ma non siamo riusciti a estrarre il valore, segnaliamo comunque il coupon box.
+    if (!clipCoupon && couponTexts.some(t => /^coupon:?\s*$/i.test(t))) {
+      clipCoupon = 'coupon';
+      clipCouponPct = false;
+      console.log('[product] clip coupon box rilevato da badge "Coupon:" (valore JS-rendered, non disponibile nell\'HTML statico)');
+    }
     if (clipCoupon) console.log('[product] clip coupon da scraping:', clipCoupon, 'pct:', clipCouponPct);
     else if (couponTexts.length) console.log('[product] couponLabelText trovati ma non parsati:', couponTexts.map(t => t.slice(0, 80)));
 
