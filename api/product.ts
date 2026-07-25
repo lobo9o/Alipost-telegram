@@ -343,12 +343,8 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
       clipCouponPct = false;
       console.log('[product] clip coupon box rilevato da badge "Coupon:" (valore JS-rendered, non disponibile nell\'HTML statico)');
     }
-    // Fallback 2: presenza del div couponsInBuybox_feature_div o del widget coupons nella pagina
-    if (!clipCoupon && (html.includes('couponsInBuybox_feature_div') || html.includes('"coupons"') && html.includes('coupon'))) {
-      clipCoupon = 'coupon';
-      clipCouponPct = false;
-      console.log('[product] clip coupon box rilevato da couponsInBuybox_feature_div nell\'HTML');
-    }
+    // NOTA: il fallback couponsInBuybox_feature_div è stato rimosso perché quel div è presente
+    // su OGNI pagina Amazon come placeholder vuoto, causando falsi positivi su tutti i prodotti.
     if (clipCoupon) console.log('[product] clip coupon da scraping:', clipCoupon, 'pct:', clipCouponPct);
     else if (couponTexts.length) console.log('[product] couponLabelText trovati ma non parsati:', couponTexts.map(t => t.slice(0, 80)));
 
