@@ -2,7 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withErrorHandler, allowMethods, requireUserId } from './_utils.js';
 import sql from '../lib/db.js';
 import crypto from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getProductEmoji, shortenTitle } from './_titleFormat.js';
+
+const execFileAsync = promisify(execFile);
 
 // Token endpoints per versione credenziale
 const TOKEN_ENDPOINTS: Record<string, string> = {
@@ -150,34 +154,26 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
     const url = `https://${domain}/dp/${asin}`;
     let html = '';
     for (let attempt = 0; attempt < UA_LIST.length; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000);
-      const r = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': UA_LIST[attempt],
-          'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Sec-Fetch-User': '?1',
-          'Upgrade-Insecure-Requests': '1',
-        },
-      });
-      clearTimeout(timer);
-      if (!r.ok) continue;
-      const text = await r.text();
-      // < 50KB = pagina anti-bot/captcha — riprova con UA diverso
-      if (text.length < 50000) {
-        console.log(`[scrape] ${asin} tentativo ${attempt + 1}: pagina troppo piccola (${text.length}B), riprovo...`);
+      try {
+        const { stdout } = await execFileAsync('curl', [
+          '-s', '-L', '--compressed',
+          '-H', `User-Agent: ${UA_LIST[attempt]}`,
+          '-H', 'Accept-Language: it-IT,it;q=0.9,en-US;q=0.8',
+          '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          '--max-time', '12',
+          url,
+        ], { maxBuffer: 15 * 1024 * 1024, timeout: 14000 });
+        // < 50KB = pagina anti-bot/captcha o TLS bloccato — riprova con UA diverso
+        if (stdout.length < 50000) {
+          console.log(`[scrape] ${asin} tentativo ${attempt + 1}: pagina troppo piccola (${stdout.length}B), riprovo...`);
+          continue;
+        }
+        html = stdout;
+        break;
+      } catch (curlErr) {
+        console.log(`[scrape] ${asin} tentativo ${attempt + 1} curl error:`, (curlErr as Error).message?.slice(0, 80));
         continue;
       }
-      html = text;
-      break;
     }
     if (!html) return empty;
 
