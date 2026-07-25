@@ -85,7 +85,6 @@ async function creatorsGetItem(
       'browseNodeInfo.browseNodes',
       'offersV2.listings.dealDetails',
       'offersV2.listings.type',
-      'offersV2.listings.promotions',
     ],
   };
 
