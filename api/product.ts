@@ -141,29 +141,45 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
   checkoutDiscountAmount: number;
 }> {
   const empty = { stelle: '', recensioni: '', scrapedPrice: 0, scrapedOrigPrice: 0, clipCoupon: '', clipCouponPct: false, hasCheckoutDiscount: false, checkoutDiscountAmount: 0 };
+  const UA_LIST = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+  ];
   try {
     const url = `https://${domain}/dp/${asin}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-      },
-    });
-    clearTimeout(timer);
-    if (!r.ok) return empty;
-    const html = await r.text();
+    let html = '';
+    for (let attempt = 0; attempt < UA_LIST.length; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      const r = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': UA_LIST[attempt],
+          'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
+        },
+      });
+      clearTimeout(timer);
+      if (!r.ok) continue;
+      const text = await r.text();
+      // < 50KB = pagina anti-bot/captcha — riprova con UA diverso
+      if (text.length < 50000) {
+        console.log(`[scrape] ${asin} tentativo ${attempt + 1}: pagina troppo piccola (${text.length}B), riprovo...`);
+        continue;
+      }
+      html = text;
+      break;
+    }
+    if (!html) return empty;
 
     // stelle — target elemento a-icon-alt: "4,5 su 5 stelle" / "4.5 out of 5 stars"
     let stelle = '';
