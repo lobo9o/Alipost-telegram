@@ -331,6 +331,12 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
       clipCouponPct = false;
       console.log('[product] clip coupon box rilevato da badge "Coupon:" (valore JS-rendered, non disponibile nell\'HTML statico)');
     }
+    // Fallback 2: presenza del div couponsInBuybox_feature_div o del widget coupons nella pagina
+    if (!clipCoupon && (html.includes('couponsInBuybox_feature_div') || html.includes('"coupons"') && html.includes('coupon'))) {
+      clipCoupon = 'coupon';
+      clipCouponPct = false;
+      console.log('[product] clip coupon box rilevato da couponsInBuybox_feature_div nell\'HTML');
+    }
     if (clipCoupon) console.log('[product] clip coupon da scraping:', clipCoupon, 'pct:', clipCouponPct);
     else if (couponTexts.length) console.log('[product] couponLabelText trovati ma non parsati:', couponTexts.map(t => t.slice(0, 80)));
 
@@ -900,6 +906,23 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         couponBox = true;
       } else if (displayAmount || displayPerc) {
         coupon = displayAmount || displayPerc;
+      }
+    }
+    // Fallback: cerca coupon nei listing S&S esclusi (il coupon box è a livello di prodotto, non listing)
+    if (!couponBox) {
+      for (const l of allListings) {
+        const lDeal = pick(l, 'dealDetails', 'DealDetails') as any;
+        if (!lDeal) continue;
+        const lType = String(pick(lDeal, 'dealType', 'DealType') ?? '').toLowerCase();
+        if (lType.includes('coupon') || lType.includes('clip')) {
+          const lAmt = String(pick(lDeal, 'displayAmount', 'DisplayAmount', 'amount', 'Amount') ?? '');
+          const lPct = String(pick(lDeal, 'displayPercentage', 'DisplayPercentage', 'percentage', 'Percentage') ?? '');
+          coupon = lAmt || lPct || 'coupon';
+          couponIsPercent = !lAmt && !!lPct;
+          couponBox = true;
+          console.log('[product] coupon rilevato da listing S&S:', coupon, 'type:', lType);
+          break;
+        }
       }
     }
 
