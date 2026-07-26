@@ -500,6 +500,17 @@ function PostCard({ post, channels, onEdit, onDelete, onPublish }: {
   );
 }
 
+const BOT_LINK = 'https://t.me/amaalipostdealbot?start=newpost';
+
+function openBotChat() {
+  const tgWebApp = (window as any).Telegram?.WebApp;
+  if (tgWebApp?.openTelegramLink) {
+    tgWebApp.openTelegramLink(BOT_LINK);
+  } else {
+    window.open(BOT_LINK, '_blank');
+  }
+}
+
 // ── Main Page ─────────────────────────────────────────────────
 function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
   const { allChannels, settings } = useApp();
@@ -508,10 +519,12 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
   const [posts, setPosts] = useState<CustomPost[]>([]);
   const [emojiList, setEmojiList] = useState<EmojiEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<CustomPost | null | 'new'>(null);
+  const [editing, setEditing] = useState<CustomPost | null>(null);
   const [err, setErr] = useState('');
+  const [botHint, setBotHint] = useState(false);
 
-  useEffect(() => {
+  const loadPosts = () => {
+    setLoading(true);
     Promise.all([
       customPostsApi.list(),
       emojiIdsApi.list().catch(() => ({ emoji: [] })),
@@ -521,7 +534,14 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
       setEmojiList(emojiData.emoji ?? []);
     }).catch(e => setErr(e.message || 'Errore caricamento'))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadPosts(); }, []);
+
+  const handleNewViaBotClick = () => {
+    setBotHint(true);
+    openBotChat();
+  };
 
   const handleSave = (saved: CustomPost) => {
     const safe = { ...saved, schedules: safeSchedules(saved.schedules) };
@@ -551,7 +571,7 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
   if (editing !== null) {
     return (
       <PostEditor
-        initial={editing === 'new' ? null : editing}
+        initial={editing}
         channels={channels}
         emojiList={emojiList}
         onSave={handleSave}
@@ -563,15 +583,42 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
   return (
     <div className="pg">
       <PageHeader title="Post Promo" onBack={() => nav('dash')} badge={posts.length || undefined}
-        right={<button className="btn bp" style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => setEditing('new')}>+ Nuovo</button>}
+        right={
+          <button className="btn bp" style={{ padding: '7px 14px', fontSize: 13 }} onClick={handleNewViaBotClick}>
+            + Nuovo
+          </button>
+        }
       />
 
       {err && <ErrorBanner>{err}</ErrorBanner>}
       {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--t3)' }}>Caricamento...</div>}
 
+      {/* Banner che appare dopo aver aperto il bot */}
+      {botHint && (
+        <div style={{
+          margin: '0 16px 14px', padding: '12px 14px', borderRadius: 10,
+          background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--a1)', marginBottom: 2 }}>Chat del bot aperta</div>
+            <div style={{ fontSize: 12, color: 'var(--t2)' }}>Crea il post nel bot, poi torna qui e ricarica.</div>
+          </div>
+          <button className="btn bs" style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
+            onClick={() => { setBotHint(false); loadPosts(); }}>
+            Ricarica
+          </button>
+        </div>
+      )}
+
       {!loading && posts.length === 0 && !err && (
         <EmptyState icon="📢" text="Nessun post promo salvato"
-          action={<button className="btn bp" onClick={() => setEditing('new')}>+ Crea il primo post</button>} />
+          action={
+            <button className="btn bp" onClick={handleNewViaBotClick}>
+              + Crea il primo post nel bot
+            </button>
+          }
+        />
       )}
 
       {posts.map(post => (
