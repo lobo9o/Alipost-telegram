@@ -273,8 +273,8 @@ export async function handleUpdate(update: any) {
       '✅ Testo ricevuto!\n\n' +
       '3️⃣ Invia i <b>bottoni della tastiera</b> (o /skip)\n\n' +
       'Formato — una riga = una fila di bottoni:\n' +
-      '<pre>🛒 Acquista - https://...\n' +
-      '#g 🟢 Offerta - https://... &amp;&amp; #r ℹ️ Info - https://...</pre>\n' +
+      '<pre>🛒 Acquista - https://amazon.it/dp/ASIN\n' +
+      '#g 🟢 Offerta - https://amazon.it/dp/ASIN &amp;&amp; #r ℹ️ Info - https://t.me/canale</pre>\n' +
       'Colori: <code>#g</code> verde · <code>#r</code> rosso · <code>#b</code> blu'
     );
     if (id1) msgIds.push(id1);

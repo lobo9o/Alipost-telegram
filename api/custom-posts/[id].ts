@@ -17,6 +17,13 @@ function stripTgEmoji(html: string): string {
 
 const KEYBOARD_COLOR_MAP: Record<string, string> = { g: 'success', r: 'danger', b: 'primary' };
 
+function isValidTgUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return /[a-zA-Z]/.test(u.hostname) && u.hostname.includes('.');
+  } catch { return false; }
+}
+
 async function buildKeyboard(body: string, links: Record<string, string> = {}): Promise<object | undefined> {
   if (!body?.trim()) return undefined;
   const rows = body.trim().split('\n').filter(r => r.trim());
@@ -30,7 +37,7 @@ async function buildKeyboard(body: string, links: Record<string, string> = {}): 
       let url = m[2].trim();
       for (const [tag, val] of Object.entries(links)) url = url.split(tag).join(val);
       const text = m[1].trim();
-      if (!text) return null;
+      if (!text || !isValidTgUrl(url)) return null;
       return { text, url, ...(style ? { style } : {}) };
     }).filter(Boolean)
   ).filter(r => r.length > 0);
