@@ -4,8 +4,10 @@ import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['GET', 'POST'], req, res)) return;
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const rawUserId = requireUserId(req, res);
+  if (!rawUserId) return;
+  // I custom post sono condivisi tra tutti i profili dello stesso utente
+  const userId = rawUserId.includes(':') ? rawUserId.split(':')[0] : rawUserId;
 
   if (req.method === 'GET') {
     const rows = await sql`

@@ -25,19 +25,20 @@ async function sendMsg(chatId: number, text: string, extra: Record<string, unkno
 
 async function sendPhoto(chatId: number, photo: string, caption: string, extra: Record<string, unknown> = {}): Promise<number | undefined> {
   if (photo.startsWith('data:')) {
-    const base64 = photo.replace(/^data:image\/\w+;base64,/, '');
+    const mimeMatch = photo.match(/^data:([^;]+);base64,/);
+    const mime = mimeMatch?.[1] || 'image/jpeg';
+    const base64 = photo.replace(/^data:[^;]+;base64,/, '');
     const form = new FormData();
     form.append('chat_id', String(chatId));
-    form.append('photo', new Blob([Buffer.from(base64, 'base64')], { type: 'image/jpeg' }), 'post.jpg');
-    form.append('caption', caption.slice(0, 1024));
-    form.append('parse_mode', 'HTML');
+    form.append('photo', new Blob([Buffer.from(base64, 'base64')], { type: mime }), 'post.jpg');
+    if (caption) form.append('caption', caption.slice(0, 1024));
     if (extra.reply_markup) form.append('reply_markup', JSON.stringify(extra.reply_markup));
     const res = await fetch(`${TG_BASE}/sendPhoto`, { method: 'POST', body: form });
     const r = await res.json() as any;
     if (!r?.ok) console.error('[tg-bot] sendPhoto error:', r?.description);
     return r?.result?.message_id;
   }
-  const r = await tg('sendPhoto', { chat_id: chatId, photo, caption: caption.slice(0, 1024), parse_mode: 'HTML', ...extra });
+  const r = await tg('sendPhoto', { chat_id: chatId, photo, caption: caption.slice(0, 1024), ...extra });
   return r?.result?.message_id;
 }
 
@@ -140,16 +141,18 @@ const CONFIRM_KB = {
 };
 
 async function sendPreviewAndConfirm(chatId: number, userId: string, data: ConvData, msgIds: number[]) {
-  const previewBody = stripTgEmoji(data.body || '').slice(0, 1024);
+  // Rimuove tg-emoji e tutti i tag HTML per la preview nel bot (evita ENTITY_TEXT_INVALID
+  // da tag troncati a 1024 chars; la formattazione vera viene inviata al canale via MTProto)
+  const previewBody = stripTgEmoji(data.body || '').replace(/<[^>]+>/g, '').slice(0, 1024);
   const hasAnim = (data.body || '').includes('<tg-emoji');
 
   let previewId: number | undefined;
   if (data.image) {
-    previewId = await sendPhoto(chatId, data.image, previewBody);
+    previewId = await sendPhoto(chatId, data.image, previewBody, {});
   } else if (previewBody.trim()) {
-    previewId = await sendMsg(chatId, previewBody);
+    previewId = await sendMsg(chatId, previewBody, { parse_mode: undefined });
   } else {
-    previewId = await sendMsg(chatId, '<i>(Nessun testo)</i>');
+    previewId = await sendMsg(chatId, '(Nessun testo)');
   }
   if (previewId) msgIds.push(previewId);
 

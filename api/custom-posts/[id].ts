@@ -51,10 +51,12 @@ async function sendCustomPost(post: Record<string, any>, channel: string, userId
 
   let tgRes: Response;
   if (isBase64) {
-    const base64 = String(post.image).replace(/^data:image\/\w+;base64,/, '');
+    const mimeMatch = String(post.image).match(/^data:([^;]+);base64,/);
+    const mime = mimeMatch?.[1] || 'image/jpeg';
+    const base64 = String(post.image).replace(/^data:[^;]+;base64,/, '');
     const form = new FormData();
     form.append('chat_id', channel);
-    form.append('photo', new Blob([Buffer.from(base64, 'base64')], { type: 'image/jpeg' }), 'post.jpg');
+    form.append('photo', new Blob([Buffer.from(base64, 'base64')], { type: mime }), 'post.jpg');
     form.append('caption', captionBotApi);
     form.append('parse_mode', 'HTML');
     if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
@@ -81,8 +83,10 @@ async function sendCustomPost(post: Record<string, any>, channel: string, userId
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (!allowMethods(['GET', 'PUT', 'DELETE', 'POST'], req, res)) return;
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const rawUserId = requireUserId(req, res);
+  if (!rawUserId) return;
+  // I custom post sono condivisi tra tutti i profili dello stesso utente
+  const userId = rawUserId.includes(':') ? rawUserId.split(':')[0] : rawUserId;
   const { id } = req.query as { id: string };
 
   if (req.method === 'GET') {
