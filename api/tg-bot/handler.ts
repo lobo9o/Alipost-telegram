@@ -3,7 +3,7 @@ import sql from '../../lib/db.js';
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TG_BASE = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-type ConvState = 'idle' | 'waiting_image' | 'waiting_body' | 'waiting_keyboard' | 'waiting_confirm';
+type ConvState = 'idle' | 'waiting_image' | 'waiting_body' | 'waiting_keyboard' | 'waiting_confirm' | 'waiting_preview_action';
 interface ConvData { image?: string; body?: string; keyboard?: string; editPostId?: string }
 
 // ── Telegram API helpers ──────────────────────────────────────────
@@ -257,14 +257,25 @@ export async function handleUpdate(update: any) {
       return;
     }
     const previewBody = stripTgEmoji(post.body || '').replace(/<[^>]+>/g, '').slice(0, 1024);
+    const msgIds: number[] = userMsgId ? [userMsgId] : [];
+    let previewId: number | undefined;
     if (post.image) {
-      await sendPhoto(chatId, post.image, previewBody, {});
+      previewId = await sendPhoto(chatId, post.image, previewBody, {});
     } else if (previewBody.trim()) {
-      await sendMsg(chatId, previewBody, { parse_mode: undefined });
+      previewId = await sendMsg(chatId, previewBody, { parse_mode: undefined });
     } else {
-      await sendMsg(chatId, '(Nessun testo)');
+      previewId = await sendMsg(chatId, '(Nessun testo)');
     }
-    await sendMsg(chatId, '👁 <i>Questa è la preview reale del post nel canale.\nLe emoji animate appaiono quando il bot ha i permessi MTProto attivi.</i>');
+    if (previewId) msgIds.push(previewId);
+    const actionKb = {
+      inline_keyboard: [[
+        { text: '✅ OK — cancella tutto', callback_data: 'preview_ok' },
+        { text: '✏️ Modifica', callback_data: 'preview_edit' },
+      ]],
+    };
+    const actionId = await sendMsg(chatId, '👁 <i>Preview reale del post.</i>', { reply_markup: actionKb });
+    if (actionId) msgIds.push(actionId);
+    await saveConv(userId, 'waiting_preview_action', { editPostId: postId }, msgIds);
     return;
   }
 
@@ -337,6 +348,33 @@ export async function handleUpdate(update: any) {
   if (state === 'waiting_keyboard') {
     const keyboard = text === '/skip' ? '' : text;
     await sendPreviewAndConfirm(chatId, userId, { ...data, keyboard }, msgIds);
+    return;
+  }
+
+  // ── waiting_preview_action ────────────────────────────────────
+  if (state === 'waiting_preview_action') {
+    const cbData = cb?.data;
+    if (cbData === 'preview_ok') {
+      await clearConv(userId, chatId, msgIds);
+    } else if (cbData === 'preview_edit') {
+      const postId = data.editPostId;
+      if (!postId) { await clearConv(userId, chatId, msgIds); return; }
+      const [post] = await sql`SELECT * FROM custom_posts WHERE id = ${postId} AND user_id = ${userId}`;
+      if (!post) {
+        await sendMsg(chatId, '❌ Post non trovato.');
+        await clearConv(userId, chatId, msgIds);
+        return;
+      }
+      const editData: ConvData = {
+        image: post.image || '',
+        body: post.body || '',
+        keyboard: post.keyboard || '',
+        editPostId: postId,
+      };
+      const introId = await sendMsg(chatId, '✏️ <b>Modifica Post</b>\n\nUsa i pulsanti per modificare o salva direttamente.');
+      const newMsgIds: number[] = introId ? [introId] : [];
+      await sendPreviewAndConfirm(chatId, userId, editData, newMsgIds);
+    }
     return;
   }
 
