@@ -1,29 +1,10 @@
-import React, { useState, useEffect, useRef, Component, useLayoutEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { NavPage } from '../types';
 import { useApp } from '../context/AppContext';
 import { PageHeader, EmptyState, ErrorBanner } from '../components/Shared';
-import { customPostsApi, CustomPost, CustomPostSchedule, emojiIdsApi, EmojiEntry } from '../lib/api';
+import { customPostsApi, CustomPost, CustomPostSchedule } from '../lib/api';
 
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
-
-const KB_COLOR_MAP: Record<string, string> = { g: 'success', r: 'danger', b: 'primary' };
-const KB_COLOR_STYLES: Record<string, { bg: string; color: string }> = {
-  success: { bg: 'rgba(16,185,129,0.18)', color: '#34d399' },
-  danger:  { bg: 'rgba(239,68,68,0.18)',  color: '#f87171' },
-  primary: { bg: 'rgba(6,182,212,0.18)',  color: '#22d3ee' },
-};
-
-function parseKbRows(keyboard: string) {
-  return (keyboard || '').split('\n').filter(l => l.trim()).map(row =>
-    row.split('&&').map(b => b.trim()).filter(Boolean).map(btn => {
-      const cm = btn.match(/^#([grb])\s+/);
-      const style = cm ? KB_COLOR_MAP[cm[1]] : undefined;
-      const clean = cm ? btn.slice(cm[0].length) : btn;
-      const m = clean.match(/^(.*?)\s+-\s+https?:\/\/.+$/) ?? clean.match(/^(.*?)\s+-\s+.+$/);
-      return { text: (m ? m[1] : clean.split(' - ')[0] ?? clean).trim(), style };
-    })
-  ).filter(r => r.length);
-}
 
 function safeSchedules(schedules: any): CustomPostSchedule[] {
   if (!Array.isArray(schedules)) return [];
@@ -37,23 +18,8 @@ function safeSchedules(schedules: any): CustomPostSchedule[] {
   }));
 }
 
-// Normalizza l'HTML estratto da contentEditable al formato Telegram (<br> per a capo)
-function normalizeBody(html: string): string {
-  let v = html;
-  v = v.replace(/<div><br\s*\/?><\/div>/gi, '<br>');
-  v = v.replace(/<\/div>\s*<div>/gi, '<br>');
-  v = v.replace(/<div>/gi, '');
-  v = v.replace(/<\/div>/gi, '<br>');
-  v = v.replace(/(<br\s*\/?>){3,}/gi, '<br><br>');
-  return v.trim();
-}
-
 function newSchedule(channel: string): CustomPostSchedule {
   return { id: crypto.randomUUID(), days: [], time: '09:00', channel, active: true };
-}
-
-function emptyForm(): Omit<CustomPost, 'id' | 'created_at' | 'updated_at'> {
-  return { title: '', image: '', body: '', keyboard: '', schedules: [] };
 }
 
 // ── Error Boundary ────────────────────────────────────────────
@@ -73,184 +39,6 @@ class PageErrorBoundary extends Component<{ children: React.ReactNode; onReset: 
     }
     return this.props.children;
   }
-}
-
-// ── Body Editor (contenteditable — mostra emoji animate direttamente) ─────────
-function BodyEditor({ value, onChange, emojiList }: {
-  value: string;
-  onChange: (v: string) => void;
-  emojiList: EmojiEntry[];
-}) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const isInit = useRef(false);
-  const [focused, setFocused] = useState(false);
-
-  // Inizializza una volta sola
-  useLayoutEffect(() => {
-    if (!isInit.current && editorRef.current) {
-      editorRef.current.innerHTML = value || '';
-      isInit.current = true;
-    }
-  });
-
-  // Risincronizza se il valore cambia dall'esterno (es. caricamento post esistente)
-  // ma solo se l'editor non è focalizzato (per non spostare il cursore)
-  useEffect(() => {
-    const el = editorRef.current;
-    if (el && !el.contains(document.activeElement) && el.innerHTML !== value) {
-      el.innerHTML = value || '';
-    }
-  }, [value]);
-
-  const readHtml = () => normalizeBody(editorRef.current?.innerHTML ?? '');
-
-  const handleInput = () => onChange(readHtml());
-
-  // Intercetta Enter → inserisce <br> (non <div>) per compatibilità Telegram
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      document.execCommand('insertLineBreak');
-      handleInput();
-    }
-  };
-
-  // Incolla come testo semplice (evita HTML estranei)
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text/plain');
-    document.execCommand('insertText', false, text);
-    handleInput();
-  };
-
-  // Inserisce <tg-emoji> al cursore senza perdere il focus sull'editor
-  const insertEmoji = (char: string, id: string) => {
-    const el = editorRef.current;
-    if (!el) return;
-    el.focus();
-    const sel = window.getSelection();
-    const tgEl = document.createElement('tg-emoji');
-    tgEl.setAttribute('emoji-id', id);
-    tgEl.textContent = char;
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(tgEl);
-      const newRange = document.createRange();
-      newRange.setStartAfter(tgEl);
-      newRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
-    } else {
-      el.appendChild(tgEl);
-    }
-    onChange(readHtml());
-  };
-
-  const isVisuallyEmpty = !value || value.replace(/<br\s*\/?>/gi, '').replace(/<[^>]*>/g, '').trim() === '';
-
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ position: 'relative' }}>
-        {isVisuallyEmpty && !focused && (
-          <div style={{ position: 'absolute', top: 10, left: 12, pointerEvents: 'none', color: 'var(--t3)', fontSize: 12, lineHeight: 1.6 }}>
-            Scrivi il testo del post...<br />
-            <span style={{ opacity: 0.7 }}>Puoi usare &lt;b&gt;grassetto&lt;/b&gt;, &lt;i&gt;corsivo&lt;/i&gt;</span>
-          </div>
-        )}
-        <div
-          ref={editorRef}
-          contentEditable
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          suppressContentEditableWarning
-          style={{
-            minHeight: 130, background: 'var(--bg3)', borderRadius: 8, padding: '10px 12px',
-            fontSize: 14, lineHeight: 1.7, color: 'var(--t1)', wordBreak: 'break-word',
-            outline: 'none', marginBottom: 8,
-            border: `1px solid ${focused ? 'var(--a1)' : 'var(--bd)'}`,
-            transition: 'border-color .15s',
-          }}
-        />
-      </div>
-
-      {emojiList.length > 0 && (
-        <div style={{ marginBottom: 4 }}>
-          <span className="lbl">✨ Emoji animate — clicca per inserire</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, paddingTop: 4 }}>
-            {emojiList.map(e => (
-              <button
-                key={e.custom_emoji_id}
-                onMouseDown={ev => ev.preventDefault()} // non perdere il focus sull'editor
-                onClick={() => insertEmoji(e.emoji_char, e.custom_emoji_id)}
-                style={{
-                  width: 40, height: 40, borderRadius: 8, cursor: 'pointer',
-                  background: 'var(--bg4)', border: '1px solid var(--bd)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                {/* tg-emoji nel picker → Telegram Mini App lo anima */}
-                <span
-                  style={{ fontSize: 24, lineHeight: 1 }}
-                  dangerouslySetInnerHTML={{ __html: `<tg-emoji emoji-id="${e.custom_emoji_id}">${e.emoji_char}</tg-emoji>` }}
-                />
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 4 }}>
-            Le emoji animate appaiono animate nel post pubblicato e nella preview qui sopra
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Animated body (usa ref per far processare <tg-emoji> a Telegram Mini App) ─
-function AnimatedBody({ html }: { html: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    if (ref.current) {
-      ref.current.innerHTML = (html || '<i style="color:var(--t3)">Nessun testo</i>').replace(/\n/g, '<br>');
-    }
-  }, [html]);
-  return <div ref={ref} className="pvmsg" />;
-}
-
-// ── Preview ───────────────────────────────────────────────────
-function PostPreview({ image, body, keyboard }: { image: string; body: string; keyboard: string }) {
-  const kbRows = parseKbRows(keyboard);
-  return (
-    <div className="pvbox" style={{ margin: '0 16px 12px' }}>
-      <span className="pvbdg">PREVIEW TELEGRAM</span>
-      {image ? (
-        <div style={{ width: '100%', marginBottom: 10, borderRadius: 8, overflow: 'hidden', background: 'var(--bg4)', maxHeight: 200 }}>
-          <img src={image} alt="" style={{ width: '100%', objectFit: 'cover', display: 'block' }}
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-        </div>
-      ) : (
-        <div style={{ width: '100%', height: 70, borderRadius: 8, background: 'var(--bg4)', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)', fontSize: 12 }}>
-          Nessuna immagine
-        </div>
-      )}
-      <AnimatedBody html={body} />
-      {kbRows.map((row, ri) => (
-        <div key={ri} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-          {row.map((b, bi) => {
-            const cs = b.style ? KB_COLOR_STYLES[b.style] : null;
-            return (
-              <div key={bi} className="tgbtn" style={{ flex: 1, textAlign: 'center', ...(cs ? { background: cs.bg, color: cs.color } : {}) }}>
-                {b.text}
-              </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 // ── Schedule Item ─────────────────────────────────────────────
@@ -305,154 +93,51 @@ function ScheduleItem({ sched, channels, onChange, onDelete }: {
   );
 }
 
-// ── Editor ────────────────────────────────────────────────────
-function PostEditor({ initial, channels, emojiList, onSave, onBack }: {
-  initial: CustomPost | null; channels: string[]; emojiList: EmojiEntry[];
-  onSave: (post: CustomPost) => void; onBack: () => void;
-}) {
-  const [form, setForm] = useState<Omit<CustomPost, 'id' | 'created_at' | 'updated_at'>>(
-    initial
-      ? { title: initial.title || '', image: initial.image || '', body: initial.body || '', keyboard: initial.keyboard || '', schedules: safeSchedules(initial.schedules) }
-      : emptyForm()
-  );
-  const [tab, setTab] = useState<'edit' | 'preview' | 'schedule'>('edit');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
+// ── Bot link helpers ──────────────────────────────────────────
+const BOT_BASE = 'https://t.me/amaalipostdealbot';
 
-  const set = (k: keyof typeof form, v: any) => setForm(f => ({ ...f, [k]: v }));
-
-  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => set('image', ev.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  const handleSave = async () => {
-    setSaving(true); setErr('');
-    try {
-      const payload = { ...form, body: normalizeBody(form.body), schedules: safeSchedules(form.schedules) };
-      const saved = initial
-        ? await customPostsApi.update(initial.id, payload)
-        : await customPostsApi.create(payload);
-      if (!saved || typeof saved !== 'object') throw new Error('Risposta server non valida');
-      onSave({ ...saved, schedules: safeSchedules(saved.schedules) });
-    } catch (e: any) {
-      setErr(e.message || 'Errore salvataggio');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const TABS = [
-    { id: 'edit' as const, label: '✏️ Testo' },
-    { id: 'preview' as const, label: '👁 Preview' },
-    { id: 'schedule' as const, label: `📅 Orari${form.schedules.length ? ` (${form.schedules.length})` : ''}` },
-  ];
-
-  return (
-    <div className="pg">
-      <PageHeader
-        title={initial ? 'Modifica Post' : 'Nuovo Post'}
-        onBack={onBack}
-        right={
-          <button className="btn bp" style={{ padding: '7px 14px', fontSize: 13 }} onClick={handleSave} disabled={saving}>
-            {saving ? '...' : 'Salva'}
-          </button>
-        }
-      />
-      <div style={{ display: 'flex', margin: '0 16px 14px', background: 'var(--bg3)', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--bd)' }}>
-        {TABS.map(t => (
-          <button key={t.id} style={{
-            flex: 1, padding: '9px 4px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer',
-            background: tab === t.id ? 'var(--a1)' : 'transparent',
-            color: tab === t.id ? '#fff' : 'var(--t2)',
-          }} onClick={() => setTab(t.id)}>{t.label}</button>
-        ))}
-      </div>
-
-      {err && <ErrorBanner>{err}</ErrorBanner>}
-
-      {tab === 'edit' && (
-        <div style={{ padding: '0 16px' }}>
-          <span className="lbl">Titolo (interno)</span>
-          <input className="inp" style={{ marginBottom: 12 }} placeholder="Es. Promo Prime Day"
-            value={form.title} onChange={e => set('title', e.target.value)} />
-
-          <span className="lbl">Immagine</span>
-          <div className="irow" style={{ marginBottom: 8 }}>
-            <input className="inp" placeholder="https://..." value={form.image.startsWith('data:') ? '' : form.image}
-              onChange={e => set('image', e.target.value)} style={{ flex: 1 }} />
-            <button className="btn bs" style={{ padding: '0 14px', flexShrink: 0 }} onClick={() => fileRef.current?.click()}>📷</button>
-          </div>
-          {form.image && (
-            <div style={{ position: 'relative', marginBottom: 12, borderRadius: 8, overflow: 'hidden', maxHeight: 150, background: 'var(--bg4)' }}>
-              <img src={form.image} alt="" style={{ width: '100%', objectFit: 'cover', display: 'block' }}
-                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              <button style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', border: 'none', borderRadius: 20, padding: '3px 9px', fontSize: 13, cursor: 'pointer' }}
-                onClick={() => set('image', '')}>✕</button>
-            </div>
-          )}
-          <input type="file" accept="image/*" ref={fileRef} style={{ display: 'none' }} onChange={handleImageFile} />
-
-          <span className="lbl">Testo del post</span>
-          <BodyEditor value={form.body} onChange={v => set('body', v)} emojiList={emojiList} />
-
-          <span className="lbl">Tastiera (bottoni)</span>
-          <textarea className="txta"
-            style={{ height: 80, fontFamily: 'monospace', fontSize: 12, marginBottom: 4 }}
-            placeholder={'🛒 Acquista - https://...\n#g 🟢 Verde - https://... && #r 🔴 Rosso - https://...'}
-            value={form.keyboard} onChange={e => set('keyboard', e.target.value)} />
-          <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 16, lineHeight: 1.6 }}>
-            Colori: <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>#g</code> verde &nbsp;
-            <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>#r</code> rosso &nbsp;
-            <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>#b</code> blu &nbsp;·&nbsp;
-            Separa bottoni stessa fila con <code style={{ background: 'var(--bg4)', padding: '1px 3px', borderRadius: 3 }}>&&</code>
-          </div>
-        </div>
-      )}
-
-      {tab === 'preview' && (
-        <PostPreview image={form.image} body={form.body} keyboard={form.keyboard} />
-      )}
-
-      {tab === 'schedule' && (
-        <div style={{ padding: '0 16px' }}>
-          {form.schedules.length === 0 && (
-            <div style={{ textAlign: 'center', color: 'var(--t3)', fontSize: 13, padding: '24px 0 16px' }}>
-              Nessuna programmazione.<br />Aggiungi un orario per inviare automaticamente.
-            </div>
-          )}
-          {form.schedules.map((s, i) => (
-            <ScheduleItem key={s.id || i} sched={s} channels={channels}
-              onChange={updated => set('schedules', form.schedules.map((x, xi) => xi === i ? updated : x))}
-              onDelete={() => set('schedules', form.schedules.filter((_, xi) => xi !== i))} />
-          ))}
-          <button className="btn bs" style={{ width: '100%' }}
-            onClick={() => set('schedules', [...form.schedules, newSchedule(channels[0] ?? '')])}>
-            + Aggiungi programmazione
-          </button>
-        </div>
-      )}
-    </div>
-  );
+function openBotChat(startParam?: string) {
+  const url = startParam ? `${BOT_BASE}?start=${startParam}` : BOT_BASE;
+  const tgWebApp = (window as any).Telegram?.WebApp;
+  if (tgWebApp?.openTelegramLink) tgWebApp.openTelegramLink(url);
+  else window.open(url, '_blank');
 }
 
 // ── Post Card ─────────────────────────────────────────────────
-function PostCard({ post, channels, onEdit, onDelete, onPublish }: {
+function PostCard({ post, channels, onDelete, onPostUpdate, onPublish, onBotOpen }: {
   post: CustomPost; channels: string[];
-  onEdit: () => void; onDelete: () => void;
+  onDelete: () => void;
+  onPostUpdate: (p: CustomPost) => void;
   onPublish: (channel: string) => Promise<void>;
+  onBotOpen: () => void;
 }) {
   const [publishChannel, setPublishChannel] = useState(channels[0] ?? '');
   const [publishing, setPublishing] = useState(false);
-  const schedules = safeSchedules(post.schedules);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [schedules, setSchedules] = useState(safeSchedules(post.schedules));
+  const [savingSchedule, setSavingSchedule] = useState(false);
+
   const activeSchedules = schedules.filter(s => s.active);
+
+  const handleSaveSchedules = async () => {
+    setSavingSchedule(true);
+    try {
+      const updated = await customPostsApi.update(post.id, {
+        title: post.title, image: post.image, body: post.body,
+        keyboard: post.keyboard, schedules,
+      });
+      onPostUpdate({ ...updated, schedules: safeSchedules(updated.schedules) });
+      setShowSchedule(false);
+    } catch (e: any) {
+      alert('Errore salvataggio: ' + e.message);
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
 
   return (
     <div className="card">
+      {/* Header: thumbnail + title */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
         <div style={{ width: 52, height: 52, borderRadius: 8, background: 'var(--bg4)', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
           {post.image
@@ -472,6 +157,7 @@ function PostCard({ post, channels, onEdit, onDelete, onPublish }: {
         </div>
       </div>
 
+      {/* Active schedule badges */}
       {activeSchedules.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
           {activeSchedules.map((s, i) => (
@@ -482,10 +168,49 @@ function PostCard({ post, channels, onEdit, onDelete, onPublish }: {
         </div>
       )}
 
+      {/* 4 action buttons */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-        <button className="btn bs" style={{ flex: 1, padding: '8px 0', fontSize: 12 }} onClick={onEdit}>✏️ Modifica</button>
+        <button className="btn bs" style={{ flex: 1, padding: '8px 0', fontSize: 12 }}
+          onClick={() => { openBotChat('edit_' + post.id); onBotOpen(); }}>
+          ✏️ Modifica
+        </button>
+        <button className="btn bs" style={{ flex: 1, padding: '8px 0', fontSize: 12 }}
+          onClick={() => openBotChat('preview_' + post.id)}>
+          👁 Preview
+        </button>
+        <button className={showSchedule ? 'btn bp' : 'btn bs'} style={{ flex: 1, padding: '8px 0', fontSize: 12 }}
+          onClick={() => setShowSchedule(s => !s)}>
+          📅 Orario
+        </button>
         <button className="btn bre" style={{ padding: '8px 12px', fontSize: 13 }} onClick={onDelete}>🗑</button>
       </div>
+
+      {/* Inline schedule editor */}
+      {showSchedule && (
+        <div style={{ marginBottom: 8 }}>
+          {schedules.length === 0 && (
+            <div style={{ textAlign: 'center', color: 'var(--t3)', fontSize: 13, padding: '12px 0 8px' }}>
+              Nessuna programmazione. Aggiungi un orario.
+            </div>
+          )}
+          {schedules.map((s, i) => (
+            <ScheduleItem key={s.id || i} sched={s} channels={channels}
+              onChange={updated => setSchedules(prev => prev.map((x, xi) => xi === i ? updated : x))}
+              onDelete={() => setSchedules(prev => prev.filter((_, xi) => xi !== i))} />
+          ))}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <button className="btn bs" style={{ flex: 1 }}
+              onClick={() => setSchedules(prev => [...prev, newSchedule(channels[0] ?? '')])}>
+              + Aggiungi
+            </button>
+            <button className="btn bp" style={{ flex: 1 }} onClick={handleSaveSchedules} disabled={savingSchedule}>
+              {savingSchedule ? '...' : '✓ Salva orari'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Channel selector + publish */}
       <div className="irow">
         <select className="sel" style={{ flex: 1, fontSize: 12 }} value={publishChannel} onChange={e => setPublishChannel(e.target.value)}>
           {channels.map(c => <option key={c} value={c}>{c}</option>)}
@@ -493,22 +218,11 @@ function PostCard({ post, channels, onEdit, onDelete, onPublish }: {
         <button className="btn bgr" style={{ padding: '0 14px', flexShrink: 0, fontSize: 12 }}
           onClick={async () => { setPublishing(true); await onPublish(publishChannel); setPublishing(false); }}
           disabled={publishing || !publishChannel}>
-          {publishing ? '...' : '▶ Invia ora'}
+          {publishing ? '...' : '▶ Invio'}
         </button>
       </div>
     </div>
   );
-}
-
-const BOT_LINK = 'https://t.me/amaalipostdealbot?start=newpost';
-
-function openBotChat() {
-  const tgWebApp = (window as any).Telegram?.WebApp;
-  if (tgWebApp?.openTelegramLink) {
-    tgWebApp.openTelegramLink(BOT_LINK);
-  } else {
-    window.open(BOT_LINK, '_blank');
-  }
 }
 
 // ── Main Page ─────────────────────────────────────────────────
@@ -517,45 +231,31 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
   const channels = allChannels.length ? allChannels : (settings.channels ?? []);
 
   const [posts, setPosts] = useState<CustomPost[]>([]);
-  const [emojiList, setEmojiList] = useState<EmojiEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<CustomPost | null>(null);
   const [err, setErr] = useState('');
   const [botHint, setBotHint] = useState(false);
 
   const loadPosts = () => {
     setLoading(true);
-    Promise.all([
-      customPostsApi.list(),
-      emojiIdsApi.list().catch(() => ({ emoji: [] })),
-    ]).then(([data, emojiData]) => {
-      const list = Array.isArray(data) ? data : [];
-      setPosts(list.map(p => ({ ...p, schedules: safeSchedules(p.schedules) })));
-      setEmojiList(emojiData.emoji ?? []);
-    }).catch(e => setErr(e.message || 'Errore caricamento'))
+    customPostsApi.list()
+      .then(data => {
+        const list = Array.isArray(data) ? data : [];
+        setPosts(list.map(p => ({ ...p, schedules: safeSchedules(p.schedules) })));
+      })
+      .catch(e => setErr(e.message || 'Errore caricamento'))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { loadPosts(); }, []);
 
-  const handleNewViaBotClick = () => {
-    setBotHint(true);
-    openBotChat();
-  };
-
-  const handleSave = (saved: CustomPost) => {
-    const safe = { ...saved, schedules: safeSchedules(saved.schedules) };
-    setPosts(prev => {
-      const idx = prev.findIndex(p => p.id === safe.id);
-      return idx >= 0 ? prev.map(p => p.id === safe.id ? safe : p) : [safe, ...prev];
-    });
-    setEditing(null);
-  };
-
   const handleDelete = async (id: string) => {
     if (!window.confirm('Eliminare questo post promo?')) return;
     await customPostsApi.delete(id).catch(() => {});
     setPosts(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handlePostUpdate = (updated: CustomPost) => {
+    setPosts(prev => prev.map(p => p.id === updated.id ? updated : p));
   };
 
   const handlePublish = async (post: CustomPost, channel: string): Promise<void> => {
@@ -568,23 +268,12 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
     }
   };
 
-  if (editing !== null) {
-    return (
-      <PostEditor
-        initial={editing}
-        channels={channels}
-        emojiList={emojiList}
-        onSave={handleSave}
-        onBack={() => setEditing(null)}
-      />
-    );
-  }
-
   return (
     <div className="pg">
       <PageHeader title="Post Promo" onBack={() => nav('dash')} badge={posts.length || undefined}
         right={
-          <button className="btn bp" style={{ padding: '7px 14px', fontSize: 13 }} onClick={handleNewViaBotClick}>
+          <button className="btn bp" style={{ padding: '7px 14px', fontSize: 13 }}
+            onClick={() => { setBotHint(true); openBotChat('newpost'); }}>
             + Nuovo
           </button>
         }
@@ -593,7 +282,6 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
       {err && <ErrorBanner>{err}</ErrorBanner>}
       {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--t3)' }}>Caricamento...</div>}
 
-      {/* Banner che appare dopo aver aperto il bot */}
       {botHint && (
         <div style={{
           margin: '0 16px 14px', padding: '12px 14px', borderRadius: 10,
@@ -602,7 +290,7 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
         }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--a1)', marginBottom: 2 }}>Chat del bot aperta</div>
-            <div style={{ fontSize: 12, color: 'var(--t2)' }}>Crea il post nel bot, poi torna qui e ricarica.</div>
+            <div style={{ fontSize: 12, color: 'var(--t2)' }}>Quando hai finito torna qui e ricarica.</div>
           </div>
           <button className="btn bs" style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
             onClick={() => { setBotHint(false); loadPosts(); }}>
@@ -614,7 +302,7 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
       {!loading && posts.length === 0 && !err && (
         <EmptyState icon="📢" text="Nessun post promo salvato"
           action={
-            <button className="btn bp" onClick={handleNewViaBotClick}>
+            <button className="btn bp" onClick={() => { setBotHint(true); openBotChat('newpost'); }}>
               + Crea il primo post nel bot
             </button>
           }
@@ -622,10 +310,15 @@ function CustomPostsInner({ nav }: { nav: (p: NavPage) => void }) {
       )}
 
       {posts.map(post => (
-        <PostCard key={post.id} post={post} channels={channels}
-          onEdit={() => setEditing(post)}
+        <PostCard
+          key={post.id}
+          post={post}
+          channels={channels}
           onDelete={() => handleDelete(post.id)}
-          onPublish={channel => handlePublish(post, channel)} />
+          onPostUpdate={handlePostUpdate}
+          onPublish={channel => handlePublish(post, channel)}
+          onBotOpen={() => setBotHint(true)}
+        />
       ))}
     </div>
   );

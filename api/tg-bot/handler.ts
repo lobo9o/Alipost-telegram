@@ -4,7 +4,7 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TG_BASE = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 type ConvState = 'idle' | 'waiting_image' | 'waiting_body' | 'waiting_keyboard' | 'waiting_confirm';
-interface ConvData { image?: string; body?: string; keyboard?: string }
+interface ConvData { image?: string; body?: string; keyboard?: string; editPostId?: string }
 
 // ── Telegram API helpers ──────────────────────────────────────────
 
@@ -179,11 +179,21 @@ async function sendPreviewAndConfirm(chatId: number, userId: string, data: ConvD
 async function savePostToDB(userId: string, data: ConvData) {
   const plainBody = (data.body || '').replace(/<[^>]+>/g, '').trim();
   const title = plainBody.split('\n')[0].slice(0, 60) || 'Post Promo';
-  await sql`
-    INSERT INTO custom_posts (user_id, title, image, body, keyboard, schedules)
-    VALUES (${userId}, ${title}, ${data.image || ''}, ${data.body || ''}, ${data.keyboard || ''}, ${sql.json([])})
-  `;
-  console.log(`[tg-bot] post salvato per userId=${userId} title="${title}"`);
+  if (data.editPostId) {
+    await sql`
+      UPDATE custom_posts SET
+        title = ${title}, image = ${data.image || ''}, body = ${data.body || ''},
+        keyboard = ${data.keyboard || ''}, updated_at = NOW()
+      WHERE id = ${data.editPostId} AND user_id = ${userId}
+    `;
+    console.log(`[tg-bot] post aggiornato userId=${userId} id=${data.editPostId} title="${title}"`);
+  } else {
+    await sql`
+      INSERT INTO custom_posts (user_id, title, image, body, keyboard, schedules)
+      VALUES (${userId}, ${title}, ${data.image || ''}, ${data.body || ''}, ${data.keyboard || ''}, ${sql.json([])})
+    `;
+    console.log(`[tg-bot] post salvato per userId=${userId} title="${title}"`);
+  }
 }
 
 // ── Update handler principale ─────────────────────────────────────
@@ -216,6 +226,47 @@ export async function handleUpdate(update: any) {
   if (userMsgId) msgIds.push(userMsgId);
 
   const text = msg?.text || '';
+
+  // ── Modifica post esistente (deep link dall'app) ─────────────
+  if (text.startsWith('/start edit_')) {
+    const postId = text.slice('/start edit_'.length).trim();
+    const [post] = await sql`SELECT * FROM custom_posts WHERE id = ${postId} AND user_id = ${userId}`;
+    if (!post) {
+      await sendMsg(chatId, '❌ Post non trovato o non autorizzato.');
+      return;
+    }
+    const data: ConvData = {
+      image: post.image || '',
+      body: post.body || '',
+      keyboard: post.keyboard || '',
+      editPostId: postId,
+    };
+    const msgIds = userMsgId ? [userMsgId] : [];
+    const introId = await sendMsg(chatId, `✏️ <b>Modifica Post</b>\n\nEcco la preview attuale. Usa i pulsanti per modificare o salva direttamente.`);
+    if (introId) msgIds.push(introId);
+    await sendPreviewAndConfirm(chatId, userId, data, msgIds);
+    return;
+  }
+
+  // ── Preview post nel bot (deep link dall'app) ─────────────────
+  if (text.startsWith('/start preview_')) {
+    const postId = text.slice('/start preview_'.length).trim();
+    const [post] = await sql`SELECT * FROM custom_posts WHERE id = ${postId} AND user_id = ${userId}`;
+    if (!post) {
+      await sendMsg(chatId, '❌ Post non trovato o non autorizzato.');
+      return;
+    }
+    const previewBody = stripTgEmoji(post.body || '').replace(/<[^>]+>/g, '').slice(0, 1024);
+    if (post.image) {
+      await sendPhoto(chatId, post.image, previewBody, {});
+    } else if (previewBody.trim()) {
+      await sendMsg(chatId, previewBody, { parse_mode: undefined });
+    } else {
+      await sendMsg(chatId, '(Nessun testo)');
+    }
+    await sendMsg(chatId, '👁 <i>Questa è la preview reale del post nel canale.\nLe emoji animate appaiono quando il bot ha i permessi MTProto attivi.</i>');
+    return;
+  }
 
   // ── Avvio conversazione (/start newpost o /newpost) ───────────
   if (text === '/newpost' || text.startsWith('/start newpost')) {
@@ -295,7 +346,10 @@ export async function handleUpdate(update: any) {
 
     if (cbData === 'save') {
       await savePostToDB(userId, data);
-      const id1 = await sendMsg(chatId, '✅ <b>Post salvato!</b>\nTorna nell\'app per vederlo, programmarlo e modificarlo.');
+      const saveMsg = data.editPostId
+        ? '✅ <b>Post aggiornato!</b>\nTorna nell\'app per vederlo.'
+        : '✅ <b>Post salvato!</b>\nTorna nell\'app per vederlo, programmarlo e modificarlo.';
+      const id1 = await sendMsg(chatId, saveMsg);
       if (id1) msgIds.push(id1);
       setTimeout(() => clearConv(userId, chatId, msgIds).catch(console.error), 3500);
 
