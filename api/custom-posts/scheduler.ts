@@ -3,9 +3,12 @@ import { sendCustomPost } from './[id].js';
 
 export async function runCustomPostScheduler(): Promise<void> {
   const now = new Date();
-  const todayDay = now.getDay(); // 0=Dom, 1=Lun, ..., 6=Sab
-  const todayStr = now.toISOString().slice(0, 10);
-  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  // Usa sempre il fuso orario italiano (Europe/Rome) indipendentemente dal sistema
+  const romeStr = now.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }); // "2026-07-26 23:23:00"
+  const todayStr = romeStr.slice(0, 10);   // "2026-07-26"
+  const timeStr  = romeStr.slice(11, 16);  // "23:23"
+  const [y, m, d] = todayStr.split('-').map(Number);
+  const todayDay = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Dom … 6=Sab
 
   const posts = await sql`
     SELECT id, user_id, title, image, body, keyboard, schedules
