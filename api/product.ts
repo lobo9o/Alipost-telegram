@@ -134,7 +134,7 @@ function parsePriceStr(s: string): number {
   return parseFloat(clean.replace(',', '.')) || 0;
 }
 
-async function scrapeAmazonPage(asin: string, domain: string): Promise<{
+async function scrapeAmazonPage(asin: string, domain: string, apiPrice = 0): Promise<{
   stelle: string;
   recensioni: string;
   scrapedPrice: number;
@@ -258,16 +258,16 @@ async function scrapeAmazonPage(asin: string, domain: string): Promise<{
       .map(m => parsePriceStr(m[1])).filter(p => p > 0);
     if (apexLPrices.length >= 2) {
       const maxApex = Math.max(...apexLPrices);
-      const apiMatchesAnApex = discountedPrice > 0 &&
-        apexLPrices.some(p => Math.abs(p - discountedPrice) / discountedPrice < 0.05);
+      const apiMatchesAnApex = apiPrice > 0 &&
+        apexLPrices.some(p => Math.abs(p - apiPrice) / apiPrice < 0.05);
       if (apiMatchesAnApex) {
         // Caso B: API ha già il prezzo corretto; il max è il prezzo di riferimento barrato
         if (maxApex > scrapedOrigPrice) {
-          console.log(`[product] apex: prezzo barrato (riferimento) = ${maxApex} | prezzo corrente API = ${discountedPrice} | opzioni: ${apexLPrices.join(',')}`);
+          console.log(`[product] apex: prezzo barrato (riferimento) = ${maxApex} | prezzo corrente API = ${apiPrice} | opzioni: ${apexLPrices.join(',')}`);
           scrapedOrigPrice = maxApex;
         }
         // Se a-offscreen aveva già letto il prezzo barrato come scrapedPrice, correggilo
-        if (scrapedPrice > discountedPrice * 1.05) scrapedPrice = discountedPrice;
+        if (scrapedPrice > apiPrice * 1.05) scrapedPrice = apiPrice;
       } else {
         // Caso A: S&S — il max è il prezzo acquisto singolo (reale)
         if (maxApex > scrapedPrice) {
@@ -833,7 +833,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // customerReviews non è supportato dall'API Creators — scraping pagina prodotto
     // Se il prezzo dall'API è 0, lo scraping prova a recuperarlo dalla pagina HTML
     // Rileva anche clip coupon (checkbox) dalla classe couponLabelText nella pagina
-    const { stelle, recensioni, scrapedPrice, scrapedOrigPrice, clipCoupon, clipCouponPct, hasCheckoutDiscount, checkoutDiscountAmount } = await scrapeAmazonPage(resolvedAsin, marketplaceDomain);
+    const { stelle, recensioni, scrapedPrice, scrapedOrigPrice, clipCoupon, clipCouponPct, hasCheckoutDiscount, checkoutDiscountAmount } = await scrapeAmazonPage(resolvedAsin, marketplaceDomain, discountedPrice);
 
     let finalDiscountedPrice = discountedPrice;
     let finalOriginalPrice   = originalPrice;
