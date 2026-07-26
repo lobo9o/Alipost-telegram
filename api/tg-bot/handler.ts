@@ -72,8 +72,8 @@ function entitiesToHtml(text: string, entities: any[] = []): string {
     events.push({ pos: e.offset, open: true, e });
     events.push({ pos: e.offset + e.length, open: false, e });
   }
-  // Ordina per posizione; a parità: prima apertura
-  events.sort((a, b) => a.pos !== b.pos ? a.pos - b.pos : (a.open ? -1 : 1));
+  // Ordina per posizione; a parità: prima chiusura (così tag adiacenti non si innestano)
+  events.sort((a, b) => a.pos !== b.pos ? a.pos - b.pos : (a.open ? 1 : -1));
 
   let html = '';
   let i = 0;
