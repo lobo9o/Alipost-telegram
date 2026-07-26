@@ -352,7 +352,7 @@ async function scrapeAmazonPage(asin: string, domain: string, apiPrice = 0): Pro
     // Cerca "Risparmia X,XX € al check-out" nell'HTML
     let hasCheckoutDiscount = false;
     let checkoutDiscountAmount = 0;
-    const checkoutM = html.match(/Risparmia\s+([\d]+[,.][\d]{1,2})\s*(?:&nbsp;)?\s*(?:€|&euro;)?\s*al\s+check-out/i);
+    const checkoutM = html.match(/Risparmia\s+([\d]+(?:[,.][\d]{1,2})?)\s*(?:&nbsp;|\s)*(?:€|&euro;)?\s*al\s+check-?out/i);
     if (checkoutM) {
       hasCheckoutDiscount = true;
       checkoutDiscountAmount = parsePriceStr(checkoutM[1]);
