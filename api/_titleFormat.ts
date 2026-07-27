@@ -10,6 +10,8 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(macbook|laptop|notebook|ultrabook|chromebook)\b/i, emoji: '💻' },
   { re: /\b(pc|computer|desktop|tower).{0,10}(portatil|fisso|gaming|win)/i, emoji: '🖥️' },
   { re: /\b(monitor)\b|\b(display)\b.{0,15}(pollici|inch|4k|2k|qhd|fhd|ips|va|oled)/i, emoji: '🖥️' },
+  { re: /\bmsi\b.{0,15}(mag|optix|artymis)\b/i, emoji: '🖥️' },
+  { re: /\b(144hz|165hz|240hz|360hz|120hz|75hz)\b/i, emoji: '🖥️' },
   { re: /\b(micro.?sd|scheda.{0,8}(memoria|sd)|memory.?card|pendrive|pen.?drive|chiavetta.{0,8}usb|usb.{0,5}(stick|flash|drive)|hard.?disk|hdd|ssd|disco.{0,10}(rigido|esterno)|nvme)\b/i, emoji: '💾' },
   { re: /\b(mouse|trackpad|trackball)\b/i, emoji: '🖱️' },
   { re: /\b(ventola|ventole|case.?fan|cpu.?fan|pwm.{0,10}fan|rgb.{0,10}fan)\b/i, emoji: '🖥️' },
@@ -56,6 +58,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(aspirapolvere|scopa.{0,10}elettrica|dyson|swiffer|cattura.{0,8}polvere|sweeper|mocio)\b/i, emoji: '🧹' },
 
   // ── Lavatrici & Grandi Elettrodomestici ───────────────────────────────────
+  { re: /\b(ferro.{0,15}(stiro|vapore)|generatore.{0,10}vapore|stiratrice|stiratore)\b/i, emoji: '🧺' },
   { re: /\b(lavatrice|asciugatrice|lavasciuga)\b/i, emoji: '🧺' },
   { re: /\b(lavastoviglie|dishwasher)\b/i, emoji: '🍽️' },
   { re: /\b(frigorifero|freezer|frigo|refrigerator)\b/i, emoji: '🧊' },
@@ -87,6 +90,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
 
   // ── Arredamento ────────────────────────────────────────────────────────────
   { re: /\b(copridivano|copridivani|fodera.{0,10}(divano|sofa))\b/i, emoji: '🛋️' },
+  { re: /\b(sdraio|prendisole|lettino.{0,10}(spiaggia|mare|piscina|outdoor|esterno))\b/i, emoji: '🪑' },
   { re: /\b(sedia|poltrona|divano|pouf)\b/i, emoji: '🪑' },
   { re: /\b(tavolo|scrivania|libreria|scaffale|armadio|comodino)\b/i, emoji: '🪑' },
   { re: /\b(tenda|tende|veneziana|rullo.{0,10}oscurante)\b/i, emoji: '🪟' },
@@ -96,7 +100,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(pannolino|pampers|huggies)\b/i, emoji: '👶' },
 
   // ── Capelli & Styling ─────────────────────────────────────────────────────
-  { re: /\b(piastra.{0,15}capelli|ferro.{0,10}(capelli|conico|arricciacapelli)|arricciacapelli|arricciatore|asciugacapelli|hair.?dryer|phon)\b/i, emoji: '💇' },
+  { re: /\b(piastra.{0,15}capelli|ferro.{0,10}(capelli|conico|arricciacapelli)|arricciacapelli|arricciatore|asciugacapelli|hair.?dryer|phon|studio.?dry)\b/i, emoji: '💇' },
 
   // ── Rasoi & Depilazione ────────────────────────────────────────────────────
   { re: /\b(rasoio|regolabarba|braun.{0,10}serie|philips.{0,10}(oneblade|aquatouch))\b/i, emoji: '🪒' },
@@ -113,11 +117,16 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(candel[ae]|tealight|tea.?light|woodwick|yankee.?candle|diffusore.{0,15}(ambiente|profumato)|wax.?melt)\b/i, emoji: '🕯️' },
   { re: /\b(profumatore|deodorante.{0,15}ambiente)\b/i, emoji: '🌸' },
 
+  // ── Solare & SPF ──────────────────────────────────────────────────────────
+  { re: /\b(spf\s*\d+|crema.{0,10}solare|solare.{0,5}(spray|fluido|trigger|latte|crema)|abbronzante|doposole|after.?sun|sunscreen)\b/i, emoji: '🌞' },
+
   // ── Skincare & Crema ──────────────────────────────────────────────────────
+  { re: /\b(fluido.{0,8}viso|ialuronico?|aloe.{0,15}(viso|pelle|ialuronic))\b/i, emoji: '🧴' },
   { re: /\b(crema|siero|contorno.{0,10}(occhi|viso)|idratante|struccante|skincare|toner.{0,10}(viso|pelle)|moisturizer)\b/i, emoji: '🧴' },
 
   // ── Shampoo & Doccia ──────────────────────────────────────────────────────
-  { re: /\b(shampoo|balsamo|doccia.?schiuma|bagno.?schiuma|bagnoschiuma|bagnodoccia|bagno.?doccia|sapone|deodorante|roll.?on|body.?spray|borotalco|talco.{0,10}(corpo|baby|bambin))\b/i, emoji: '🧴' },
+  { re: /\bdove\b.{0,25}(doccia|shampoo|men|care|body|wash|gel|spray|deodorante)\b/i, emoji: '🧴' },
+  { re: /\b(shampoo|balsamo|doccia.?schiuma|bagno.?schiuma|bagnoschiuma|bagnodoccia|bagno.?doccia|doccia\b|sapone|deodorante|roll.?on|body.?spray|borotalco|talco.{0,10}(corpo|baby|bambin))\b/i, emoji: '🧴' },
 
   // ── Make-up ────────────────────────────────────────────────────────────────
   { re: /\b(rossetto|mascara|fondotinta|correttore|blush|cipria|palette|ombretto|kajal|eyeliner)\b/i, emoji: '💄' },
@@ -147,11 +156,11 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(calzin[io]|calze|calza|socks?)\b/i, emoji: '🧦' },
   { re: /\b(boxer(?:.{0,10}(uomo|donna|vita))?|pantaloncini.{0,10}boxer|slip.{0,10}(uomo|donna)|mutande|intimo.{0,10}(uomo|donna))\b/i, emoji: '🩲' },
   { re: /\b(tuta|sweatsuit|tracksuit)\b/i, emoji: '🏃' },
-  { re: /\b(giacca|giubbotto|cappotto|parka|piumino).{0,20}(uomo|donna|taglia|invernale)\b/i, emoji: '🧥' },
+  { re: /\b(giacca|giubbotto|cappotto|parka|piumino)\b/i, emoji: '🧥' },
   { re: /\b(scarpe.{0,25}(donna|tacco|col\s+tacco)|tacchi|decollete|ballerine|stiletto)\b/i, emoji: '👠' },
   { re: /\b(scarpe.{0,25}uomo|mocassini)\b/i, emoji: '👞' },
   { re: /\b(stivali)\b/i, emoji: '👢' },
-  { re: /\b(infradito|ciabatte|flip.?flop|havaianas|sandalo|sandali)\b/i, emoji: '🩴' },
+  { re: /\b(infradito|ciabatte|flip.?flop|havaianas|sandal[oi]|slides?|pool.?slide)\b/i, emoji: '🩴' },
   { re: /\b(scarpe)\b/i, emoji: '👟' },
   { re: /\b(zaino|zaini|eastpak|backpack)\b/i, emoji: '🎒' },
   { re: /\b(valigia|valigie|trolley|bagaglio)\b/i, emoji: '🧳' },
@@ -160,7 +169,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(cappello|berretto|cappellino|beanie)\b/i, emoji: '🧢' },
   { re: /\b(occhiali.{0,10}(sole|vista|lettura))\b/i, emoji: '🕶️' },
   { re: /\b(maglia|maglione|pullover|cardigan)\b/i, emoji: '🧶' },
-  { re: /\b(maglietta|t-shirt|felpa|polo.{0,20}(uomo|donna|bambino|bambina|shirt|cotone|manica)|camicia|helly.?hansen|north.?face|columbia.{0,10}(giacca|giubbotto|felpa|magliett)|tommy.?hilfiger|ralph.?lauren|lacoste)\b/i, emoji: '👕' },
+  { re: /\b(maglietta|t-shirt|felpa|polo.{0,20}(uomo|donna|bambino|bambina|shirt|cotone|manica)|camicia|sweatshirt|crew.?neck|crewneck|helly.?hansen|north.?face|columbia.{0,10}(giacca|giubbotto|felpa|magliett)|tommy.?hilfiger|ralph.?lauren|lacoste)\b/i, emoji: '👕' },
   { re: /\b(pantaloni|jeans|shorts|bermuda|leggings)\b/i, emoji: '👖' },
   { re: /\b(costume.{0,10}bagno|bikini|trikini)\b/i, emoji: '👙' },
   { re: /\b(cintura|cinture)\b/i, emoji: '👔' },
@@ -180,7 +189,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(olio.{0,10}oliva|olio.{0,10}evo|extravergine)\b/i, emoji: '🫒' },
   { re: /\b(vino|prosecco|spumante|champagne)\b/i, emoji: '🍷' },
   { re: /\b(birra|craft beer)\b/i, emoji: '🍺' },
-  { re: /\b(integratore|vitamina|omega.?3|proteina|protein|whey|creatina|collagene|multivitaminico|bcaa|aminoacid|fermenti.{0,10}lattici|enterogermina|probiotici|lactobacill|magnesio|zinco|potassio|selenio|coenzima|melatonina?|curcuma|ashwagandha?|berberina|spirulina?|triptofano|5.?htp|acido.{0,10}folico|bisglicinato)\b/i, emoji: '💊' },
+  { re: /\b(integratore|vitamina|omega.?3|proteina|protein|whey|creatina|collagene|multivitaminico|bcaa|aminoacid|fermenti.{0,10}lattici|enterogermina|probiotici|lactobacill|magnesio|zinco|potassio|selenio|coenzima|melatonina?|curcuma|ashwagandha?|berberina|spirulina?|triptofano|5.?htp|acido.{0,10}folico|bisglicinato|cranberry|mirtillo.{0,8}rosso|vie.{0,10}urinarie|benessere.{0,15}(urinari|vie))\b/i, emoji: '💊' },
   { re: /\b(gasatore|sodastream|sifone.{0,10}(acqua|soda))\b/i, emoji: '🫧' },
   { re: /\b(acqua.{0,10}(minerale|frizzante)|bevanda|succo|tè|te |infuso|tisana)\b/i, emoji: '🥤' },
   { re: /\b(snack|patatine|pop.?corn|frutta secca|noci|mandorle)\b/i, emoji: '🍿' },
@@ -226,6 +235,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
 
   // ── Ufficio & Cancelleria ─────────────────────────────────────────────────
   { re: /\b(sedia.{0,10}ufficio|poltrona.{0,10}ufficio|sedia.{0,10}ergonomica|gaming chair)\b/i, emoji: '🪑' },
+  { re: /\b(astuccio|astucci|zaino.{0,10}scuola|cartella.{0,10}scuola)\b/i, emoji: '✏️' },
   { re: /\b(penna|matita|evidenziatore|quaderno|taccuino|agenda|blocco.?notes)\b/i, emoji: '✏️' },
   { re: /\b(distruggi.?documenti|timbro|cucitrice|perforatrice)\b/i, emoji: '📎' },
 
