@@ -199,6 +199,7 @@ const KEYWORD_RULES: Array<{ re: RegExp; emoji: string }> = [
   { re: /\b(birra|craft beer)\b/i, emoji: '🍺' },
   { re: /\b(integratore|vitamina|omega.?3|proteina|protein|whey|creatina|collagene|multivitaminico|bcaa|aminoacid|fermenti.{0,10}lattici|enterogermina|probiotici|lactobacill|magnesio|zinco|potassio|selenio|coenzima|melatonina?|curcuma|ashwagandha?|berberina|spirulina?|triptofano|5.?htp|acido.{0,10}folico|bisglicinato|cranberry|mirtillo.{0,8}rosso|vie.{0,10}urinarie|benessere.{0,15}(urinari|vie)|no.?dol|esi.{0,5}(capsule|compresse)|capsule.{0,10}esi)\b/i, emoji: '💊' },
   { re: /\b(gasatore|sodastream|sifone.{0,10}(acqua|soda))\b/i, emoji: '🫧' },
+  { re: /\b(coca.?cola|pepsi|sprite|fanta|red.?bull|monster.{0,10}(energy|drink)|energy.?drink|bibita|bibite|gassata|zero.{0,10}caffeina|zero.{0,10}zuccheri)\b/i, emoji: '🥤' },
   { re: /\b(acqua.{0,10}(minerale|frizzante)|bevanda|succo|tè|te |infuso|tisana)\b/i, emoji: '🥤' },
   { re: /\b(snack|patatine|pop.?corn|frutta secca|noci|mandorle)\b/i, emoji: '🍿' },
   { re: /\b(gelato|ghiacciolo|sorbetto)\b/i, emoji: '🍦' },
