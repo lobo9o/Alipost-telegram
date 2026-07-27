@@ -147,35 +147,38 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
     });
   }
 
-  // Costruisce caption rispettando telegramMode — identico alla terminata automatica di publish.ts
+  // Recupera layout e tag sempre — servono sia per 'append' che per re-applicare emoji in 'keep'
+  const layoutIdToUse = post.layoutId ?? termCfg.layoutId ?? null;
+  const [termLayoutRow] = layoutIdToUse ? await sql`
+    SELECT body FROM layouts WHERE id = ${layoutIdToUse}
+      AND (user_id = ${post.user_id} OR user_id = ${baseUserId})
+  `.catch(() => [null]) : [null];
+
+  const tagRows = await sql`
+    SELECT name, value FROM tags
+    WHERE user_id = ${post.user_id} OR user_id = ${baseUserId}
+    ORDER BY (user_id = ${post.user_id}) ASC
+  `.catch(() => []);
+  const customTags: Record<string, string> = {};
+  for (const tr of tagRows) customTags[tr.name as string] = tr.value as string;
+
+  const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
+  const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+  const affUrl = post.sourceUrl
+    || (post.productId ? `https://${domain}/dp/${post.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}` : '');
+
+  // customText è "errore di prezzo" — nel post terminato lo azzeriamo
+  const postForCaption = { ...post, customText: '' };
+  // Testo originale del post (senza marcatore terminata) — usato per re-applicare emoji in keep
+  const originalCaption = termLayoutRow?.body
+    ? buildMessage(String(termLayoutRow.body), postForCaption, affUrl, undefined, customTags)
+    : '';
+
+  // Costruisce caption Telegram rispettando telegramMode
   let caption: string | undefined;
   if (telegramMode === 'only') {
     caption = terminataText;
   } else if (telegramMode === 'append') {
-    // Ricostruisce il testo completo del post con il layout, poi appende il testo terminata
-    const layoutIdToUse = post.layoutId ?? termCfg.layoutId ?? null;
-    const [termLayoutRow] = layoutIdToUse ? await sql`
-      SELECT body FROM layouts WHERE id = ${layoutIdToUse}
-        AND (user_id = ${post.user_id} OR user_id = ${baseUserId})
-    `.catch(() => [null]) : [null];
-
-    const tagRows = await sql`
-      SELECT name, value FROM tags
-      WHERE user_id = ${post.user_id} OR user_id = ${baseUserId}
-      ORDER BY (user_id = ${post.user_id}) ASC
-    `.catch(() => []);
-    const customTags: Record<string, string> = {};
-    for (const tr of tagRows) customTags[tr.name as string] = tr.value as string;
-
-    const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
-    const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
-    const affUrl = post.sourceUrl
-      || (post.productId ? `https://${domain}/dp/${post.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}` : '');
-
-    const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato}{valuta} <s>{oldprezzo}{valuta}</s>\n🏷️ Sconto: -{sconto}%\n\n{_<b>{custom}</b>_}`;
-    // customText è "errore di prezzo" — nel post terminato lo azzeriamo per non lasciare
-    // la dicitura originale accanto al testo terminata
-    const postForCaption = { ...post, customText: '' };
     const builtCaption = termLayoutRow?.body
       ? buildMessage(String(termLayoutRow.body), postForCaption, affUrl, undefined, customTags, terminataText)
       : '';
@@ -214,8 +217,13 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
   }
 
   await sql`UPDATE published_posts SET terminata = true WHERE id = ${post.id}`.catch(() => {});
-  if (caption !== undefined && chatId && msgId && cfg.emojiAnimated?.enabled !== false) {
-    applyCustomEmoji({ baseUserId, chatId: String(chatId), messageId: Number(msgId), htmlText: caption.slice(0, 1024), enabled: true }).catch(() => {});
+
+  // Re-applica emoji animate MTProto dopo ogni edit Bot API (le entità custom vengono perse).
+  // 'keep' con immagine: usa testo originale (invariato nel messaggio ma entità perse per editMedia)
+  // 'append'/'only': usa il nuovo testo del messaggio
+  const htmlForEmoji = caption ?? (termImg && originalCaption ? originalCaption : undefined);
+  if (htmlForEmoji && chatId && msgId && cfg.emojiAnimated?.enabled !== false) {
+    applyCustomEmoji({ baseUserId, chatId: String(chatId), messageId: Number(msgId), htmlText: htmlForEmoji, enabled: true }).catch(() => {});
   }
   console.log(`[price-watch] terminato: ${post.id} (${post.productId} ${Number(post.discountedPrice)}→${currentPrice})`);
 }
