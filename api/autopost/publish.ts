@@ -837,6 +837,11 @@ function buildMessage(
   const disc = Number(post.discountPercent);
   const titleShort = (post.title || '').length > maxTitleLen ? (post.title || '').slice(0, maxTitleLen - 3) + '...' : (post.title || '');
 
+  // boxcoupon = coupon spuntabile su Amazon (nessun codice da digitare).
+  // Trattato come boxcoupon: flag esplicito, stringa 'coupon', valore numerico/monetario
+  // (es. '3.06', '3.06€', '10%') = importo badge. Solo stringhe con lettere = vero codice.
+  const isBoxCoupon = post.boxcoupon || post.coupon === 'coupon' || /^\d+([.,]\d+)?[€%]?$/.test(String(post.coupon || '').trim());
+
   const tags: Record<string, string> = {
     // Tag personalizzati dal DB — le assegnazioni esplicite sotto hanno priorità
     ...customTags,
@@ -870,9 +875,8 @@ function buildMessage(
     '{recensioni}':      post.recensioni || '',
     '{cat}':             post.cat || '',
     '{author}':          esc(post.author || ''),
-    // coupon === 'coupon' = badge rilevato ma valore JS-rendered non disponibile → tratta come boxcoupon
-    '{coupon}':          (post.boxcoupon || post.coupon === 'coupon') ? '' : (post.coupon || ''),
-    '{boxcoupon}':       (post.boxcoupon || post.coupon === 'coupon') ? (customTags['{boxcoupon}'] || 'Abilita il coupon prima di acquistare') : '',
+    '{coupon}':          isBoxCoupon ? '' : (post.coupon || ''),
+    '{boxcoupon}':       isBoxCoupon ? (customTags['{boxcoupon}'] || 'Abilita il coupon prima di acquistare') : '',
     '{checkout}':        post.checkout || '',
     '{emojicat}':        getProductEmoji(post.title || '', post.cat || ''),
   };
