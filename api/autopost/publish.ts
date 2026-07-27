@@ -1295,6 +1295,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const salePrice = parseFloat(candidate.target_sale_price ?? '0') || 0;
           const origPrice = parseFloat(candidate.target_original_price ?? '0') || salePrice;
           const affUrl    = candidate.promotion_link || `https://www.aliexpress.com/item/${candidate.product_id}.html`;
+          const candidatePlatform: 'amazon' | 'aliexpress' = affUrl.toLowerCase().includes('amazon') ? 'amazon' : 'aliexpress';
           const aliCurrSym2 = ALI_CURRENCY_SYM[country] ?? '€';
 
           // Carica template e layout utente (come per Amazon)
@@ -1306,7 +1307,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const aliKeyboardId = String(aliLayoutRows[0]?.keyboard_id ?? '');
 
           post = {
-            id: crypto.randomUUID(), platform: 'aliexpress',
+            id: crypto.randomUUID(), platform: candidatePlatform,
             sourceUrl: affUrl, productId: String(candidate.product_id),
             title: candidate.product_title ?? '',
             image: candidate.product_main_image_url ?? '',
