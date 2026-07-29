@@ -1112,6 +1112,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const published: string[] = [];
   const skipped: string[] = [];
   const errors: string[] = [];
+  // Dedup cross-profilo: evita che profilo primario e secondario pubblichino sullo stesso canale
+  // nello stesso ciclo cron. Chiave: "baseUserId:channel"
+  const publishedChannelsThisRun = new Set<string>();
 
   for (const row of settingsRows) {
     const userId = row.user_id as string;
@@ -1139,6 +1142,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       : cfgChannels2.length > 0 ? cfgChannels2 : channelFromId2 ? [channelFromId2] : [];
 
     if (!channels.length) { skipped.push(`${userId}: no channels`); continue; }
+
+    // Dedup cross-profilo: se un altro profilo dello stesso utente ha già pubblicato
+    // su questo canale in questo ciclo, salta per evitare post doppi.
+    const destCh0 = channelOverride ? channels[0] : (channels[0] ?? '');
+    const chanDedupKey = `${baseUserId}:${destCh0}`;
+    if (!channelOverride && publishedChannelsThisRun.has(chanDedupKey)) {
+      skipped.push(`${userId}: skip — ${destCh0} già pubblicato da profilo ${baseUserId} in questo ciclo`);
+      continue;
+    }
 
     // Controlla se c'è almeno un item immediate in coda — se sì, salta tutti i controlli di timing
     const [immediateItem] = await sql`
@@ -2030,6 +2042,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       // Rimuove dalla coda
       await sql`DELETE FROM autopost_queue WHERE id = ${queueItem.id}`.catch(() => {});
 
+      publishedChannelsThisRun.add(chanDedupKey);
       published.push(`${userId}: "${String(post.title ?? '').slice(0, 50)}"`);
       console.log(`[autopost] pubblicato userId=${userId} postId=${post.id}`);
 
