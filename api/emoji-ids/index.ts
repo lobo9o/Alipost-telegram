@@ -20,44 +20,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     const action = (req.body?.action ?? req.query.action) as string | undefined;
 
     if (action === 'discover') {
-      // Carica bot token dalle settings utente
-      const [settings] = await sql`SELECT data FROM settings WHERE user_id = ${userId}`;
-      const raw = settings?.data ?? {};
-      const cfg = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, any>;
-      const botToken = cfg.telegram?.botToken || process.env.TELEGRAM_BOT_TOKEN;
-      if (!botToken) return res.status(400).json({ error: 'Token bot non configurato nelle impostazioni' });
+      // Il webhook del bot salva le emoji animate in tg_emoji_buffer (per userId base).
+      // "Scopri emoji" legge dal buffer e le copia su emoji_ids per il profilo/canale corrente.
+      const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
 
-      // Leggi offset salvato (per non ri-processare update già visti)
-      const savedOffset = Number(cfg.tgUpdateOffset ?? 0);
-      const tgBase = `https://api.telegram.org/bot${botToken}`;
+      const buffered = await sql`
+        SELECT emoji_char, custom_emoji_id FROM tg_emoji_buffer
+        WHERE base_user_id = ${baseUserId}
+      `.catch(() => [] as any[]);
 
-      const updRes = await fetch(
-        `${tgBase}/getUpdates?offset=${savedOffset}&limit=100&timeout=0&allowed_updates=${encodeURIComponent('["message"]')}`,
-      );
-      const updData = await updRes.json() as any;
-      if (!updData.ok) return res.status(500).json({ error: updData.description ?? 'Errore Telegram' });
-
-      const updates: any[] = updData.result ?? [];
-      let newOffset = savedOffset;
-      const discovered: Array<{ emoji_char: string; custom_emoji_id: string }> = [];
-
-      for (const upd of updates) {
-        newOffset = Math.max(newOffset, upd.update_id + 1);
-        // Solo messaggi privati al bot — mai channel_post per non rischiare di cancellare post dal canale
-        const msg = upd.message;
-        if (!msg || msg.chat?.type !== 'private') continue;
-        const entities: any[] = [...(msg.entities ?? []), ...(msg.caption_entities ?? [])];
-        const text: string = msg.text ?? msg.caption ?? '';
-        for (const entity of entities) {
-          if (entity.type === 'custom_emoji' && entity.custom_emoji_id) {
-            const emojiChar = text.slice(entity.offset, entity.offset + entity.length);
-            if (emojiChar) discovered.push({ emoji_char: emojiChar, custom_emoji_id: entity.custom_emoji_id });
-          }
-        }
-      }
-
-      // Salva emoji trovate (upsert per char)
-      for (const { emoji_char, custom_emoji_id } of discovered) {
+      for (const { emoji_char, custom_emoji_id } of buffered as { emoji_char: string; custom_emoji_id: string }[]) {
         await sql`
           INSERT INTO emoji_ids (user_id, emoji_char, custom_emoji_id)
           VALUES (${userId}, ${emoji_char}, ${custom_emoji_id})
@@ -66,37 +38,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         `;
       }
 
-      // Cancella solo i messaggi privati al bot che contenevano emoji custom
-      const msgsToDelete: Array<{ chatId: number; messageId: number }> = [];
-      for (const upd of updates) {
-        const msg = upd.message;
-        if (!msg || msg.chat?.type !== 'private') continue;
-        const entities: any[] = [...(msg.entities ?? []), ...(msg.caption_entities ?? [])];
-        const hasCustomEmoji = entities.some((e: any) => e.type === 'custom_emoji');
-        if (hasCustomEmoji) msgsToDelete.push({ chatId: msg.chat.id, messageId: msg.message_id });
-      }
-      for (const { chatId, messageId } of msgsToDelete) {
-        await fetch(`${tgBase}/deleteMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
-        }).catch(() => null);
-      }
-
-      // Aggiorna offset in settings così i prossimi discover partono da qui
-      if (newOffset > savedOffset) {
-        await sql`
-          UPDATE settings
-          SET data = data || ${sql.json({ tgUpdateOffset: newOffset })}
-          WHERE user_id = ${userId}
-        `;
-      }
-
       const rows = await sql`
         SELECT emoji_char, custom_emoji_id FROM emoji_ids
         WHERE user_id = ${userId} ORDER BY created_at DESC
       `;
-      return res.json({ discovered: discovered.length, emoji: rows });
+      return res.json({ discovered: (buffered as any[]).length, emoji: rows });
     }
 
     if (action === 'from_pack') {

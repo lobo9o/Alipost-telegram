@@ -420,7 +420,7 @@ export async function handleUpdate(update: any) {
     return;
   }
 
-  // Stato idle: intercetta emoji animate per discovery, altrimenti risposta generica
+  // Stato idle: intercetta emoji animate → buffer temporaneo, altrimenti risposta generica
   if (msg) {
     const entities: any[] = [...(msg.entities ?? []), ...(msg.caption_entities ?? [])];
     const text: string = msg.text ?? msg.caption ?? '';
@@ -432,15 +432,29 @@ export async function handleUpdate(update: any) {
       }
     }
     if (discovered.length > 0) {
+      // Salva nel buffer temporaneo (non in emoji_ids): l'utente poi preme "Scopri emoji"
+      // dal canale specifico e le emoji vengono trasferite sul profilo giusto.
+      await sql`
+        CREATE TABLE IF NOT EXISTS tg_emoji_buffer (
+          base_user_id TEXT NOT NULL,
+          emoji_char   TEXT NOT NULL,
+          custom_emoji_id TEXT NOT NULL,
+          received_at  TIMESTAMPTZ DEFAULT now(),
+          PRIMARY KEY (base_user_id, emoji_char)
+        )
+      `.catch(() => {});
       for (const { emoji_char, custom_emoji_id } of discovered) {
         await sql`
-          INSERT INTO emoji_ids (user_id, emoji_char, custom_emoji_id)
+          INSERT INTO tg_emoji_buffer (base_user_id, emoji_char, custom_emoji_id)
           VALUES (${userId}, ${emoji_char}, ${custom_emoji_id})
-          ON CONFLICT (user_id, emoji_char)
-          DO UPDATE SET custom_emoji_id = EXCLUDED.custom_emoji_id
+          ON CONFLICT (base_user_id, emoji_char)
+          DO UPDATE SET custom_emoji_id = EXCLUDED.custom_emoji_id, received_at = now()
         `.catch(() => {});
       }
-      await sendMsg(chatId, `✅ ${discovered.length} emoji anim${discovered.length === 1 ? 'ata salvata' : 'ate salvate'}!`);
+      await sendMsg(chatId,
+        `✅ ${discovered.length} emoji anim${discovered.length === 1 ? 'ata rilevata' : 'ate rilevate'}!\n` +
+        'Ora vai nel <b>canale</b> nell\'app e premi <b>Scopri emoji</b> per salvarle.'
+      );
       return;
     }
     await sendMsg(chatId,
