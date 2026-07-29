@@ -451,10 +451,15 @@ export async function handleUpdate(update: any) {
           DO UPDATE SET custom_emoji_id = EXCLUDED.custom_emoji_id, received_at = now()
         `.catch(() => {});
       }
-      await sendMsg(chatId,
+      const replyId = await sendMsg(chatId,
         `✅ ${discovered.length} emoji anim${discovered.length === 1 ? 'ata rilevata' : 'ate rilevate'}!\n` +
         'Ora vai nel <b>canale</b> nell\'app e premi <b>Scopri emoji</b> per salvarle.'
       );
+      // Cancella il messaggio utente e la risposta del bot dopo 6 secondi
+      const toDelete = [replyId, userMsgId].filter(Boolean) as number[];
+      setTimeout(() => {
+        Promise.allSettled(toDelete.map(id => tg('deleteMessage', { chat_id: chatId, message_id: id })));
+      }, 6000);
       return;
     }
     await sendMsg(chatId,
