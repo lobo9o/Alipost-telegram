@@ -420,8 +420,29 @@ export async function handleUpdate(update: any) {
     return;
   }
 
-  // Stato idle: risposta generica
+  // Stato idle: intercetta emoji animate per discovery, altrimenti risposta generica
   if (msg) {
+    const entities: any[] = [...(msg.entities ?? []), ...(msg.caption_entities ?? [])];
+    const text: string = msg.text ?? msg.caption ?? '';
+    const discovered: Array<{ emoji_char: string; custom_emoji_id: string }> = [];
+    for (const entity of entities) {
+      if (entity.type === 'custom_emoji' && entity.custom_emoji_id) {
+        const emojiChar = text.slice(entity.offset, entity.offset + entity.length);
+        if (emojiChar) discovered.push({ emoji_char: emojiChar, custom_emoji_id: String(entity.custom_emoji_id) });
+      }
+    }
+    if (discovered.length > 0) {
+      for (const { emoji_char, custom_emoji_id } of discovered) {
+        await sql`
+          INSERT INTO emoji_ids (user_id, emoji_char, custom_emoji_id)
+          VALUES (${userId}, ${emoji_char}, ${custom_emoji_id})
+          ON CONFLICT (user_id, emoji_char)
+          DO UPDATE SET custom_emoji_id = EXCLUDED.custom_emoji_id
+        `.catch(() => {});
+      }
+      await sendMsg(chatId, `✅ ${discovered.length} emoji anim${discovered.length === 1 ? 'ata salvata' : 'ate salvate'}!`);
+      return;
+    }
     await sendMsg(chatId,
       '👋 Scrivi /newpost per creare un nuovo post promo.\n' +
       'Oppure usa il pulsante <b>+ Nuovo</b> nell\'app.'
