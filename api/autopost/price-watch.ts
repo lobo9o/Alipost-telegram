@@ -7,6 +7,8 @@ import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 
 // In-memory: timestamp dell'ultimo check per ogni post (reset al riavvio)
 const lastChecked = new Map<string, number>(); // postId → ms
+// Contatore di risultati null consecutivi per postId: dopo 3 null → termina
+const nullHits = new Map<string, number>(); // postId → count
 
 const MARKETPLACE_DOMAINS: Record<string, string> = {
   IT: 'www.amazon.it', US: 'www.amazon.com', DE: 'www.amazon.de',
@@ -50,13 +52,17 @@ async function scrapeAmazonPrice(domain: string, asin: string): Promise<number |
 }
 
 // Ottieni prezzo corrente: prima PA API (via checkPostPrice), poi scraping HTML come fallback.
-async function getCurrentPrice(post: any, cfg: Record<string, any>): Promise<number | null> {
+// Ritorna { price, unavailable } — unavailable=true se il prodotto non è più su Amazon.
+async function getCurrentPrice(post: any, cfg: Record<string, any>): Promise<{ price: number | null; unavailable: boolean }> {
   const check = await checkPostPrice(post, cfg).catch(() => null);
-  if (check?.currentPrice != null) return check.currentPrice;
+  // valid:false dalla PA API = prodotto non più disponibile → termina subito
+  if (check?.valid === false) return { price: null, unavailable: true };
+  if (check?.currentPrice != null) return { price: check.currentPrice, unavailable: false };
 
   const mktCode = (cfg.amazon?.marketplace || 'IT').toUpperCase();
   const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
-  return scrapeAmazonPrice(domain, String(post.productId));
+  const price = await scrapeAmazonPrice(domain, String(post.productId));
+  return { price, unavailable: false };
 }
 
 async function terminatePost(post: any, currentPrice: number, cfg: Record<string, any>) {
@@ -274,6 +280,7 @@ export async function runPriceWatchCheck() {
     const storedPrice = Number(post.discountedPrice);
     let currentPrice: number | null;
 
+    let unavailable = false;
     if (runPriceCache.has(post.productId)) {
       currentPrice = runPriceCache.get(post.productId) ?? null;
       console.log(`[price-watch] ${post.productId}: cache current=${currentPrice ?? '?'}`);
@@ -282,8 +289,10 @@ export async function runPriceWatchCheck() {
       if (now - lastTime < 90_000) continue;
       lastChecked.set(post.id, now);
 
-      currentPrice = await getCurrentPrice(post, cfg);
-      console.log(`[price-watch] ${post.productId}: stored=${storedPrice} current=${currentPrice ?? '?'}`);
+      const result = await getCurrentPrice(post, cfg);
+      currentPrice = result.price;
+      unavailable  = result.unavailable;
+      console.log(`[price-watch] ${post.productId}: stored=${storedPrice} current=${currentPrice ?? '?'} unavailable=${unavailable}`);
 
       runPriceCache.set(
         post.productId,
@@ -291,7 +300,31 @@ export async function runPriceWatchCheck() {
       );
     }
 
-    if (currentPrice === null) continue;
+    // Prodotto non più disponibile su Amazon → termina subito
+    if (unavailable) {
+      console.log(`[price-watch] terminata (non disponibile): ${post.id} ${post.productId}`);
+      nullHits.delete(post.id);
+      await terminatePost(post, 0, cfg);
+      continue;
+    }
+
+    // Prezzo non recuperabile: incrementa contatore null
+    // Dopo 3 null consecutivi il prodotto è probabilmente sparito → termina
+    if (currentPrice === null) {
+      const hits = (nullHits.get(post.id) ?? 0) + 1;
+      nullHits.set(post.id, hits);
+      console.log(`[price-watch] ${post.productId}: null hit ${hits}/3`);
+      if (hits >= 3) {
+        console.log(`[price-watch] terminata (3 null consecutivi): ${post.id} ${post.productId}`);
+        nullHits.delete(post.id);
+        await terminatePost(post, 0, cfg);
+      }
+      continue;
+    }
+
+    // Prezzo recuperato → azzera contatore null
+    nullHits.delete(post.id);
+
     if (currentPrice <= storedPrice * 1.02) continue;
 
     lastChecked.set(post.id, now);
