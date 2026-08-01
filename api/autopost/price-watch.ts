@@ -227,8 +227,20 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
   // Re-applica emoji animate MTProto dopo ogni edit Bot API (le entità custom vengono perse).
   // 'keep' con immagine: usa testo originale (invariato nel messaggio ma entità perse per editMedia)
   // 'append'/'only': usa il nuovo testo del messaggio
-  const htmlForEmoji = caption ?? (termImg && originalCaption ? originalCaption : undefined);
+  let htmlForEmoji = caption ?? (termImg && originalCaption ? originalCaption : undefined);
   if (htmlForEmoji && chatId && msgId && cfg.emojiAnimated?.enabled !== false) {
+    // buildMessage restituisce emoji raw (❌, ⚠️…); applyCustomEmoji richiede <tg-emoji> già presenti.
+    // Applichiamo qui la stessa sostituzione fatta durante il publish.
+    const emojiRows = await sql`
+      SELECT emoji_char, custom_emoji_id FROM emoji_ids
+      WHERE user_id = ${post.user_id} OR user_id = ${baseUserId}
+      ORDER BY (user_id = ${post.user_id}) DESC
+    `.catch(() => [] as any[]);
+    for (const { emoji_char, custom_emoji_id } of emojiRows as { emoji_char: string; custom_emoji_id: string }[]) {
+      if (emoji_char && custom_emoji_id && htmlForEmoji.includes(emoji_char)) {
+        htmlForEmoji = htmlForEmoji.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
+      }
+    }
     applyCustomEmoji({ baseUserId, chatId: String(chatId), messageId: Number(msgId), htmlText: htmlForEmoji, enabled: true }).catch(() => {});
   }
   console.log(`[price-watch] terminato: ${post.id} (${post.productId} ${Number(post.discountedPrice)}→${currentPrice})`);

@@ -2242,8 +2242,42 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               }
             }
             await sql`UPDATE published_posts SET terminata = true WHERE id = ${pub.id}`.catch(() => {});
-            if (termCaption !== undefined && cfg.emojiAnimated?.enabled !== false) {
-              applyCustomEmoji({ baseUserId, chatId: chatIdStr, messageId: msgIdNum, htmlText: termCaption.slice(0, 1024), enabled: true }).catch(() => {});
+            if (cfg.emojiAnimated?.enabled !== false) {
+              // buildMessage restituisce emoji raw — serve wrappare in <tg-emoji> prima di applyCustomEmoji.
+              // 'append'/'only': usa termCaption (nuovo testo).
+              // 'keep' + termImg: ricostruisce la caption originale (editMessageMedia ha perso le entità).
+              let htmlToWrap: string | undefined = termCaption;
+              if (htmlToWrap === undefined && termImg) {
+                const keepLayoutId = (pub as any).layoutId ?? null;
+                const [keepLayout] = keepLayoutId ? await sql`
+                  SELECT body FROM layouts WHERE id = ${keepLayoutId}
+                    AND (user_id = ${userId} OR user_id = ${baseUserId})
+                `.catch(() => [null]) : [null];
+                if (keepLayout?.body) {
+                  const keepTagRows = await sql`
+                    SELECT name, value FROM tags
+                    WHERE user_id = ${userId} OR user_id = ${baseUserId}
+                    ORDER BY (user_id = ${userId}) ASC
+                  `.catch(() => []);
+                  const keepTags: Record<string, string> = {};
+                  for (const t of keepTagRows) keepTags[t.name as string] = t.value as string;
+                  htmlToWrap = buildMessage(String(keepLayout.body), pub as any, String(pub.sourceUrl ?? ''), undefined, keepTags);
+                }
+              }
+              if (htmlToWrap) {
+                const pubEmojiRows = await sql`
+                  SELECT emoji_char, custom_emoji_id FROM emoji_ids
+                  WHERE user_id = ${userId} OR user_id = ${baseUserId}
+                  ORDER BY (user_id = ${userId}) DESC
+                `.catch(() => [] as any[]);
+                let wrappedHtml = htmlToWrap;
+                for (const { emoji_char, custom_emoji_id } of pubEmojiRows as { emoji_char: string; custom_emoji_id: string }[]) {
+                  if (emoji_char && custom_emoji_id && wrappedHtml.includes(emoji_char)) {
+                    wrappedHtml = wrappedHtml.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
+                  }
+                }
+                applyCustomEmoji({ baseUserId, chatId: chatIdStr, messageId: msgIdNum, htmlText: wrappedHtml, enabled: true }).catch(() => {});
+              }
             }
           }
         }
