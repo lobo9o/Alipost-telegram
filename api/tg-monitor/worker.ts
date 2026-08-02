@@ -24,6 +24,11 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
   const priceText = text.split('\n')
     .filter(line => !/paypal|cashback|rimborso|sconto\s+extra|sconto\s+aggiuntivo|bonus|credito/i.test(line))
     .filter(line => !/a\s+confezione|al?\s+pezzo|per\s+(?:confezione|pezzo|unit[àa]|snack|barr[ae]|biscotto|cialda|bustina|capsula|compressa|tablet|dose)|cadauno|l[''']uno|l[''']una|\bunit(?:à|a)\b/i.test(line))
+    // Rimuovi righe dove il numero è l'importo dello sconto, non il prezzo finale
+    // es. "Allenati a casa con 76€ di sconto" → 76 NON è il prezzo
+    .filter(line => !/[\d.,]+\s*[€$]\s*di\s+(?:sconto|risparmio)\b/i.test(line))
+    .filter(line => !/\bsconto\s+(?:di|del)\s*[\d.,]+\s*[€$]/i.test(line))
+    .filter(line => !/\brisparmia(?:ndo)?\s+[\d.,]+\s*[€$]/i.test(line))
     .join('\n');
 
   // Prezzi con € o $ sia dopo (12,99€ / 1.234,56€) sia prima (€12.99 / $1,234.56)
