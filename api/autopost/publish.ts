@@ -1845,10 +1845,33 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           }
         }
 
-        // Solo la tastiera del layout (se impostata), nessun pulsante prodotto hardcoded
-        if (keyboardRow?.body) {
-          replyMarkup = await buildKeyboard(keyboardRow.body, post, affiliateUrl)
-            ?? undefined;
+        // Keyboard multi-post: pulsanti per-prodotto + tastiera del layout
+        {
+          // Un pulsante "Acquista" per ogni prodotto (con titolo breve)
+          const productRows = (postsArr as Record<string, any>[]).flatMap(mp => {
+            let mpUrl = String(mp.sourceUrl ?? '');
+            if (!mpUrl && mp.platform === 'amazon' && mp.productId) {
+              const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
+              const mpDomain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+              mpUrl = `https://${mpDomain}/dp/${mp.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}`;
+            }
+            if (!mpUrl) return [];
+            const rawTitle = String(mp.title ?? '');
+            const shortTitle = rawTitle.length > 22 ? rawTitle.slice(0, 22) + '…' : rawTitle;
+            const btnText = shortTitle
+              ? `🛒 ${shortTitle}`
+              : (mp.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress');
+            return [[{ text: btnText, url: mpUrl }]];
+          });
+
+          const layoutKb = keyboardRow?.body
+            ? (await buildKeyboard(keyboardRow.body, post, affiliateUrl) ?? null)
+            : null;
+          const layoutRows = (layoutKb as any)?.inline_keyboard ?? [];
+
+          if (productRows.length > 0 || layoutRows.length > 0) {
+            replyMarkup = { inline_keyboard: [...productRows, ...layoutRows] };
+          }
         }
       } else {
         const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato}{valuta} <s>{oldprezzo}{valuta}</s>\n🏷️ Sconto: -{sconto}%\n\n{_ {custom} _}`;
