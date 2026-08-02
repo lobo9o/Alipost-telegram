@@ -3,6 +3,25 @@ import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { getProductEmoji } from '../_titleFormat.js';
 import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
+import { generateTerminataImageServer } from '../_imageServer.js';
+
+// Wrappa le emoji di testo in <tg-emoji> usando emoji_ids del DB, poi chiama applyCustomEmoji.
+// Identico a quanto fa publish.ts nel path automatico (righe ~2268-2279).
+async function wrapAndApplyEmoji(userId: string, chatId: string, messageId: number, htmlText: string): Promise<void> {
+  const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+  const emojiRows = await sql`
+    SELECT emoji_char, custom_emoji_id FROM emoji_ids
+    WHERE user_id = ${userId} OR user_id = ${baseUserId}
+    ORDER BY (user_id = ${userId}) DESC
+  `.catch(() => [] as any[]);
+  let wrapped = htmlText;
+  for (const { emoji_char, custom_emoji_id } of emojiRows as { emoji_char: string; custom_emoji_id: string }[]) {
+    if (emoji_char && custom_emoji_id && wrapped.includes(emoji_char)) {
+      wrapped = wrapped.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
+    }
+  }
+  applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: wrapped, enabled: true }).catch(() => {});
+}
 
 async function generateMultiImageServer(
   imageUrls: string[],
@@ -480,9 +499,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           tgD = await tgR.json() as { ok: boolean; description?: string };
         }
         if (!tgD.ok) { res.status(500).json({ error: `Telegram: ${tgD.description ?? 'errore'}` }); return; }
-        // Riapplica emoji animate dopo edit testo
-        const baseUserIdEp = userId.includes(':') ? userId.split(':')[0] : userId;
-        applyCustomEmoji({ baseUserId: baseUserIdEp, chatId: String(chatId), messageId: Number(messageId), htmlText: String(newCaption), enabled: true }).catch(() => {});
+        // Riapplica emoji animate dopo edit testo (con wrapping <tg-emoji>)
+        wrapAndApplyEmoji(userId, String(chatId), Number(messageId), String(newCaption)).catch(() => {});
       }
       res.json({ ok: true });
       return;
@@ -520,10 +538,36 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       caption = terminata ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim() : (newCaption !== undefined ? String(newCaption) : undefined);
     }
 
+    // Genera immagine terminata server-side: stessa logica del path automatico (publish.ts)
+    // per evitare differenze di rendering emoji tra browser canvas e node-canvas
+    let effectiveNewImage: string | undefined = typeof newImage === 'string' && newImage.startsWith('data:') ? newImage : undefined;
+    if (terminata && postData?.image && String(postData.image).startsWith('http')) {
+      const baseUserIdTerm = userId.includes(':') ? userId.split(':')[0] : userId;
+      try {
+        const [[sRow], [tRow]] = await Promise.all([
+          sql`SELECT data FROM settings WHERE user_id = ${userId} OR user_id = ${baseUserIdTerm} ORDER BY (user_id = ${userId}) DESC LIMIT 1`.catch(() => [null]),
+          sql`SELECT value FROM tags WHERE name = '{terminata}' AND (user_id = ${userId} OR user_id = ${baseUserIdTerm}) ORDER BY (user_id = ${userId}) DESC LIMIT 1`.catch(() => [null]),
+        ]);
+        const cfgT = (typeof sRow?.data === 'string' ? JSON.parse(sRow.data) : (sRow?.data ?? {})) as Record<string, any>;
+        const termCfgT = (cfgT.terminata ?? {}) as Record<string, any>;
+        const termTagVal = String(tRow?.value ?? '❌ Offerta terminata');
+        const effCfg = {
+          grayscale: true, overlayTextColor: '#ff0000', overlayTextSize: 7, overlayTextX: 50, overlayTextY: 50,
+          ...termCfgT,
+          overlayText: termCfgT.overlayText || termTagVal,
+        };
+        const buf = await generateTerminataImageServer(String(postData.image), effCfg);
+        effectiveNewImage = `data:image/jpeg;base64,${buf.toString('base64')}`;
+        console.log(`[terminata] immagine generata server-side per ${id}`);
+      } catch (e: any) {
+        console.warn('[terminata] fallback a immagine browser:', e.message);
+      }
+    }
+
     let tgRes: Response;
     let tgData: { ok: boolean; description?: string };
 
-    if (newImage && typeof newImage === 'string' && newImage.startsWith('data:')) {
+    if (effectiveNewImage) {
       const base64 = newImage.replace(/^data:image\/\w+;base64,/, '');
       const imgBuffer = Buffer.from(base64, 'base64');
       const form = new FormData();
@@ -589,9 +633,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     if (!tgData.ok) { res.status(500).json({ error: `Telegram: ${tgData.description ?? 'errore'}` }); return; }
 
     // Riapplica emoji animate dopo ogni edit (editMessageCaption le perde)
+    // Wrappa le emoji di testo in <tg-emoji> prima di chiamare applyCustomEmoji
     if (caption !== undefined && messageId) {
-      const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
-      applyCustomEmoji({ baseUserId, chatId: String(chatId), messageId: Number(messageId), htmlText: caption, enabled: true }).catch(() => {});
+      wrapAndApplyEmoji(userId, String(chatId), Number(messageId), caption).catch(() => {});
     }
 
     res.json({ ok: true });
