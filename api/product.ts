@@ -726,10 +726,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const baseCfg = (typeof baseRow.data === 'string' ? JSON.parse(baseRow.data) : baseRow.data) as Record<string, any>;
       // Merge campo per campo per evitare che valori vuoti del secondario sovrascrivano quelli del primario
       if (!cfg.aliexpress) cfg.aliexpress = {};
-      // Solo credenziali API condivise — appKey/appSecret possono essere del primario
-      if (!cfg.aliexpress.appKey && baseCfg.aliexpress?.appKey) cfg.aliexpress.appKey = baseCfg.aliexpress.appKey;
-      if (!cfg.aliexpress.appSecret && baseCfg.aliexpress?.appSecret) cfg.aliexpress.appSecret = baseCfg.aliexpress.appSecret;
-      // trackingId NON si eredita: è il tag affiliato e deve essere esclusivo del profilo secondario
+      // Credenziali AliExpress: ereditate dal primario se non impostate nel secondario (sovrascrivibili per canale)
+      if (!cfg.aliexpress.appKey     && baseCfg.aliexpress?.appKey)     cfg.aliexpress.appKey     = baseCfg.aliexpress.appKey;
+      if (!cfg.aliexpress.appSecret  && baseCfg.aliexpress?.appSecret)  cfg.aliexpress.appSecret  = baseCfg.aliexpress.appSecret;
+      if (!cfg.aliexpress.trackingId && baseCfg.aliexpress?.trackingId) cfg.aliexpress.trackingId = baseCfg.aliexpress.trackingId;
       if (!cfg.amazon) cfg.amazon = {};
       if (!cfg.amazon.credentialId && baseCfg.amazon?.credentialId) cfg.amazon.credentialId = baseCfg.amazon.credentialId;
       if (!cfg.amazon.credentialSecret && baseCfg.amazon?.credentialSecret) cfg.amazon.credentialSecret = baseCfg.amazon.credentialSecret;
