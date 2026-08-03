@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
+import { buildMessage } from '../_buildMessage.js';
 
 // ── Ensure published_posts table exists (idempotent) ─────────────────────────
 async function ensurePublishedTable() {
@@ -114,85 +115,6 @@ function codeToCountryName(code?: string): string {
   return names[code.toUpperCase()] ?? code.toUpperCase();
 }
 
-function buildMessage(contenuto: string, post: Record<string, any>, affiliateUrl: string): string {
-  const now = new Date();
-  const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-  const pad = (n: number) => n < 10 ? `0${n}` : String(n);
-  const valuta = post.platform === 'aliexpress' ? '$' : '€';
-  const discPrice = Number(post.discountedPrice).toFixed(2);
-  const origPrice = Number(post.originalPrice).toFixed(2);
-  const disc = Number(post.discountPercent);
-  const titleShort = (post.title || '').length > 60 ? (post.title || '').slice(0, 57) + '...' : (post.title || '');
-
-  const tags: Record<string, string> = {
-    '{titolo}':          esc(post.title),
-    '{titoloup}':        esc((post.title || '').toUpperCase()),
-    '{titoloshort}':     esc(titleShort),
-    '{prezzo}':          discPrice,
-    '{prezzo_scontato}': discPrice,
-    '{oldprezzo}':       origPrice,
-    '{sconto}':          String(disc),
-    '{perc}':            `-${disc}%`,
-    '{valuta}':          valuta,
-    '{link_affiliato}':  affiliateUrl,
-    '{link}':            affiliateUrl,
-    '{minimo_storico}':  post.isHistoricalLow ? '🏆 MINIMO STORICO!' : '',
-    '{custom}':          esc(post.customText || ''),
-    '{store}':           post.platform === 'amazon' ? 'Amazon' : 'AliExpress',
-    '{storeup}':         post.platform === 'amazon' ? 'AMAZON' : 'ALIEXPRESS',
-    '{store_emoji_amz}': '',
-    '{store_emoji_ali}': '',
-    '{countryflag}':     post.shipFromCountry ? codeToFlag(post.shipFromCountry) : (post.platform === 'aliexpress' ? '🇨🇳' : '🇮🇹'),
-    '{country}':         post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? 'Cina' : 'Italia'),
-    '{countryup}':       (post.shipFromCountry ? codeToCountryName(post.shipFromCountry) : (post.platform === 'aliexpress' ? 'Cina' : 'Italia')).toUpperCase(),
-    '{giorno}':          giorni[now.getDay()],
-    '{ora}':             `${pad(now.getHours())}:${pad(now.getMinutes())}`,
-    '{data}':            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,
-    '{stelle}':          post.stelle || '',
-    '{recensioni}':      post.recensioni || '',
-    '{cat}':             post.cat || '',
-    '{author}':          esc(post.author || ''),
-    '{coupon}':          (post as any).boxcoupon ? '' : ((post.coupon === 'coupon' ? '' : post.coupon) || ''),
-    '{boxcoupon}':       (post as any).boxcoupon ? 'Abilita il coupon prima di acquistare' : '',
-  };
-
-  const tagOverrides = (post.tagOverrides ?? {}) as Record<string, string>;
-  for (const [tagName, val] of Object.entries(tagOverrides)) {
-    if (!(tagName in tags)) tags[tagName] = val || '';
-  }
-
-  const SENTINEL = '\x01';
-  const knownTagNames = new Set(Object.keys(tags));
-  let t = contenuto;
-  let prev = '';
-  while (prev !== t) {
-    prev = t;
-    t = t.replace(/\{_((?:(?!\{_)[\s\S])*?)_\}/g, (_, inner) => {
-      let hasEmpty = false;
-      let resolved = inner;
-      for (const [tag, val] of Object.entries(tags)) {
-        if (inner.includes(tag)) {
-          if (!val || val.trim() === '') hasEmpty = true;
-          resolved = resolved.split(tag).join(val);
-        }
-      }
-      const found = inner.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) ?? [];
-      for (const tn of found) {
-        if (!knownTagNames.has(tn)) { hasEmpty = true; break; }
-      }
-      return hasEmpty ? SENTINEL : resolved;
-    });
-  }
-  for (const [tag, val] of Object.entries(tags)) {
-    t = t.split(tag).join(val);
-  }
-  t = t.replace(/~~([^~]+)~~/g, '<s>$1</s>');
-  t = t.split('\n').filter(line => {
-    if (!line.includes(SENTINEL)) return true;
-    return line.replace(/\x01/g, '').trim() !== '';
-  }).map(line => line.replace(/\x01/g, '')).join('\n');
-  return t;
-}
 
 const MARKETPLACE_DOMAINS: Record<string, string> = {
   IT: 'www.amazon.it', US: 'www.amazon.com', DE: 'www.amazon.de',
@@ -231,7 +153,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         p.id, p.user_id, p.product_id,
         p.discounted_price, p.original_price, p.discount_percent,
         p.title, p.custom_text, p.source_url, p.is_historical_low,
-        p.chat_id, p.message_id,
+        p.chat_id, p.message_id, p.platform,
         s.data AS settings_data,
         l.body AS layout_body
       FROM published_posts p
@@ -312,6 +234,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
                 title: post.title, originalPrice: origPrice,
                 discountedPrice: newPrice, discountPercent: newPct,
                 customText: post.custom_text, isHistoricalLow: post.is_historical_low,
+                platform: post.platform,
               },
               affiliateUrl,
             );
