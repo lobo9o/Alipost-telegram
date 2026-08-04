@@ -1116,11 +1116,26 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // nello stesso ciclo cron. Chiave: "baseUserId:channel"
   const publishedChannelsThisRun = new Set<string>();
 
+  // Build set of root users blocked by admin
+  const blockedRoots = new Set<string>(
+    (settingsRows as any[])
+      .filter((r: any) => {
+        const uid = String(r.user_id);
+        if (uid.includes(':')) return false;
+        const c = typeof r.data === 'string' ? JSON.parse(r.data) : (r.data ?? {});
+        return !!c.blocked;
+      })
+      .map((r: any) => String(r.user_id))
+  );
+
   for (const row of settingsRows) {
     const userId = row.user_id as string;
     const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
     const rawData = row.data ?? {};
     const cfg = (typeof rawData === 'string' ? JSON.parse(rawData) : rawData) as Record<string, any>;
+
+    // Admin block
+    if (blockedRoots.has(baseUserId)) { skipped.push(`${userId}: bloccato da admin`); continue; }
 
     // AutoPost disabilitato
     if (!cfg.attivo) { skipped.push(`${userId}: disabled`); continue; }
