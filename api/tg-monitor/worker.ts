@@ -170,6 +170,14 @@ let cronSecret = '';
 export function initTgMonitor(port: number) {
   serverPort = port;
   cronSecret = process.env.CRON_SECRET || '';
+  // Crea tabella per persistere lastMsgId tra riavvii
+  sql`CREATE TABLE IF NOT EXISTS tg_monitor_state (
+    user_id TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    last_msg_id BIGINT DEFAULT 0,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (user_id, channel)
+  )`.catch(() => {});
   startAll().catch(e => console.error('[tg-monitor] errore avvio:', e));
 
   // Watchdog: ogni 5 minuti controlla se i client sono ancora connessi
@@ -352,11 +360,18 @@ async function startUser(userId: string) {
         // Registra entità per polling di fallback e inizializza lastMsgId
         const initMsgs = await client.getMessages(entity, { limit: 1 }).catch(() => [] as any[]);
         const entityCore = (() => { const s = String(entity.id).replace(/^-/, ''); return s.startsWith('100') && s.length >= 12 ? s.slice(3) : s; })();
-        const initLastId = (initMsgs as any[])[0]?.id ?? 0;
+        const currentLastId = (initMsgs as any[])[0]?.id ?? 0;
+        // Legge lastMsgId persistito nel DB per non perdere messaggi tra riavvii
+        const [storedState] = await sql<{ last_msg_id: number }[]>`
+          SELECT last_msg_id FROM tg_monitor_state WHERE user_id = ${userId} AND channel = ${entityCore}
+        `.catch(() => [] as any[]);
+        const initLastId = storedState?.last_msg_id
+          ? Math.min(storedState.last_msg_id, currentLastId) // mai andare oltre l'attuale (sicurezza)
+          : currentLastId;
         // Un'entry per ogni profilo/destinazione che monitora questo canale sorgente
         for (const { auto_publish: ap, dest_channel: dc } of dests) {
           channelEntities.push({ entity, core: entityCore, lastMsgId: initLastId, autoPublish: ap, destChannel: dc });
-          console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId} autoPublish=${ap} destChannel=${dc ?? 'default'} (tentativo ${attempt})`);
+          console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId}${storedState ? '(db)' : '(live)'} autoPublish=${ap} destChannel=${dc ?? 'default'} (tentativo ${attempt})`);
         }
         coreDestsMap.set(entityCore, dests); // aggiorna con il core corretto
         resolved = true;
@@ -526,6 +541,21 @@ async function startUser(userId: string) {
         }
       } catch (e: any) {
         console.warn(`[tg-monitor] ${userId} — poll error ${info.core}: ${e.message}`);
+      }
+    }
+    // Persiste i lastMsgId aggiornati nel DB (deduplicato per core)
+    const coresUpdated = new Map<string, number>();
+    for (const info of channelEntities) {
+      const prev = coresUpdated.get(info.core) ?? 0;
+      if (info.lastMsgId > prev) coresUpdated.set(info.core, info.lastMsgId);
+    }
+    for (const [core, lastId] of coresUpdated) {
+      if (lastId > 0) {
+        sql`INSERT INTO tg_monitor_state (user_id, channel, last_msg_id, updated_at)
+            VALUES (${userId}, ${core}, ${lastId}, NOW())
+            ON CONFLICT (user_id, channel)
+            DO UPDATE SET last_msg_id = GREATEST(tg_monitor_state.last_msg_id, EXCLUDED.last_msg_id), updated_at = NOW()
+        `.catch(() => {});
       }
     }
     if (activeClients.has(userId)) {
