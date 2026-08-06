@@ -1,3 +1,8 @@
+// GramJS bug: _parseMessageText rimuove i MessageEntityTextUrl il cui URL contiene "+"
+// (es. tutti i link invite t.me/+XXX). Bypassiamo usando HTMLParser.parse() direttamente
+// e passando le entità via formattingEntities invece di parseMode:'html'.
+import { HTMLParser } from 'telegram/extensions/html';
+
 export async function applyCustomEmoji(opts: {
   baseUserId: string;
   chatId: string;
@@ -20,13 +25,14 @@ export async function applyCustomEmoji(opts: {
     return;
   }
 
+  const [parsedText, formattingEntities] = HTMLParser.parse(htmlText);
   const preview = htmlText.slice(0, 120).replace(/\n/g, '↵');
-  console.log(`[emoji-edit] editMessage chatId=${chatId} msgId=${messageId} htmlLen=${htmlText.length} preview="${preview}"`);
+  console.log(`[emoji-edit] editMessage chatId=${chatId} msgId=${messageId} htmlLen=${htmlText.length} entities=${formattingEntities.length} preview="${preview}"`);
   try {
     await (client as any).editMessage(chatId, {
       message: messageId,
-      text: htmlText,
-      parseMode: 'html',
+      text: parsedText,
+      formattingEntities,
     });
     console.log(`[emoji-edit] ✅ emoji animate applicate: chatId=${chatId} msgId=${messageId}`);
   } catch (e: any) {
