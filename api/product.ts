@@ -733,7 +733,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       if (!cfg.amazon) cfg.amazon = {};
       if (!cfg.amazon.credentialId && baseCfg.amazon?.credentialId) cfg.amazon.credentialId = baseCfg.amazon.credentialId;
       if (!cfg.amazon.credentialSecret && baseCfg.amazon?.credentialSecret) cfg.amazon.credentialSecret = baseCfg.amazon.credentialSecret;
-      // affiliateTag NON si eredita: ogni profilo deve avere il proprio tag affiliato
+      // affiliateTag: fallback al root se non impostato sul secondario (mai da ENV, per non usare il tag di sistema)
+      if (!cfg.amazon.affiliateTag && baseCfg.amazon?.affiliateTag) cfg.amazon.affiliateTag = baseCfg.amazon.affiliateTag;
       if (!cfg.amazon.version && baseCfg.amazon?.version) cfg.amazon.version = baseCfg.amazon.version;
       if (!cfg.amazon.marketplace && baseCfg.amazon?.marketplace) cfg.amazon.marketplace = baseCfg.amazon.marketplace;
     }
