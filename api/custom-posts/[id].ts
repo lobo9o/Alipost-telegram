@@ -122,21 +122,7 @@ async function sendCustomPost(post: Record<string, any>, channel: string, userId
   const messageId = tgData.result?.message_id ?? 0;
   const chatId = String(tgData.result?.chat?.id ?? channel);
   const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
-  if (messageId) {
-    (async () => {
-      const emojiRows = await sql`
-        SELECT emoji_char, custom_emoji_id FROM emoji_ids
-        WHERE user_id = ${userId} OR user_id = ${baseUserId}
-        ORDER BY (user_id = ${userId}) DESC
-      `.catch(() => [] as any[]);
-      let wrapped = captionMtProto;
-      for (const { emoji_char, custom_emoji_id } of emojiRows as { emoji_char: string; custom_emoji_id: string }[]) {
-        if (emoji_char && custom_emoji_id && wrapped.includes(emoji_char))
-          wrapped = wrapped.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
-      }
-      applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: wrapped, enabled: true }).catch(() => {});
-    })().catch(() => {});
-  }
+  if (messageId) applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: captionMtProto, enabled: true }).catch(() => {});
   return { ok: true, messageId, chatId };
 }
 
