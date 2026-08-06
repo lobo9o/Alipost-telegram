@@ -122,8 +122,24 @@ async function sendCustomPost(post: Record<string, any>, channel: string, userId
   const messageId = tgData.result?.message_id ?? 0;
   const chatId = String(tgData.result?.chat?.id ?? channel);
   const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
-  console.log(`[custom-post] send ok msgId=${messageId} chatId=${chatId} baseUserId=${baseUserId} hasTgEmoji=${captionMtProto.includes('<tg-emoji')} mtLen=${captionMtProto.length}`);
-  if (messageId) applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: captionMtProto, enabled: true }).catch(() => {});
+  if (messageId) {
+    (async () => {
+      const emojiRows = await sql`
+        SELECT emoji_char, custom_emoji_id FROM emoji_ids
+        WHERE user_id = ${userId} OR user_id = ${baseUserId}
+        ORDER BY (user_id = ${userId}) DESC
+      `.catch(() => [] as any[]);
+      // Strip tg-emoji già presenti, poi ri-applica da emoji_ids → gestisce sia
+      // testo con emoji normali che testo con custom emoji già wrappate
+      let wrapped = captionMtProto.replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/g, '$1');
+      for (const { emoji_char, custom_emoji_id } of emojiRows as { emoji_char: string; custom_emoji_id: string }[]) {
+        if (emoji_char && custom_emoji_id && wrapped.includes(emoji_char))
+          wrapped = wrapped.split(emoji_char).join(`<tg-emoji emoji-id="${custom_emoji_id}">${emoji_char}</tg-emoji>`);
+      }
+      console.log(`[custom-post] apply emoji: hasTgEmoji=${wrapped.includes('<tg-emoji')} emojiRows=${(emojiRows as any[]).length}`);
+      applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: wrapped, enabled: true }).catch(() => {});
+    })().catch(() => {});
+  }
   return { ok: true, messageId, chatId };
 }
 
