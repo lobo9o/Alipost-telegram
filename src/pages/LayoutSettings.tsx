@@ -2067,6 +2067,8 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [emojiManualChar, setEmojiManualChar] = useState('');
   const [emojiManualId, setEmojiManualId] = useState('');
   const [emojiPreviews, setEmojiPreviews] = useState<Record<string, { url: string; isVideo: boolean } | null>>({});
+  const [emojiEditing, setEmojiEditing] = useState<string | null>(null); // emoji_char in modifica
+  const [emojiEditVal, setEmojiEditVal] = useState('');
 
   React.useEffect(() => {
     if (subPage === 'emoji' && !emojiLoaded) {
@@ -2465,27 +2467,54 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           {emojiList.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div className="stit" style={{ padding: '0 0 6px' }}>EMOJI SALVATE</div>
-              {emojiList.map(e => (
-                <div key={e.emoji_char} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
-                  <span style={{ fontSize: 22, lineHeight: 1, minWidth: 28 }}>{e.emoji_char}</span>
-                  <span style={{ fontSize: 13, color: 'var(--t3)', minWidth: 16 }}>→</span>
-                  <span style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {(() => {
-                      const p = emojiPreviews[e.custom_emoji_id];
-                      if (!p) return <span style={{ fontSize: 14, color: 'var(--t3)' }}>⏳</span>;
-                      if (p.isVideo) return <video src={p.url} autoPlay loop muted playsInline style={{ width: 32, height: 32, objectFit: 'contain' }} />;
-                      return <img src={p.url} alt={e.emoji_char} style={{ width: 32, height: 32, objectFit: 'contain' }} />;
-                    })()}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: 'var(--t3)', wordBreak: 'break-all' }}>{e.custom_emoji_id}</div>
+              {emojiList.map(e => {
+                const isEditing = emojiEditing === e.emoji_char;
+                const doStartEdit = () => { setEmojiEditing(e.emoji_char); setEmojiEditVal(e.emoji_char); };
+                const doConfirmEdit = async () => {
+                  const newChar = emojiEditVal.trim();
+                  if (!newChar || newChar === e.emoji_char) { setEmojiEditing(null); return; }
+                  await emojiIdsApi.remove(e.emoji_char).catch(() => {});
+                  await emojiIdsApi.add(newChar, e.custom_emoji_id).catch(() => {});
+                  setEmojiList(prev => prev.map(x => x.emoji_char === e.emoji_char ? { ...x, emoji_char: newChar } : x));
+                  setEmojiEditing(null);
+                };
+                return (
+                  <div key={e.emoji_char} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
+                    {isEditing ? (
+                      <>
+                        <input
+                          autoFocus
+                          value={emojiEditVal}
+                          onChange={ev => setEmojiEditVal(ev.target.value)}
+                          onKeyDown={ev => { if (ev.key === 'Enter') doConfirmEdit(); if (ev.key === 'Escape') setEmojiEditing(null); }}
+                          style={{ width: 52, fontSize: 20, textAlign: 'center', background: 'var(--bg)', border: '1px solid var(--acc)', borderRadius: 6, color: 'inherit', padding: '2px 4px' }}
+                          maxLength={4}
+                        />
+                        <button onClick={doConfirmEdit} style={{ background: 'var(--acc)', border: 'none', borderRadius: 6, color: '#fff', padding: '4px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>✓</button>
+                        <button onClick={() => setEmojiEditing(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)', fontSize: 16 }}>✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: 22, lineHeight: 1, minWidth: 28 }}>{e.emoji_char}</span>
+                        <span style={{ fontSize: 13, color: 'var(--t3)', minWidth: 16 }}>→</span>
+                        <span style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {(() => {
+                            const p = emojiPreviews[e.custom_emoji_id];
+                            if (!p) return <span style={{ fontSize: 14, color: 'var(--t3)' }}>⏳</span>;
+                            if (p.isVideo) return <video src={p.url} autoPlay loop muted playsInline style={{ width: 32, height: 32, objectFit: 'contain' }} />;
+                            return <img src={p.url} alt={e.emoji_char} style={{ width: 32, height: 32, objectFit: 'contain' }} />;
+                          })()}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: 'var(--t3)', wordBreak: 'break-all' }}>{e.custom_emoji_id}</div>
+                        </div>
+                        <button onClick={doStartEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)', padding: '2px 6px', fontSize: 15 }}>✏️</button>
+                        <button onClick={() => doDelete(e.emoji_char)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)', padding: '2px 6px', fontSize: 16 }}>✕</button>
+                      </>
+                    )}
                   </div>
-                  <button
-                    onClick={() => doDelete(e.emoji_char)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)', padding: '2px 6px', fontSize: 16 }}
-                  >✕</button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {emojiList.length === 0 && emojiLoaded && (
