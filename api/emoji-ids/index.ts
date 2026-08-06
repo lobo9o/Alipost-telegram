@@ -7,6 +7,37 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   if (!userId) return;
 
   if (req.method === 'GET') {
+    // GET /api/emoji-ids?action=preview&id=<custom_emoji_id>
+    // Ritorna { url, isVideo } per mostrare l'anteprima dello sticker nel browser
+    if (req.query.action === 'preview') {
+      const emojiId = String(req.query.id ?? '');
+      if (!emojiId) return res.status(400).json({ error: 'id mancante' });
+
+      const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+      const [settings] = await sql`SELECT data FROM settings WHERE user_id = ${baseUserId}`;
+      const rawCfg = settings?.data ?? {};
+      const cfg = (typeof rawCfg === 'string' ? JSON.parse(rawCfg) : rawCfg) as Record<string, any>;
+      const botToken = cfg.telegram?.botToken || process.env.TELEGRAM_BOT_TOKEN;
+      if (!botToken) return res.status(400).json({ error: 'Token bot non configurato' });
+
+      const tgBase = `https://api.telegram.org/bot${botToken}`;
+      const stickerRes = await fetch(`${tgBase}/getCustomEmojiStickers?custom_emoji_ids=["${emojiId}"]`);
+      const stickerData = await stickerRes.json() as any;
+      const sticker = stickerData?.result?.[0];
+      if (!sticker) return res.status(404).json({ error: 'Sticker non trovato' });
+
+      const fileId = sticker.thumbnail?.file_id ?? sticker.file_id;
+      const fileRes = await fetch(`${tgBase}/getFile?file_id=${encodeURIComponent(fileId)}`);
+      const fileData = await fileRes.json() as any;
+      const filePath = fileData?.result?.file_path;
+      if (!filePath) return res.status(404).json({ error: 'File path non trovato' });
+
+      return res.json({
+        url: `${tgBase.replace('/bot', '/file/bot')}/${filePath}`,
+        isVideo: filePath.endsWith('.webm'),
+      });
+    }
+
     const rows = await sql`
       SELECT emoji_char, custom_emoji_id
       FROM emoji_ids

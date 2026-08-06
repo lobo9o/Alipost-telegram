@@ -2066,6 +2066,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [emojiStatus, setEmojiStatus] = useState('');
   const [emojiManualChar, setEmojiManualChar] = useState('');
   const [emojiManualId, setEmojiManualId] = useState('');
+  const [emojiPreviews, setEmojiPreviews] = useState<Record<string, { url: string; isVideo: boolean } | null>>({});
 
   React.useEffect(() => {
     if (subPage === 'emoji' && !emojiLoaded) {
@@ -2074,6 +2075,17 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         .catch(() => {});
     }
   }, [subPage, emojiLoaded]);
+
+  React.useEffect(() => {
+    if (!emojiList.length) return;
+    for (const e of emojiList) {
+      if (emojiPreviews[e.custom_emoji_id] !== undefined) continue;
+      setEmojiPreviews(prev => ({ ...prev, [e.custom_emoji_id]: null })); // placeholder loading
+      emojiIdsApi.preview(e.custom_emoji_id)
+        .then(data => setEmojiPreviews(prev => ({ ...prev, [e.custom_emoji_id]: data })))
+        .catch(() => {});
+    }
+  }, [emojiList]); // emojiPreviews escluso: aggiornato dentro l'effetto stesso
 
   React.useEffect(() => { setS(settings); }, [settings]);
 
@@ -2457,9 +2469,13 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
                 <div key={e.emoji_char} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
                   <span style={{ fontSize: 22, lineHeight: 1, minWidth: 28 }}>{e.emoji_char}</span>
                   <span style={{ fontSize: 13, color: 'var(--t3)', minWidth: 16 }}>→</span>
-                  <span style={{ fontSize: 22, lineHeight: 1, minWidth: 28 }}>
-                    {/* tg-emoji renderizza l'animata dentro Telegram Mini App */}
-                    <tg-emoji emoji-id={e.custom_emoji_id}>{e.emoji_char}</tg-emoji>
+                  <span style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {(() => {
+                      const p = emojiPreviews[e.custom_emoji_id];
+                      if (!p) return <span style={{ fontSize: 14, color: 'var(--t3)' }}>⏳</span>;
+                      if (p.isVideo) return <video src={p.url} autoPlay loop muted playsInline style={{ width: 32, height: 32, objectFit: 'contain' }} />;
+                      return <img src={p.url} alt={e.emoji_char} style={{ width: 32, height: 32, objectFit: 'contain' }} />;
+                    })()}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, color: 'var(--t3)', wordBreak: 'break-all' }}>{e.custom_emoji_id}</div>

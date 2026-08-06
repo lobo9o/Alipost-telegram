@@ -253,6 +253,7 @@ export const dealsCacheApi = {
 export interface EmojiEntry { emoji_char: string; custom_emoji_id: string; }
 export const emojiIdsApi = {
   list: () => req<{ emoji: EmojiEntry[] }>('GET', '/api/emoji-ids'),
+  preview: (id: string) => req<{ url: string; isVideo: boolean }>('GET', `/api/emoji-ids?action=preview&id=${encodeURIComponent(id)}`),
   discover: () => req<{ discovered: number; emoji: EmojiEntry[] }>('POST', '/api/emoji-ids', { action: 'discover' }),
   fromPack: (pack_name: string) => req<{ imported: number; total_in_pack: number; pack_title: string; emoji: EmojiEntry[] }>('POST', '/api/emoji-ids', { action: 'from_pack', pack_name }),
   add: (emoji_char: string, custom_emoji_id: string) => req<{ ok: boolean }>('POST', '/api/emoji-ids', { emoji_char, custom_emoji_id }),
