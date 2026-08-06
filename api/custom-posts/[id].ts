@@ -88,10 +88,11 @@ async function sendCustomPost(post: Record<string, any>, channel: string, userId
   const isBase64 = post.image && String(post.image).startsWith('data:');
   const hasImage = post.image && String(post.image).startsWith('http');
   const maxLen = (isBase64 || hasImage) ? 1024 : 4096;
-  // Bot API: testo visibile senza tag, limite applicato al testo
-  // MTProto: HTML completo senza limite — GramJS misura il testo, non i tag
+  // Bot API: strippati i tg-emoji (non supportati), troncato sullo stesso limite
+  // MTProto: mantiene i tg-emoji ma troncato allo stesso limite visibile — se il
+  // testo è più lungo di captionBotApi, Telegram rifiuta l'edit silenziosamente
   const captionBotApi = safeCaption(stripTgEmoji(rawBody), maxLen);
-  const captionMtProto = rawBody;
+  const captionMtProto = safeCaption(rawBody, maxLen);
   const replyMarkup = await buildKeyboard(post.keyboard || '');
 
   let tgRes: Response;
