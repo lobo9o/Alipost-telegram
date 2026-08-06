@@ -5,8 +5,45 @@ import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
+const VOID_TAGS = new Set(['br', 'hr', 'img', 'input']);
+
+function balanceHtmlTags(html: string): string {
+  const open: string[] = [];
+  const tagRe = /<\/?([a-zA-Z][a-zA-Z0-9-]*)[^>]*>/g;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(html)) !== null) {
+    const tag = m[1].toLowerCase();
+    if (VOID_TAGS.has(tag)) continue;
+    if (m[0].startsWith('</')) {
+      const idx = open.lastIndexOf(tag);
+      if (idx !== -1) open.splice(idx, 1);
+    } else if (!m[0].endsWith('/>')) {
+      open.push(tag);
+    }
+  }
+  let out = html;
+  for (let i = open.length - 1; i >= 0; i--) out += `</${open[i]}>`;
+  return out;
+}
+
 function safeCaption(html: string, max: number): string {
-  return html.length <= max ? html : html.slice(0, max - 1) + '…';
+  // Conta i caratteri visibili (esclusi i tag HTML) per trovare il punto di taglio corretto
+  let visible = 0;
+  let i = 0;
+  let cutAt = -1;
+  while (i < html.length) {
+    if (html[i] === '<') {
+      const end = html.indexOf('>', i);
+      i = end === -1 ? html.length : end + 1;
+    } else {
+      visible++;
+      if (visible === max && cutAt === -1) cutAt = i + 1;
+      i++;
+    }
+  }
+  const truncated = visible > max ? html.slice(0, cutAt) + '…' : html;
+  // Chiude sempre i tag aperti, anche se il testo non era stato troncato
+  return balanceHtmlTags(truncated);
 }
 
 // Bot API non supporta <tg-emoji>: li strippiamo prima dell'invio,
