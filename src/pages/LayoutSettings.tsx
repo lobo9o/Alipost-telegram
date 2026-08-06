@@ -2456,6 +2456,11 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
               {emojiList.map(e => (
                 <div key={e.emoji_char} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
                   <span style={{ fontSize: 22, lineHeight: 1, minWidth: 28 }}>{e.emoji_char}</span>
+                  <span style={{ fontSize: 13, color: 'var(--t3)', minWidth: 16 }}>→</span>
+                  <span style={{ fontSize: 22, lineHeight: 1, minWidth: 28 }}>
+                    {/* tg-emoji renderizza l'animata dentro Telegram Mini App */}
+                    <tg-emoji emoji-id={e.custom_emoji_id}>{e.emoji_char}</tg-emoji>
+                  </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, color: 'var(--t3)', wordBreak: 'break-all' }}>{e.custom_emoji_id}</div>
                   </div>
