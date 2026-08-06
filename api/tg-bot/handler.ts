@@ -87,6 +87,7 @@ function entitiesToHtml(text: string, entities: any[] = []): string {
       else if (t === 'strikethrough')html += '<s>';
       else if (t === 'code')         html += '<code>';
       else if (t === 'pre')          html += '<pre>';
+      else if (t === 'text_link')    html += `<a href="${ev.e.url}">`;
       else if (t === 'custom_emoji') html += `<tg-emoji emoji-id="${ev.e.custom_emoji_id}">`;
     } else {
       if      (t === 'bold')         html += '</b>';
@@ -95,6 +96,7 @@ function entitiesToHtml(text: string, entities: any[] = []): string {
       else if (t === 'strikethrough')html += '</s>';
       else if (t === 'code')         html += '</code>';
       else if (t === 'pre')          html += '</pre>';
+      else if (t === 'text_link')    html += '</a>';
       else if (t === 'custom_emoji') html += '</tg-emoji>';
     }
   }
