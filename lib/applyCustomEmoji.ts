@@ -6,6 +6,7 @@ export async function applyCustomEmoji(opts: {
   enabled?: boolean;
 }): Promise<void> {
   const { baseUserId, chatId, messageId, htmlText, enabled = true } = opts;
+  console.log(`[emoji-edit] called: enabled=${enabled} msgId=${messageId} chatId=${chatId} hasTgEmoji=${!!htmlText?.includes('<tg-emoji')} htmlLen=${htmlText?.length ?? 0}`);
   if (!enabled) return;
   if (!messageId || !chatId || !htmlText) return;
 

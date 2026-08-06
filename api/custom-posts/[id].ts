@@ -122,6 +122,7 @@ async function sendCustomPost(post: Record<string, any>, channel: string, userId
   const messageId = tgData.result?.message_id ?? 0;
   const chatId = String(tgData.result?.chat?.id ?? channel);
   const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+  console.log(`[custom-post] send ok msgId=${messageId} chatId=${chatId} baseUserId=${baseUserId} hasTgEmoji=${captionMtProto.includes('<tg-emoji')} mtLen=${captionMtProto.length}`);
   if (messageId) applyCustomEmoji({ baseUserId, chatId, messageId, htmlText: captionMtProto, enabled: true }).catch(() => {});
   return { ok: true, messageId, chatId };
 }
