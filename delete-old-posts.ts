@@ -19,8 +19,8 @@ const TG_API_HASH = process.env.TG_API_HASH || '';
 const USER_ID = '54225500';
 const CHANNEL_ID = -1003593220674; // @cavalieridelrisparmio
 
-// Range di date da cancellare
-const FROM_TS = Math.floor(new Date('2026-02-01T00:00:00Z').getTime() / 1000);
+// Range di date da cancellare (FROM_TS=0 = dal primo post del canale)
+const FROM_TS = 0;
 const TO_TS   = Math.floor(new Date('2026-07-31T23:59:59Z').getTime() / 1000);
 
 async function main() {
