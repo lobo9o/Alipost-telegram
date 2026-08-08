@@ -1816,6 +1816,24 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const layoutText: string | undefined = layoutRow?.body;
         const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n🟥#{store}\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">ACQUISTA ORA</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
 
+        // PostTap: pre-calcola URL per ogni prodotto del multi-post
+        const mpPtUrls = new Map<string, string>();
+        if (ptActivePub) {
+          await Promise.all((postsArr as any[]).map(async (mp: any) => {
+            if (mp.platform !== 'amazon') return;
+            let mpRawUrl = String(mp.sourceUrl ?? '');
+            if (!mpRawUrl && mp.productId) {
+              const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
+              const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+              mpRawUrl = `https://${domain}/dp/${mp.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}`;
+            }
+            if (mpRawUrl) {
+              const ptUrl = await wrapWithPostTap(mpRawUrl, String(mp.title ?? ''), ptActivePub, { userId, botToken });
+              mpPtUrls.set(String(mp.productId ?? ''), ptUrl);
+            }
+          }));
+        }
+
         if (layoutText?.includes('{lista_prodotti}')) {
           // Backward compat: layout vecchio con {lista_prodotti}
           const lista = (postsArr as Record<string, any>[]).map((mp, i) => {
@@ -1825,7 +1843,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             const shortTitle = title.length > 55 ? title.slice(0, 55) + '…' : title;
             return `${i + 1}. ${mp.emoji || '📦'} ${shortTitle}\n💰 ${cur}${Number(mp.discountedPrice).toFixed(2).replace('.', ',')} (-${Number(mp.discountPercent)}%)`;
           }).join('\n\n');
-          messageText = buildMessage(layoutText.replace('{lista_prodotti}', lista), post, affiliateUrl, aliCurrency, customTags);
+          messageText = buildMessage(layoutText.replace('{lista_prodotti}', lista), post, ptAffiliateUrl, aliCurrency, customTags);
           console.log(`[autopost] multi lista_prodotti messageText (100ch): ${messageText.slice(0, 100).replace(/\n/g, '↵')}`);
         } else {
           // Nuovo comportamento: ripeti il template per ogni prodotto
@@ -1840,6 +1858,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
                 const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
                 mpUrl = `https://${domain}/dp/${mp.productId}?tag=${cfg.amazon?.affiliateTag ?? ''}`;
               }
+              // PostTap: usa URL pre-calcolato se disponibile
+              const ptMpUrl = mpPtUrls.get(String(mp.productId ?? ''));
+              if (ptMpUrl) mpUrl = ptMpUrl;
               const mpCurrency = mp.platform === 'aliexpress'
                 ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€') : '€';
               const mpCustomTags: Record<string, string> = {};

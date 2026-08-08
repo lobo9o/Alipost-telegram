@@ -741,6 +741,34 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   let messageText = buildMessage(layoutContenuto || defaultLayout, post, ptAffiliateUrl, aliCurrency, customTags);
 
+  // Multi-post con PostTap: il frontend pre-espande il layout sostituendo {link} con URL originali.
+  // Se PostTap è attivo e ci sono più prodotti, ricostruiamo lato server per applicare i shortlink.
+  const multiPostsBody: any[] = Array.isArray(req.body?.multiPosts) ? req.body.multiPosts : [];
+  if (multiPostsBody.length > 1 && ptActive) {
+    const [mlRow] = await sql`
+      SELECT body FROM layouts
+      WHERE (user_id = ${userId} OR user_id = ${baseUserId}) AND tipo = 'multi'
+      ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1
+    `.catch(() => [null]);
+    const defaultMultiLayout = '{_<b>{custom}</b>_}\n<b>{titoloshort}</b>\n🟥#{store}\n💶 A soli: <b>{prezzo}{valuta}</b> invece di: <s>{oldprezzo}€</s>\n{_🎟 <b>Coupon:</b> {coupon}_}\n👉 <a href="{link}">ACQUISTA ORA</a>\n➿➿➿➿➿➿➿➿➿➿➿➿';
+    const multiTpl = (mlRow?.body && !mlRow.body.includes('{lista_prodotti}')) ? mlRow.body : defaultMultiLayout;
+    const perProductTexts = await Promise.all(multiPostsBody.map(async (mp: any) => {
+      const mpPlatform = mp.platform ?? 'amazon';
+      let mpUrl = mp.sourceUrl ?? '';
+      if (!mpUrl && mpPlatform === 'amazon' && mp.productId && cfg.amazon?.affiliateTag) {
+        const mktCode = (cfg.amazon?.marketplace ?? 'IT').toUpperCase();
+        const domain = MARKETPLACE_DOMAINS[mktCode] ?? 'www.amazon.it';
+        mpUrl = `https://${domain}/dp/${mp.productId}?tag=${cfg.amazon.affiliateTag}`;
+      }
+      const ptMpUrl = mpPlatform === 'amazon'
+        ? await wrapWithPostTap(mpUrl, mp.title ?? '', ptActive, { userId, botToken })
+        : mpUrl;
+      return buildMessage(multiTpl, mp, ptMpUrl, aliCurrency, customTags);
+    }));
+    messageText = perProductTexts.join('\n');
+    console.log(`[posttap] multi-post: ricostruiti ${multiPostsBody.length} testi con PostTap`);
+  }
+
   // Applica emoji animate: solo per il profilo/canale corrente (userId esatto)
   const emojiRowsP = await sql`
     SELECT emoji_char, custom_emoji_id
