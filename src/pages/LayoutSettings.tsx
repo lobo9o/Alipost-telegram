@@ -2163,6 +2163,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       try {
         await settingsApi.save(updated);
         setS(updated);
+        setSettings(updated);
         setPtCookieInput(essential);
         setPtSaveMsg('✅ Cookie salvato');
       } catch {
@@ -2182,6 +2183,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
             onChange={async v => {
               const updated = { ...s, postTap: { ...pt, enabled: v } };
               setS(updated);
+              setSettings(updated);
               await settingsApi.save(updated).catch(() => {});
             }}
           />
