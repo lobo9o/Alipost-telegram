@@ -33,6 +33,7 @@ export async function wrapWithPostTap(
   config: PostTapConfig | undefined,
   ctx: { userId?: string; botToken?: string } = {},
 ): Promise<string> {
+  console.log(`[posttap] wrapWithPostTap chiamato: url="${url.slice(0, 80)}" enabled=${config?.enabled} hasCookie=${!!config?.cookie}`);
   if (!config?.enabled || !config.cookie || !url) return url;
 
   const cached = _cache.get(url);

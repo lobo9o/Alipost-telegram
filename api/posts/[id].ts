@@ -727,12 +727,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   // PostTap: carica config dalla tabella dedicata (non dalle settings per evitare limite 10k)
   const baseUserIdPt = userId.includes(':') ? userId.split(':')[0] : userId;
-  const [ptRow] = await sql`SELECT enabled, cookie FROM posttap_sessions WHERE user_id = ${baseUserIdPt}`.catch(() => [] as any[]);
+  const ptRowResult = await sql`SELECT enabled, cookie FROM posttap_sessions WHERE user_id = ${baseUserIdPt}`.catch((e: any) => { console.error('[posttap] SQL error:', e.message); return [] as any[]; });
+  const [ptRow] = ptRowResult;
+  console.log(`[posttap] DB lookup: baseUserIdPt=${baseUserIdPt} found=${!!ptRow} enabled=${ptRow?.enabled} hasCookie=${!!ptRow?.cookie} platform=${post.platform}`);
   const ptConfig: PostTapConfig | undefined = ptRow?.enabled && ptRow?.cookie
     ? { enabled: true, cookie: ptRow.cookie }
     : undefined;
   // PostTap supporta solo Amazon — per AliExpress usa il link originale
   const ptActive = ptConfig && post.platform === 'amazon' ? ptConfig : undefined;
+  console.log(`[posttap] ptConfig=${!!ptConfig} ptActive=${!!ptActive} affiliateUrl="${affiliateUrl.slice(0, 60)}"`);
   const ptCtx = ptActive ? { config: ptActive, userId, botToken } : undefined;
   const ptAffiliateUrl = await wrapWithPostTap(affiliateUrl, post.title ?? '', ptActive, { userId, botToken });
 
