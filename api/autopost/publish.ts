@@ -5,6 +5,7 @@ import { checkPostPrice } from '../_priceCheck.js';
 import { getProductEmoji } from '../_titleFormat.js';
 import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
+import { wrapWithPostTap, type PostTapConfig } from '../../lib/postTap.js';
 import crypto from 'crypto';
 
 // ── AliExpress auto-search helpers ────────────────────────────────────────────
@@ -956,6 +957,7 @@ async function buildKeyboard(
   contenuto: string | undefined,
   post: Record<string, any>,
   affiliateUrl: string,
+  ptCtx?: { config: PostTapConfig; userId: string; botToken: string },
 ): Promise<object | undefined> {
   if (!contenuto?.trim()) return undefined;
 
@@ -980,11 +982,20 @@ async function buildKeyboard(
     } catch { /* fallback al link normale */ }
   }
 
+  // PostTap: wrappa {link} e {buynow} se abilitato
+  const ptName = (post.title ?? '').slice(0, 120);
+  const ptCfg = ptCtx?.config;
+  const ptOpts = ptCtx ? { userId: ptCtx.userId, botToken: ptCtx.botToken } : {};
+  const [ptLink, ptBuyNow] = await Promise.all([
+    wrapWithPostTap(affiliateUrl, ptName, ptCfg, ptOpts),
+    wrapWithPostTap(buyNowUrl, ptName, ptCfg, ptOpts),
+  ]);
+
   const urlTags: Record<string, string> = {
-    '{link}':            affiliateUrl,
-    '{link_affiliato}':  affiliateUrl,
+    '{link}':            ptLink,
+    '{link_affiliato}':  ptLink,
     '{addtocart}':       addToCartUrl,
-    '{buynow}':          buyNowUrl,
+    '{buynow}':          ptBuyNow,
     '{whatsapp}':        `https://api.whatsapp.com/send?text=${waText}`,
     '{app}':             affiliateUrl,
     '{amici}':           affiliateUrl,
@@ -1789,6 +1800,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
         : '€';
 
+      // PostTap: carica config dalla tabella dedicata — solo per post Amazon
+      const [ptRowPub] = await sql`SELECT enabled, cookie FROM posttap_sessions WHERE user_id = ${baseUserId}`.catch(() => [] as any[]);
+      const ptConfigPub: PostTapConfig | undefined = ptRowPub?.enabled && ptRowPub?.cookie
+        ? { enabled: true, cookie: ptRowPub.cookie } : undefined;
+      const ptActivePub = ptConfigPub && post.platform === 'amazon' ? ptConfigPub : undefined;
+      const ptCtxPub = ptActivePub ? { config: ptActivePub, userId, botToken } : undefined;
+      const ptAffiliateUrl = await wrapWithPostTap(affiliateUrl, post.title ?? '', ptActivePub, { userId, botToken });
+
       let messageText: string;
       let replyMarkup: object | undefined;
 
@@ -1862,18 +1881,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
         // Solo la tastiera del layout (se impostata), nessun pulsante prodotto hardcoded
         if (keyboardRow?.body) {
-          replyMarkup = await buildKeyboard(keyboardRow.body, post, affiliateUrl)
+          replyMarkup = await buildKeyboard(keyboardRow.body, post, affiliateUrl, ptCtxPub)
             ?? undefined;
         }
       } else {
         const defaultLayout = `🔥 <b>{titolo}</b>\n\n💰 {prezzo_scontato}{valuta} <s>{oldprezzo}{valuta}</s>\n🏷️ Sconto: -{sconto}%\n\n{_ {custom} _}`;
         messageText = buildMessage(
           layoutRow?.body || defaultLayout,
-          post, affiliateUrl, aliCurrency, customTags,
+          post, ptAffiliateUrl, aliCurrency, customTags,
         );
         console.log(`[autopost] messageText preview (100ch): ${messageText.slice(0, 100).replace(/\n/g, '↵')}`);
-        replyMarkup = await buildKeyboard(keyboardRow?.body, post, affiliateUrl)
-          ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
+        replyMarkup = await buildKeyboard(keyboardRow?.body, post, affiliateUrl, ptCtxPub)
+          ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: ptAffiliateUrl }]] } : undefined);
       }
 
       // Usa dest_channel dell'item se impostato, altrimenti il primo canale configurato
