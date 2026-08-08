@@ -2143,6 +2143,30 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   {/* ── SOTTO-PAGINA POSTTAP ── */}
   if (subPage === 'posttap') {
     const pt = s.postTap ?? { enabled: false, cookie: '' };
+    const [ptCookieInput, setPtCookieInput] = React.useState(pt.cookie);
+    const [ptSaveMsg, setPtSaveMsg] = React.useState('');
+
+    // Estrae solo i cookie essenziali per l'auth (btn_*): riduce ~900 → ~150 chars
+    const extractEssentialCookies = (raw: string): string =>
+      raw.split(';')
+        .map(c => c.trim())
+        .filter(c => c.startsWith('btn_'))
+        .join('; ');
+
+    const saveCookie = async () => {
+      const essential = extractEssentialCookies(ptCookieInput) || ptCookieInput.trim();
+      const updated = { ...s, postTap: { ...pt, cookie: essential } };
+      try {
+        await settingsApi.save(updated);
+        setS(updated);
+        setPtCookieInput(essential);
+        setPtSaveMsg('✅ Cookie salvato');
+      } catch {
+        setPtSaveMsg('❌ Errore nel salvataggio');
+      }
+      setTimeout(() => setPtSaveMsg(''), 3000);
+    };
+
     return (
       <div className="pg">
         <PageHeader title="PostTap" onBack={() => setSubPage(null)} />
@@ -2161,30 +2185,25 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Cookie di sessione PostTap</div>
             <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.6, marginBottom: 10 }}>
-              Vai su <b>creators.posttap.com</b> → DevTools (F12) → Network → crea un link → clicca su <b>create-shortlink</b> → Headers → copia tutto il valore del campo <b>cookie:</b> e incollalo qui.
+              Vai su <b>creators.posttap.com</b> → DevTools (F12) → Network → crea un link → clicca su <b>create-shortlink</b> → Headers → copia tutto il valore del campo <b>cookie:</b> e incollalo qui. Il bot estrarrà automaticamente solo i cookie necessari.
             </div>
             <textarea
-              value={pt.cookie}
-              onChange={e => setS(prev => ({ ...prev, postTap: { ...pt, cookie: e.target.value } }))}
-              placeholder="btn_logged_in=1; btn_session=... (incolla il cookie completo)"
-              rows={5}
+              value={ptCookieInput}
+              onChange={e => setPtCookieInput(e.target.value)}
+              placeholder="Incolla qui il cookie completo copiato da DevTools..."
+              rows={4}
               style={{
                 width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid var(--bdr)',
                 background: 'var(--bg)', color: 'var(--t1)', fontSize: 11, padding: 10,
                 fontFamily: 'monospace', resize: 'vertical',
               }}
             />
-            <button
-              className="btn bp bfull"
-              style={{ marginTop: 10 }}
-              onClick={async () => {
-                const updated = { ...s, postTap: { ...pt, cookie: pt.cookie } };
-                await settingsApi.save(updated);
-                setS(updated);
-              }}
-            >
+            <button className="btn bp bfull" style={{ marginTop: 10 }} onClick={saveCookie}>
               Salva cookie
             </button>
+            {ptSaveMsg && (
+              <div style={{ marginTop: 8, fontSize: 13, textAlign: 'center' }}>{ptSaveMsg}</div>
+            )}
           </div>
 
           <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: 14, fontSize: 12, color: 'var(--t3)', lineHeight: 1.6 }}>
