@@ -2060,6 +2060,8 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [openAmz, setOpenAmz] = useState(false);
   const [openAli, setOpenAli] = useState(false);
   const [subPage, setSubPage] = useState<null | 'general' | 'admin' | 'emoji' | 'posttap'>(null);
+  const [ptCookieInput, setPtCookieInput] = useState('');
+  const [ptSaveMsg, setPtSaveMsg] = useState('');
   const [emojiList, setEmojiList] = useState<EmojiEntry[]>([]);
   const [emojiLoaded, setEmojiLoaded] = useState(false);
   const [emojiLoading, setEmojiLoading] = useState(false);
@@ -2075,6 +2077,10 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       emojiIdsApi.list()
         .then(d => { setEmojiList(d.emoji ?? []); setEmojiLoaded(true); })
         .catch(() => {});
+    }
+    if (subPage === 'posttap') {
+      setPtCookieInput(s.postTap?.cookie ?? '');
+      setPtSaveMsg('');
     }
   }, [subPage, emojiLoaded]);
 
@@ -2143,8 +2149,6 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   {/* ── SOTTO-PAGINA POSTTAP ── */}
   if (subPage === 'posttap') {
     const pt = s.postTap ?? { enabled: false, cookie: '' };
-    const [ptCookieInput, setPtCookieInput] = React.useState(pt.cookie);
-    const [ptSaveMsg, setPtSaveMsg] = React.useState('');
 
     // Estrae solo i cookie essenziali per l'auth (btn_*): riduce ~900 → ~150 chars
     const extractEssentialCookies = (raw: string): string =>
