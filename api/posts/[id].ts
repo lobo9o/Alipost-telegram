@@ -731,8 +731,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   const ptConfig: PostTapConfig | undefined = ptRow?.enabled && ptRow?.cookie
     ? { enabled: true, cookie: ptRow.cookie }
     : undefined;
-  const ptCtx = ptConfig ? { config: ptConfig, userId, botToken } : undefined;
-  const ptAffiliateUrl = await wrapWithPostTap(affiliateUrl, post.title ?? '', ptConfig, { userId, botToken });
+  // PostTap supporta solo Amazon — per AliExpress usa il link originale
+  const ptActive = ptConfig && post.platform === 'amazon' ? ptConfig : undefined;
+  const ptCtx = ptActive ? { config: ptActive, userId, botToken } : undefined;
+  const ptAffiliateUrl = await wrapWithPostTap(affiliateUrl, post.title ?? '', ptActive, { userId, botToken });
 
   let messageText = buildMessage(layoutContenuto || defaultLayout, post, ptAffiliateUrl, aliCurrency, customTags);
 
