@@ -323,6 +323,7 @@ export interface AppSettings {
   dealSearch: DealSearchSettings;
   dailyRecap: Record<string, DailyRecapChannelConfig>; // chiave: nome canale o "default"
   emojiAnimated?: { enabled: boolean };
+  postTap?: { enabled: boolean; cookie: string };
 }
 
 export interface AppState {

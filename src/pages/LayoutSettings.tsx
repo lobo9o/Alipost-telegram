@@ -2059,7 +2059,7 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [saveErr, setSaveErr] = useState('');
   const [openAmz, setOpenAmz] = useState(false);
   const [openAli, setOpenAli] = useState(false);
-  const [subPage, setSubPage] = useState<null | 'general' | 'admin' | 'emoji'>(null);
+  const [subPage, setSubPage] = useState<null | 'general' | 'admin' | 'emoji' | 'posttap'>(null);
   const [emojiList, setEmojiList] = useState<EmojiEntry[]>([]);
   const [emojiLoaded, setEmojiLoaded] = useState(false);
   const [emojiLoading, setEmojiLoading] = useState(false);
@@ -2131,9 +2131,72 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
           sub="Sostituisci emoji con versioni animate nei post"
           onClick={() => setSubPage('emoji')}
         />
+        <SettingsMenuItem
+          icon="🔗" label="PostTap"
+          sub="Converti link {link} e {buynow} in shortlink PostTap"
+          onClick={() => setSubPage('posttap')}
+        />
       </div>
     </div>
   );
+
+  {/* ── SOTTO-PAGINA POSTTAP ── */}
+  if (subPage === 'posttap') {
+    const pt = s.postTap ?? { enabled: false, cookie: '' };
+    return (
+      <div className="pg">
+        <PageHeader title="PostTap" onBack={() => setSubPage(null)} />
+        <div style={{ padding: '0 16px' }}>
+          <ToggleRow
+            label="Attiva PostTap"
+            sub="Converte automaticamente {link} e {buynow} in shortlink amzlink.to"
+            value={!!pt.enabled}
+            onChange={async v => {
+              const updated = { ...s, postTap: { ...pt, enabled: v } };
+              setS(updated);
+              await settingsApi.save(updated).catch(() => {});
+            }}
+          />
+
+          <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Cookie di sessione PostTap</div>
+            <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.6, marginBottom: 10 }}>
+              Vai su <b>creators.posttap.com</b> → DevTools (F12) → Network → crea un link → clicca su <b>create-shortlink</b> → Headers → copia tutto il valore del campo <b>cookie:</b> e incollalo qui.
+            </div>
+            <textarea
+              value={pt.cookie}
+              onChange={e => setS(prev => ({ ...prev, postTap: { ...pt, cookie: e.target.value } }))}
+              placeholder="btn_logged_in=1; btn_session=... (incolla il cookie completo)"
+              rows={5}
+              style={{
+                width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid var(--bdr)',
+                background: 'var(--bg)', color: 'var(--t1)', fontSize: 11, padding: 10,
+                fontFamily: 'monospace', resize: 'vertical',
+              }}
+            />
+            <button
+              className="btn bp bfull"
+              style={{ marginTop: 10 }}
+              onClick={async () => {
+                const updated = { ...s, postTap: { ...pt, cookie: pt.cookie } };
+                await settingsApi.save(updated);
+                setS(updated);
+              }}
+            >
+              Salva cookie
+            </button>
+          </div>
+
+          <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: 14, fontSize: 12, color: 'var(--t3)', lineHeight: 1.6 }}>
+            <b style={{ color: 'var(--t1)' }}>Come funziona</b><br />
+            Quando pubblichi un post, il bot crea automaticamente uno shortlink <b>amzlink.to/...</b> per i tag <code>{'{link}'}</code> e <code>{'{buynow}'}</code>. I link già creati vengono memorizzati in cache e riutilizzati.<br /><br />
+            <b style={{ color: 'var(--t1)' }}>Cookie scaduti</b><br />
+            Se la sessione PostTap scade, riceverai una notifica Telegram e i post continueranno a uscire con i link originali Amazon.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   {/* ── SOTTO-PAGINA ADMIN: credenziali e canali ── */}
   if (subPage === 'admin') return (

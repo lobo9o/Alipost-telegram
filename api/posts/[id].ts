@@ -4,6 +4,7 @@ import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { getProductEmoji } from '../_titleFormat.js';
 import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
+import { wrapWithPostTap, type PostTapConfig } from '../../lib/postTap.js';
 
 // Wrappa le emoji di testo in <tg-emoji> usando emoji_ids del DB, poi chiama applyCustomEmoji.
 // Identico a quanto fa publish.ts nel path automatico (righe ~2268-2279).
@@ -311,6 +312,7 @@ async function buildKeyboard(
   contenuto: string | undefined,
   post: Record<string, any>,
   affiliateUrl: string,
+  ptCtx?: { config: PostTapConfig; userId: string; botToken: string },
 ): Promise<object | undefined> {
   if (!contenuto?.trim()) return undefined;
 
@@ -332,11 +334,21 @@ async function buildKeyboard(
       }
     } catch { /* fallback */ }
   }
+
+  // PostTap: wrappa {link} e {buynow} se abilitato
+  const ptName = (post.title ?? '').slice(0, 120);
+  const ptCfg = ptCtx?.config;
+  const ptOpts = ptCtx ? { userId: ptCtx.userId, botToken: ptCtx.botToken } : {};
+  const [ptLink, ptBuyNow] = await Promise.all([
+    wrapWithPostTap(affiliateUrl, ptName, ptCfg, ptOpts),
+    wrapWithPostTap(buyNowUrl, ptName, ptCfg, ptOpts),
+  ]);
+
   const urlTags: Record<string, string> = {
-    '{link}':       affiliateUrl,
-    '{link_affiliato}': affiliateUrl,
+    '{link}':       ptLink,
+    '{link_affiliato}': ptLink,
     '{addtocart}':  addToCartUrl,
-    '{buynow}':     buyNowUrl,
+    '{buynow}':     ptBuyNow,
     '{whatsapp}':   `https://api.whatsapp.com/send?text=${waText}`,
     '{app}':        affiliateUrl,
     '{amici}':      affiliateUrl,
@@ -713,7 +725,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     customTags[tr.name as string] = tr.value as string;
   }
 
-  let messageText = buildMessage(layoutContenuto || defaultLayout, post, affiliateUrl, aliCurrency, customTags);
+  // PostTap: wrappa {link} nel body se abilitato
+  const ptCfgRaw = cfg.postTap as { enabled?: boolean; cookie?: string } | undefined;
+  const ptConfig: PostTapConfig | undefined = ptCfgRaw?.enabled && ptCfgRaw.cookie
+    ? { enabled: true, cookie: ptCfgRaw.cookie }
+    : undefined;
+  const ptCtx = ptConfig ? { config: ptConfig, userId, botToken } : undefined;
+  const ptAffiliateUrl = await wrapWithPostTap(affiliateUrl, post.title ?? '', ptConfig, { userId, botToken });
+
+  let messageText = buildMessage(layoutContenuto || defaultLayout, post, ptAffiliateUrl, aliCurrency, customTags);
 
   // Applica emoji animate: solo per il profilo/canale corrente (userId esatto)
   const emojiRowsP = await sql`
@@ -727,8 +747,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     }
   }
 
-  const replyMarkup = await buildKeyboard(keyboardContenuto, post, affiliateUrl)
-    ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: affiliateUrl }]] } : undefined);
+  const replyMarkup = await buildKeyboard(keyboardContenuto, post, affiliateUrl, ptCtx)
+    ?? (affiliateUrl ? { inline_keyboard: [[{ text: post.platform === 'amazon' ? '🛒 Acquista su Amazon' : '🛒 Acquista su AliExpress', url: ptAffiliateUrl }]] } : undefined);
 
   const tgBase = `https://api.telegram.org/bot${botToken}`;
 
