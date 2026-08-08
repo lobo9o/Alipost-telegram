@@ -725,10 +725,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     customTags[tr.name as string] = tr.value as string;
   }
 
-  // PostTap: wrappa {link} nel body se abilitato
-  const ptCfgRaw = cfg.postTap as { enabled?: boolean; cookie?: string } | undefined;
-  const ptConfig: PostTapConfig | undefined = ptCfgRaw?.enabled && ptCfgRaw.cookie
-    ? { enabled: true, cookie: ptCfgRaw.cookie }
+  // PostTap: carica config dalla tabella dedicata (non dalle settings per evitare limite 10k)
+  const baseUserIdPt = userId.includes(':') ? userId.split(':')[0] : userId;
+  const [ptRow] = await sql`SELECT enabled, cookie FROM posttap_sessions WHERE user_id = ${baseUserIdPt}`.catch(() => [] as any[]);
+  const ptConfig: PostTapConfig | undefined = ptRow?.enabled && ptRow?.cookie
+    ? { enabled: true, cookie: ptRow.cookie }
     : undefined;
   const ptCtx = ptConfig ? { config: ptConfig, userId, botToken } : undefined;
   const ptAffiliateUrl = await wrapWithPostTap(affiliateUrl, post.title ?? '', ptConfig, { userId, botToken });

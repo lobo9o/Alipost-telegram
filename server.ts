@@ -58,6 +58,7 @@ async function main() {
     adminDashboardHandler,
     customPostsHandler,
     customPostsIdHandler,
+    postTapHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -85,6 +86,7 @@ async function main() {
     loadHandler('api/admin/dashboard.ts'),
     loadHandler('api/custom-posts/index.ts'),
     loadHandler('api/custom-posts/[id].ts'),
+    loadHandler('api/posttap.ts'),
   ]);
 
   const app = express();
@@ -140,6 +142,7 @@ async function main() {
   app.all('/admin', adminDashboardHandler);
   app.all('/api/custom-posts', customPostsHandler);
   app.all('/api/custom-posts/:id', withId(customPostsIdHandler));
+  app.all('/api/posttap', postTapHandler);
 
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');

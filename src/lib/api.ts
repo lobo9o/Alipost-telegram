@@ -282,6 +282,11 @@ export interface CustomPost {
   updated_at?: string;
 }
 
+export const postTapApi = {
+  get: () => req<{ enabled: boolean; cookie: string }>('GET', '/api/posttap'),
+  save: (data: { enabled: boolean; cookie: string }) => req<{ ok: boolean }>('POST', '/api/posttap', data),
+};
+
 export const customPostsApi = {
   list: () => req<CustomPost[]>('GET', '/api/custom-posts'),
   create: (data: Omit<CustomPost, 'id' | 'created_at' | 'updated_at'>) => req<CustomPost>('POST', '/api/custom-posts', data),

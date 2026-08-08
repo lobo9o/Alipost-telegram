@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { NavPage, TextLayout, KeyboardLayout, LayoutType, Tag, Template, TextEl, ImgEl, makeDefaultTemplate, TerminataConfig, MultiBarConfig, MultiPriceConfig } from '../types';
 import { PageHeader, SwitchTabs, InfoBanner, ErrorBanner, ToggleRow } from '../components/Shared';
 import { genId, INITIAL_LAYOUTS, INITIAL_KEYBOARDS } from '../data/mock';
-import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, tgMonitorApi, TgMonitorChannel, emojiIdsApi, EmojiEntry } from '../lib/api';
+import { tagsApi, layoutsApi, keyboardsApi, templatesApi, settingsApi, tgMonitorApi, TgMonitorChannel, emojiIdsApi, EmojiEntry, postTapApi } from '../lib/api';
 import { SYSTEM_TAGS } from '../utils/tagUtils';
 
 // ============================================================
@@ -2060,8 +2060,10 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
   const [openAmz, setOpenAmz] = useState(false);
   const [openAli, setOpenAli] = useState(false);
   const [subPage, setSubPage] = useState<null | 'general' | 'admin' | 'emoji' | 'posttap'>(null);
+  const [ptEnabled, setPtEnabled] = useState(false);
   const [ptCookieInput, setPtCookieInput] = useState('');
   const [ptSaveMsg, setPtSaveMsg] = useState('');
+  const [ptLoaded, setPtLoaded] = useState(false);
   const [emojiList, setEmojiList] = useState<EmojiEntry[]>([]);
   const [emojiLoaded, setEmojiLoaded] = useState(false);
   const [emojiLoading, setEmojiLoading] = useState(false);
@@ -2078,9 +2080,12 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
         .then(d => { setEmojiList(d.emoji ?? []); setEmojiLoaded(true); })
         .catch(() => {});
     }
-    if (subPage === 'posttap') {
-      setPtCookieInput(s.postTap?.cookie ?? '');
-      setPtSaveMsg('');
+    if (subPage === 'posttap' && !ptLoaded) {
+      postTapApi.get().then(d => {
+        setPtEnabled(d.enabled);
+        setPtCookieInput(d.cookie);
+        setPtLoaded(true);
+      }).catch(() => {});
     }
   }, [subPage, emojiLoaded]);
 
@@ -2148,22 +2153,15 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
 
   {/* ── SOTTO-PAGINA POSTTAP ── */}
   if (subPage === 'posttap') {
-    const pt = s.postTap ?? { enabled: false, cookie: '' };
-
-    // Estrae solo i cookie essenziali per l'auth (btn_*): riduce ~900 → ~150 chars
-    const extractEssentialCookies = (raw: string): string =>
-      raw.split(';')
-        .map(c => c.trim())
-        .filter(c => c.startsWith('btn_'))
-        .join('; ');
+    const extractEssentialCookies = (raw: string): string => {
+      const filtered = raw.split(';').map(c => c.trim()).filter(c => c.startsWith('btn_')).join('; ');
+      return filtered || raw.trim();
+    };
 
     const saveCookie = async () => {
-      const essential = extractEssentialCookies(ptCookieInput) || ptCookieInput.trim();
-      const updated = { ...s, postTap: { ...pt, cookie: essential } };
+      const essential = extractEssentialCookies(ptCookieInput);
       try {
-        await settingsApi.save(updated);
-        setS(updated);
-        setSettings(updated);
+        await postTapApi.save({ enabled: ptEnabled, cookie: essential });
         setPtCookieInput(essential);
         setPtSaveMsg('✅ Cookie salvato');
       } catch {
@@ -2172,52 +2170,56 @@ export function SettingsPage({ nav }: { nav: (p: NavPage) => void }) {
       setTimeout(() => setPtSaveMsg(''), 3000);
     };
 
+    const toggleEnabled = async (v: boolean) => {
+      setPtEnabled(v);
+      await postTapApi.save({ enabled: v, cookie: ptCookieInput }).catch(() => {});
+    };
+
     return (
       <div className="pg">
         <PageHeader title="PostTap" onBack={() => setSubPage(null)} />
         <div style={{ padding: '0 16px' }}>
-          <ToggleRow
-            label="Attiva PostTap"
-            sub="Converte automaticamente {link} e {buynow} in shortlink amzlink.to"
-            value={!!pt.enabled}
-            onChange={async v => {
-              const updated = { ...s, postTap: { ...pt, enabled: v } };
-              setS(updated);
-              setSettings(updated);
-              await settingsApi.save(updated).catch(() => {});
-            }}
-          />
+          {!ptLoaded ? (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--t3)' }}>Caricamento...</div>
+          ) : (
+            <>
+              <ToggleRow
+                label="Attiva PostTap"
+                sub="Converte automaticamente {link} e {buynow} in shortlink amzlink.to"
+                value={ptEnabled}
+                onChange={toggleEnabled}
+              />
 
-          <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Cookie di sessione PostTap</div>
-            <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.6, marginBottom: 10 }}>
-              Vai su <b>creators.posttap.com</b> → DevTools (F12) → Network → crea un link → clicca su <b>create-shortlink</b> → Headers → copia tutto il valore del campo <b>cookie:</b> e incollalo qui. Il bot estrarrà automaticamente solo i cookie necessari.
-            </div>
-            <textarea
-              value={ptCookieInput}
-              onChange={e => setPtCookieInput(e.target.value)}
-              placeholder="Incolla qui il cookie completo copiato da DevTools..."
-              rows={4}
-              style={{
-                width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid var(--bdr)',
-                background: 'var(--bg)', color: 'var(--t1)', fontSize: 11, padding: 10,
-                fontFamily: 'monospace', resize: 'vertical',
-              }}
-            />
-            <button className="btn bp bfull" style={{ marginTop: 10 }} onClick={saveCookie}>
-              Salva cookie
-            </button>
-            {ptSaveMsg && (
-              <div style={{ marginTop: 8, fontSize: 13, textAlign: 'center' }}>{ptSaveMsg}</div>
-            )}
-          </div>
+              <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Cookie di sessione PostTap</div>
+                <div style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.6, marginBottom: 10 }}>
+                  Vai su <b>creators.posttap.com</b> → DevTools (F12) → Network → crea un link → clicca su <b>create-shortlink</b> → Headers → copia tutto il valore del campo <b>cookie:</b> e incollalo qui.
+                </div>
+                <textarea
+                  value={ptCookieInput}
+                  onChange={e => setPtCookieInput(e.target.value)}
+                  placeholder="Incolla qui il cookie completo copiato da DevTools..."
+                  rows={4}
+                  style={{
+                    width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid var(--bdr)',
+                    background: 'var(--bg)', color: 'var(--t1)', fontSize: 11, padding: 10,
+                    fontFamily: 'monospace', resize: 'vertical',
+                  }}
+                />
+                <button className="btn bp bfull" style={{ marginTop: 10 }} onClick={saveCookie}>
+                  Salva cookie
+                </button>
+                {ptSaveMsg && <div style={{ marginTop: 8, fontSize: 13, textAlign: 'center' }}>{ptSaveMsg}</div>}
+              </div>
 
-          <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: 14, fontSize: 12, color: 'var(--t3)', lineHeight: 1.6 }}>
-            <b style={{ color: 'var(--t1)' }}>Come funziona</b><br />
-            Quando pubblichi un post, il bot crea automaticamente uno shortlink <b>amzlink.to/...</b> per i tag <code>{'{link}'}</code> e <code>{'{buynow}'}</code>. I link già creati vengono memorizzati in cache e riutilizzati.<br /><br />
-            <b style={{ color: 'var(--t1)' }}>Cookie scaduti</b><br />
-            Se la sessione PostTap scade, riceverai una notifica Telegram e i post continueranno a uscire con i link originali Amazon.
-          </div>
+              <div style={{ background: 'var(--card)', border: '1px solid var(--bdr)', borderRadius: 10, padding: 14, fontSize: 12, color: 'var(--t3)', lineHeight: 1.6 }}>
+                <b style={{ color: 'var(--t1)' }}>Come funziona</b><br />
+                Quando pubblichi un post, il bot crea automaticamente uno shortlink <b>amzlink.to/...</b> per i tag <code>{'{link}'}</code> e <code>{'{buynow}'}</code>. I link già creati vengono memorizzati in cache e riutilizzati.<br /><br />
+                <b style={{ color: 'var(--t1)' }}>Cookie scaduti</b><br />
+                Se la sessione PostTap scade, riceverai una notifica Telegram e i post continueranno a uscire con i link originali Amazon.
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
