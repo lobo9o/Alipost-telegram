@@ -2169,6 +2169,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       const ptTermConfig: PostTapConfig | undefined = ptTermRow?.enabled && ptTermRow?.cookie
         ? { enabled: true, cookie: ptTermRow.cookie } : undefined;
 
+      // Custom tag: caricati una volta per il loop (servono a buildMessage per store_emoji_amz/ali ecc.)
+      const termTagRows = await sql`SELECT name, value FROM tags WHERE user_id = ${userId} OR user_id = ${baseUserId}`.catch(() => [] as any[]);
+      const termCustomTags: Record<string, string> = {};
+      for (const tr of termTagRows) termCustomTags[String(tr.name)] = String(tr.value ?? '');
+
       console.log(`[autopost] price-check ${userId}: trovati ${toCheck.length} post da verificare`);
       for (const pub of toCheck) {
         // Aggiorna subito per evitare doppio check in run sovrapposti
@@ -2270,7 +2275,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               ? await wrapWithPostTap(affUrl, String(pub.title ?? ''), ptTermConfig, { userId, botToken })
               : affUrl;
             const builtCaption = termLayoutRow?.body
-              ? buildMessage(String(termLayoutRow.body), pub as any, ptTermAffUrl, undefined, {}, terminataTagValue)
+              ? buildMessage(String(termLayoutRow.body), pub as any, ptTermAffUrl, undefined, termCustomTags, terminataTagValue)
               : '';
             termCaption = builtCaption || terminataTagValue;
           }

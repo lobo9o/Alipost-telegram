@@ -156,6 +156,11 @@ export function resolvePostTags(template: string, post: CreatedPost, tags: Tag[]
   // {testo_sconto}: valore JSON con range percentuali → risolto in base alla % di sconto
   const testoScontoTag = tags.find(t => t.name === '{testo_sconto}');
   builtIn['{testo_sconto}'] = testoScontoTag ? resolveRangeTag(testoScontoTag.value, post.discountPercent) : '';
+  // Store emoji: filtro per piattaforma (solo uno dei due deve essere visibile)
+  const storeEmojiAmz = tags.find(t => t.name === '{store_emoji_amz}');
+  const storeEmojiAli = tags.find(t => t.name === '{store_emoji_ali}');
+  builtIn['{store_emoji_amz}'] = post.platform === 'amazon' ? (storeEmojiAmz?.value || '') : '';
+  builtIn['{store_emoji_ali}'] = post.platform === 'aliexpress' ? (storeEmojiAli?.value || '') : '';
   // Override per-post: i tagOverrides del post hanno priorità sui valori globali dei tag custom
   const effectiveTags = tags.map(t =>
     post.tagOverrides?.[t.name] !== undefined
