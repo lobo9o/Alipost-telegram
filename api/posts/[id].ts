@@ -4,6 +4,7 @@ import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { getProductEmoji } from '../_titleFormat.js';
 import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
+import { generateTemplateImageServer, parseTemplateCfg } from '../autopost/publish.js';
 import { wrapWithPostTap, type PostTapConfig } from '../../lib/postTap.js';
 
 // Wrappa le emoji di testo in <tg-emoji> usando emoji_ids del DB, poi chiama applyCustomEmoji.
@@ -550,8 +551,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       caption = terminata ? `❌ <b>OFFERTA TERMINATA</b>\n\n${newCaption ?? ''}`.trim() : (newCaption !== undefined ? String(newCaption) : undefined);
     }
 
-    // Genera immagine terminata server-side: stessa logica del path automatico (publish.ts)
-    // per evitare differenze di rendering emoji tra browser canvas e node-canvas
+    // Genera immagine terminata server-side identica al path automatico (publish.ts):
+    // 1) applica il template (prezzi, badge store), 2) applica grayscale + overlay testo.
     let effectiveNewImage: string | undefined = typeof newImage === 'string' && newImage.startsWith('data:') ? newImage : undefined;
     if (terminata && postData?.image && String(postData.image).startsWith('http')) {
       const baseUserIdTerm = userId.includes(':') ? userId.split(':')[0] : userId;
@@ -568,7 +569,41 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ...termCfgT,
           overlayText: termCfgT.overlayText || termTagVal,
         };
-        const buf = await generateTerminataImageServer(String(postData.image), effCfg);
+
+        // Applica prima il template (stesso comportamento del path automatico in publish.ts)
+        let baseForTerm: string | Buffer = String(postData.image);
+        try {
+          const [termTpl] = await sql`
+            SELECT id, config FROM templates
+            WHERE (user_id = ${baseUserIdTerm} OR user_id = ${userId})
+              AND tipo NOT IN ('historical_low')
+            ORDER BY (user_id = ${userId}) DESC, (tipo = 'normal') DESC,
+                     updated_at DESC NULLS LAST, created_at DESC LIMIT 1
+          `.catch(() => [null]);
+          if (termTpl) {
+            const termTplCfg = parseTemplateCfg(termTpl);
+            if (termTplCfg) {
+              const CSYM2: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
+              const cs2 = postData.platform === 'aliexpress'
+                ? ((cfgT.aliexpress?.targetCountry ?? '').toUpperCase() === 'US' ? '$' : '€')
+                : (CSYM2[String(cfgT.amazon?.currency ?? 'EUR').toUpperCase()] ?? '€');
+              const tplBuf = await generateTemplateImageServer(termTplCfg, String(postData.image), String(postData.platform ?? 'amazon'), {
+                prezzo:           `${cs2}${Number(postData.discountedPrice).toFixed(2)}`,
+                prezzoPrecedente: `${cs2}${Number(postData.originalPrice).toFixed(2)}`,
+                sconto:           `-${Number(postData.discountPercent)}%`,
+              }).catch(() => null);
+              if (tplBuf) {
+                const b64tpl = String(tplBuf).replace(/^data:image\/\w+;base64,/, '');
+                baseForTerm = Buffer.from(b64tpl, 'base64');
+                console.log(`[terminata] template applicato per ${id}`);
+              }
+            }
+          }
+        } catch (e: any) {
+          console.warn('[terminata] fallback a immagine grezza (no template):', e.message);
+        }
+
+        const buf = await generateTerminataImageServer(baseForTerm, effCfg);
         effectiveNewImage = `data:image/jpeg;base64,${buf.toString('base64')}`;
         console.log(`[terminata] immagine generata server-side per ${id}`);
       } catch (e: any) {
@@ -580,7 +615,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     let tgData: { ok: boolean; description?: string };
 
     if (effectiveNewImage) {
-      const base64 = newImage.replace(/^data:image\/\w+;base64,/, '');
+      const base64 = effectiveNewImage.replace(/^data:image\/\w+;base64,/, '');
       const imgBuffer = Buffer.from(base64, 'base64');
       const form = new FormData();
       form.append('chat_id', chatId);
