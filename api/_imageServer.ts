@@ -28,7 +28,8 @@ export async function generateTerminataImageServer(
 
   if (!config.overlayText) return step1;
 
-  const refSize = Math.min(imgW, imgH);
+  // Usa la larghezza come riferimento, uguale all'anteprima (containerW = larghezza immagine)
+  const refSize = imgW;
   const fs  = Math.round(((Number(config.overlayTextSize) || 7) / 100) * refSize);
   const tx  = Math.round(((Number(config.overlayTextX)    || 50) / 100) * imgW);
   const ty  = Math.round(((Number(config.overlayTextY)    || 50) / 100) * imgH);
@@ -57,12 +58,12 @@ export async function generateTerminataImageServer(
     return canvas.toBuffer('image/jpeg', { quality: 0.88 });
   }
 
-  // Fallback SVG (senza emoji)
-  const txt = rawTxt.replace(/[^\x00-\x7F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+  // Fallback SVG: mantieni il testo originale (incluse emoji), escape solo caratteri XML speciali
+  const txt = rawTxt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
   if (!txt) return step1;
   const svg = Buffer.from(
-    `<svg width="${imgW}" height="${imgH}">` +
-    `<text x="${tx}" y="${ty}" font-family="Impact,Arial Black,sans-serif"` +
+    `<svg width="${imgW}" height="${imgH}" xmlns="http://www.w3.org/2000/svg">` +
+    `<text x="${tx}" y="${ty}" font-family="Impact,'Noto Color Emoji','Noto Emoji','Segoe UI Emoji',Arial Black,sans-serif"` +
     ` font-size="${fs}" font-weight="bold" fill="${col}"` +
     ` stroke="#000" stroke-width="${sw}" stroke-linejoin="round" paint-order="stroke fill"` +
     ` text-anchor="middle" dominant-baseline="middle">${txt}</text>` +
