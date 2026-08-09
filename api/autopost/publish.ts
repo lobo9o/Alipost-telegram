@@ -2164,6 +2164,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           LIMIT 50
         `.catch(() => []);
 
+      // PostTap: carica config una volta per il loop terminata
+      const [ptTermRow] = await sql`SELECT enabled, cookie FROM posttap_sessions WHERE user_id = ${baseUserId}`.catch(() => [] as any[]);
+      const ptTermConfig: PostTapConfig | undefined = ptTermRow?.enabled && ptTermRow?.cookie
+        ? { enabled: true, cookie: ptTermRow.cookie } : undefined;
+
       console.log(`[autopost] price-check ${userId}: trovati ${toCheck.length} post da verificare`);
       for (const pub of toCheck) {
         // Aggiorna subito per evitare doppio check in run sovrapposti
@@ -2259,8 +2264,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               SELECT body FROM layouts WHERE id = ${layoutIdToUse} AND (user_id = ${userId} OR user_id = ${baseUserId})
             `.catch(() => [null]) : [null];
             const affUrl = String(pub.sourceUrl ?? '');
+            const ptTermAffUrl = ptTermConfig && pub.platform === 'amazon'
+              ? await wrapWithPostTap(affUrl, String(pub.title ?? ''), ptTermConfig, { userId, botToken })
+              : affUrl;
             const builtCaption = termLayoutRow?.body
-              ? buildMessage(String(termLayoutRow.body), pub as any, affUrl, undefined, {}, terminataTagValue)
+              ? buildMessage(String(termLayoutRow.body), pub as any, ptTermAffUrl, undefined, {}, terminataTagValue)
               : '';
             termCaption = builtCaption || terminataTagValue;
           }
@@ -2316,7 +2324,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
                   `.catch(() => []);
                   const keepTags: Record<string, string> = {};
                   for (const t of keepTagRows) keepTags[t.name as string] = t.value as string;
-                  htmlToWrap = buildMessage(String(keepLayout.body), pub as any, String(pub.sourceUrl ?? ''), undefined, keepTags);
+                  const keepAffUrl = String(pub.sourceUrl ?? '');
+                  const keepPtUrl = ptTermConfig && pub.platform === 'amazon'
+                    ? await wrapWithPostTap(keepAffUrl, String(pub.title ?? ''), ptTermConfig, { userId, botToken })
+                    : keepAffUrl;
+                  htmlToWrap = buildMessage(String(keepLayout.body), pub as any, keepPtUrl, undefined, keepTags);
                 }
               }
               if (htmlToWrap) {
