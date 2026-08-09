@@ -2174,8 +2174,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         // Aggiorna subito per evitare doppio check in run sovrapposti
         await sql`UPDATE published_posts SET last_checked_at = now() WHERE id = ${pub.id}`.catch(() => {});
 
-        // I multi-post e aliexpress non hanno productId verificabile — skip price check
-        if (pub.isMulti || pub.platform === 'aliexpress') continue;
+        // AliExpress non ha price-check affidabile — skip
+        if (pub.platform === 'aliexpress') continue;
+        // Multi-post: terminati solo se sono errori di prezzo (customText contiene "ERRORE")
+        if (pub.isMulti && !String(pub.customText ?? '').toUpperCase().includes('ERRORE')) continue;
         const check = await checkPostPrice(pub as any, cfg).catch(() => ({ valid: true as const, currentPrice: undefined as number | undefined }));
         console.log(`[autopost] price-check ${pub.productId}: valid=${check.valid} price=${check.currentPrice ?? '-'} stored=${pub.discountedPrice} orig=${pub.originalPrice} chatId=${pub.chatId}`);
 
