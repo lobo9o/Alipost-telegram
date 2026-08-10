@@ -193,10 +193,24 @@ export async function checkPostPrice(
       if (currentPrice === null) return { valid: true }; // impossibile verificare → considera valido
     }
 
-    // Termina solo se abbiamo un prezzo originale affidabile come riferimento e il prezzo
-    // è tornato vicino a quello (≥85%). Senza originalPrice i falsi positivi sono troppi:
-    // l'API restituisce il prezzo base senza coupon, più alto del prezzo pubblicato.
-    if (originalPrice > storedPrice * 1.10) {
+    const isErrorePrezzo = String(post.customText ?? '').toUpperCase().includes('ERRORE');
+
+    if (isErrorePrezzo) {
+      // Per errori di prezzo il "prezzo originale" non è affidabile (il prezzo può
+      // ripristinarsi a un valore diverso da quello indicato nel post). Termina se
+      // il prezzo attuale supera del 50% il prezzo errato: qualsiasi rientro significativo
+      // indica che l'errore è stato corretto da Amazon.
+      if (currentPrice > storedPrice * 1.5) {
+        return {
+          valid: false,
+          reason: `Errore prezzo rientrato: ${currentPrice.toFixed(2)} > soglia ${(storedPrice * 1.5).toFixed(2)} (1.5× prezzo errore ${storedPrice.toFixed(2)})`,
+          currentPrice,
+        };
+      }
+    } else if (originalPrice > storedPrice * 1.10) {
+      // Offerta normale: termina solo se il prezzo è tornato sopra il prezzo originale.
+      // Senza originalPrice affidabile i falsi positivi sono troppi (l'API restituisce
+      // il prezzo base senza coupon, più alto del prezzo pubblicato).
       if (currentPrice > originalPrice) {
         return {
           valid: false,
