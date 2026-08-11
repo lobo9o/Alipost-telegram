@@ -973,9 +973,7 @@ async function buildKeyboard(
       addToCartUrl = `${u.origin}/gp/aws/cart/add.html?ASIN.1=${post.productId}&Quantity.1=1${tag ? `&tag=${tag}` : ''}`;
       if (contenuto.includes('{buynow}')) {
         const offeringId = await fetchOfferingId(u.hostname, post.productId);
-        buyNowUrl = offeringId
-          ? `${u.origin}/checkout/entry/buynow?buyNow=1&quantity=1&asin=${post.productId}${tag ? `&tag=${tag}` : ''}&offeringID=${encodeURIComponent(offeringId)}`
-          : `${u.origin}/dp/${post.productId}${tag ? `?tag=${tag}` : ''}`;
+        buyNowUrl = `${u.origin}/checkout/entry/buynow?buyNow=1&quantity=1&asin=${post.productId}${tag ? `&tag=${tag}` : ''}${offeringId ? `&offeringID=${encodeURIComponent(offeringId)}` : ''}`;
       } else {
         buyNowUrl = `${u.origin}/dp/${post.productId}${tag ? `?tag=${tag}` : ''}`;
       }
