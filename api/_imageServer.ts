@@ -44,8 +44,9 @@ export async function generateTerminataImageServer(
     const ctx = canvas.getContext('2d');
     const baseImg = await loadImage(step1);
     ctx.drawImage(baseImg, 0, 0, imgW, imgH);
+    const fontFamily = String(config.overlayTextFont || 'Impact');
     ctx.save();
-    ctx.font = `bold ${fs}px Impact, "Noto Color Emoji", "Segoe UI Emoji", Arial, sans-serif`;
+    ctx.font = `bold ${fs}px '${fontFamily}', "Noto Color Emoji", "Segoe UI Emoji", Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#000000';
@@ -61,9 +62,10 @@ export async function generateTerminataImageServer(
   // Fallback SVG: mantieni il testo originale (incluse emoji), escape solo caratteri XML speciali
   const txt = rawTxt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
   if (!txt) return step1;
+  const svgFont = String(config.overlayTextFont || 'Impact');
   const svg = Buffer.from(
     `<svg width="${imgW}" height="${imgH}" xmlns="http://www.w3.org/2000/svg">` +
-    `<text x="${tx}" y="${ty}" font-family="Impact,'Noto Color Emoji','Noto Emoji','Segoe UI Emoji',Arial Black,sans-serif"` +
+    `<text x="${tx}" y="${ty}" font-family="'${svgFont}','Noto Color Emoji','Noto Emoji','Segoe UI Emoji',Arial Black,sans-serif"` +
     ` font-size="${fs}" font-weight="bold" fill="${col}"` +
     ` stroke="#000" stroke-width="${sw}" stroke-linejoin="round" paint-order="stroke fill"` +
     ` text-anchor="middle" dominant-baseline="middle">${txt}</text>` +
