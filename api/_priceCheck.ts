@@ -208,13 +208,12 @@ export async function checkPostPrice(
         };
       }
     } else if (originalPrice > storedPrice * 1.10) {
-      // Offerta normale: termina solo se il prezzo è tornato sopra il prezzo originale.
-      // Senza originalPrice affidabile i falsi positivi sono troppi (l'API restituisce
-      // il prezzo base senza coupon, più alto del prezzo pubblicato).
-      if (currentPrice > originalPrice) {
+      // Offerta normale: termina se il prezzo è tornato al 95% o più del prezzo originale.
+      // La tolleranza del 5% copre piccole fluttuazioni (es. 7.26 vs originale 7.33).
+      if (currentPrice > originalPrice * 0.95) {
         return {
           valid: false,
-          reason: `Offerta scaduta: ${currentPrice.toFixed(2)} supera il prezzo originale ${originalPrice.toFixed(2)}`,
+          reason: `Offerta scaduta: ${currentPrice.toFixed(2)} ≥ 95% del prezzo originale ${originalPrice.toFixed(2)}`,
           currentPrice,
         };
       }
