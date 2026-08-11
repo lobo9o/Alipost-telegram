@@ -2193,7 +2193,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
         if (!check.valid) {
           console.log(`[autopost] offerta scaduta: ${String(pub.title ?? '').slice(0, 40)} — ${check.reason}`);
-          const termCfg = (cfg.terminata ?? {}) as Record<string, any>;
+          // Se il post appartiene a un profilo secondario (main userId che gestisce canali secondari),
+          // carica le impostazioni del profilo specifico del canale invece del profilo principale.
+          const pubUserId = secondaryPattern ? `${baseUserId}:${String(pub.chatId)}` : userId;
+          let pubCfg = cfg;
+          if (pubUserId !== userId) {
+            const [pubSettingsRow] = await sql`SELECT data FROM settings WHERE user_id = ${pubUserId}`.catch(() => []);
+            if (pubSettingsRow?.data) {
+              const raw = typeof pubSettingsRow.data === 'string' ? JSON.parse(pubSettingsRow.data) : pubSettingsRow.data;
+              pubCfg = { ...cfg, ...raw };
+            }
+          }
+          const termCfg = (pubCfg.terminata ?? cfg.terminata ?? {}) as Record<string, any>;
           const telegramMode = String(termCfg.telegramMode ?? 'keep');
           // Se overlayText non è configurato, usa il valore del tag {terminata} come fallback
           const effectiveTermCfg: Record<string, any> = {
@@ -2266,7 +2277,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             // Usa il layout del post stesso (non termCfg.layoutId che potrebbe non essere impostato)
             const layoutIdToUse = (pub as any).layoutId ?? termCfg.layoutId ?? null;
             const [termLayoutRow] = layoutIdToUse ? await sql`
-              SELECT body FROM layouts WHERE id = ${layoutIdToUse} AND (user_id = ${userId} OR user_id = ${baseUserId})
+              SELECT body FROM layouts WHERE id = ${layoutIdToUse}
+                AND (user_id = ${userId} OR user_id = ${baseUserId} OR user_id = ${pubUserId})
             `.catch(() => [null]) : [null];
             const affUrl = String(pub.sourceUrl ?? '');
             const ptTermAffUrl = ptTermConfig && pub.platform === 'amazon'
