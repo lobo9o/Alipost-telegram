@@ -2139,8 +2139,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           FROM published_posts
           WHERE (user_id = ${userId} OR user_id LIKE ${secondaryPattern})
             AND NOT COALESCE(terminata, false)
-            AND published_at < now() - interval '30 minutes'
-            AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
+            AND published_at < now() - CASE WHEN custom_text ILIKE '%ERRORE%' THEN interval '5 minutes' ELSE interval '30 minutes' END
+            AND (last_checked_at IS NULL OR last_checked_at < now() - CASE WHEN custom_text ILIKE '%ERRORE%' THEN interval '5 minutes' ELSE interval '30 minutes' END)
           ORDER BY last_checked_at ASC NULLS FIRST
           LIMIT 50
         `.catch(() => [])
@@ -2158,8 +2158,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           FROM published_posts
           WHERE user_id = ${userId}
             AND NOT COALESCE(terminata, false)
-            AND published_at < now() - interval '30 minutes'
-            AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
+            AND published_at < now() - CASE WHEN custom_text ILIKE '%ERRORE%' THEN interval '5 minutes' ELSE interval '30 minutes' END
+            AND (last_checked_at IS NULL OR last_checked_at < now() - CASE WHEN custom_text ILIKE '%ERRORE%' THEN interval '5 minutes' ELSE interval '30 minutes' END)
           ORDER BY last_checked_at ASC NULLS FIRST
           LIMIT 50
         `.catch(() => []);
