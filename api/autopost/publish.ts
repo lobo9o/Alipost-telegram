@@ -2076,7 +2076,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ${post.originalPrice ?? 0}, ${post.discountedPrice ?? 0}, ${post.discountPercent ?? 0},
           ${post.platform ?? 'amazon'}, ${post.sourceUrl ?? ''}, ${post.productId ?? ''},
           ${post.customText ?? ''}, ${post.layoutId ?? ''}, ${post.isHistoricalLow ?? false},
-          ${isMulti}, ${multiItemsForDB}, ${chatId}, ${messageId}, now(), now(), ${destCh ?? null}
+          ${isMulti}, ${multiItemsForDB}, ${chatId}, ${messageId}, now(),
+          ${String(post.customText ?? '').toUpperCase().includes('ERRORE') ? null : sql`now()`},
+          ${destCh ?? null}
         )
         ON CONFLICT (id) DO UPDATE SET
           chat_id = EXCLUDED.chat_id,
@@ -2122,45 +2124,63 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       // Per profili primari includi anche i post dei profili secondari (userId:channelId)
       // che potrebbero avere attivo=false e quindi non essere iterati nel loop principale.
       const secondaryPattern = userId.includes(':') ? null : `${userId}:%`;
-      const toCheck = secondaryPattern
+      const selectCols = sql`
+          id, product_id AS "productId", platform,
+          discounted_price::float AS "discountedPrice",
+          source_url AS "sourceUrl", image,
+          chat_id AS "chatId", message_id AS "messageId",
+          title, original_price::float AS "originalPrice",
+          discount_percent AS "discountPercent",
+          custom_text AS "customText", emoji,
+          layout_id AS "layoutId",
+          COALESCE(is_multi, false) AS "isMulti",
+          COALESCE(multi_items, '[]'::jsonb) AS "multiItems"
+      `;
+      // Query separata per post ERRORE: priorità assoluta, slot dedicati, intervallo breve
+      const erroreToCheck = secondaryPattern
         ? await sql`
-          SELECT id, product_id AS "productId", platform,
-                 discounted_price::float AS "discountedPrice",
-                 source_url AS "sourceUrl", image,
-                 chat_id AS "chatId", message_id AS "messageId",
-                 title, original_price::float AS "originalPrice",
-                 discount_percent AS "discountPercent",
-                 custom_text AS "customText", emoji,
-                 layout_id AS "layoutId",
-                 COALESCE(is_multi, false) AS "isMulti",
-                 COALESCE(multi_items, '[]'::jsonb) AS "multiItems"
-          FROM published_posts
+          SELECT ${selectCols} FROM published_posts
           WHERE (user_id = ${userId} OR user_id LIKE ${secondaryPattern})
             AND NOT COALESCE(terminata, false)
-            AND published_at < now() - CASE WHEN custom_text ILIKE '%ERRORE%' THEN interval '5 minutes' ELSE interval '30 minutes' END
-            AND (last_checked_at IS NULL OR last_checked_at < now() - CASE WHEN custom_text ILIKE '%ERRORE%' THEN interval '5 minutes' ELSE interval '30 minutes' END)
+            AND custom_text ILIKE '%ERRORE%'
+            AND published_at < now() - interval '5 minutes'
+            AND (last_checked_at IS NULL OR last_checked_at < now() - interval '5 minutes')
           ORDER BY last_checked_at ASC NULLS FIRST
-          LIMIT 50
+          LIMIT 10
         `.catch(() => [])
         : await sql`
-          SELECT id, product_id AS "productId", platform,
-                 discounted_price::float AS "discountedPrice",
-                 source_url AS "sourceUrl", image,
-                 chat_id AS "chatId", message_id AS "messageId",
-                 title, original_price::float AS "originalPrice",
-                 discount_percent AS "discountPercent",
-                 custom_text AS "customText", emoji,
-                 layout_id AS "layoutId",
-                 COALESCE(is_multi, false) AS "isMulti",
-                 COALESCE(multi_items, '[]'::jsonb) AS "multiItems"
-          FROM published_posts
+          SELECT ${selectCols} FROM published_posts
           WHERE user_id = ${userId}
             AND NOT COALESCE(terminata, false)
-            AND published_at < now() - CASE WHEN custom_text ILIKE '%ERRORE%' THEN interval '5 minutes' ELSE interval '30 minutes' END
-            AND (last_checked_at IS NULL OR last_checked_at < now() - CASE WHEN custom_text ILIKE '%ERRORE%' THEN interval '5 minutes' ELSE interval '30 minutes' END)
+            AND custom_text ILIKE '%ERRORE%'
+            AND published_at < now() - interval '5 minutes'
+            AND (last_checked_at IS NULL OR last_checked_at < now() - interval '5 minutes')
           ORDER BY last_checked_at ASC NULLS FIRST
-          LIMIT 50
+          LIMIT 10
         `.catch(() => []);
+      // Query per post normali: intervallo 30 minuti, rimanenti 40 slot
+      const normalToCheck = secondaryPattern
+        ? await sql`
+          SELECT ${selectCols} FROM published_posts
+          WHERE (user_id = ${userId} OR user_id LIKE ${secondaryPattern})
+            AND NOT COALESCE(terminata, false)
+            AND (custom_text NOT ILIKE '%ERRORE%' OR custom_text IS NULL)
+            AND published_at < now() - interval '30 minutes'
+            AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
+          ORDER BY last_checked_at ASC NULLS FIRST
+          LIMIT 40
+        `.catch(() => [])
+        : await sql`
+          SELECT ${selectCols} FROM published_posts
+          WHERE user_id = ${userId}
+            AND NOT COALESCE(terminata, false)
+            AND (custom_text NOT ILIKE '%ERRORE%' OR custom_text IS NULL)
+            AND published_at < now() - interval '30 minutes'
+            AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
+          ORDER BY last_checked_at ASC NULLS FIRST
+          LIMIT 40
+        `.catch(() => []);
+      const toCheck = [...erroreToCheck, ...normalToCheck];
 
       // PostTap: carica config una volta per il loop terminata
       const [ptTermRow] = await sql`SELECT enabled, cookie FROM posttap_sessions WHERE user_id = ${baseUserId}`.catch(() => [] as any[]);
