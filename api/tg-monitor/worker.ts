@@ -12,10 +12,14 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
   // Esempio: "🎟️ Coupon: ITTP30" — (?=.*\d) matchava "Coupon" perché "30" era dopo → produceva "COUPON".
   // Con (?=[A-Za-z0-9]{0,19}\d) il lookahead fallisce su "Coupon" (non contiene cifre proprie).
   const COUPON_RE = /(?=[A-Za-z0-9]{0,19}\d)[A-Za-z0-9]{4,20}/; // la cifra deve stare nel token
+  // Keyword esplicito (es. "🎟 Coupon Sconto: IFPFLYZQ"): accetta anche codici senza cifre
+  // perché il contesto "coupon:" è sufficiente a escludere falsi positivi.
+  // \W{0,5} prima del keyword consuma emoji come 🎟 che precedono "Coupon" (prima era \s* che le ignorava).
+  const COUPON_RE_KEYWORD = /(?=[A-Za-z0-9]{0,19}\d)[A-Za-z0-9]{4,20}|[A-Za-z]{5,20}/;
   // Il keyword deve essere a inizio riga (flag 'm') — evita di matchare "Codice IH8226" nei titoli prodotto
   // Seconda regex: \W* invece di \s* per consumare il variation selector U+FE0F dopo emoji (es. 🎟️)
   const couponM =
-    text.match(new RegExp(`(?:^|[\\n\\r])\\s*(?:coupon|codice|code|promo)(?:\\s+(?:sconto|discount|promo|codice|code)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'im')) ??
+    text.match(new RegExp(`(?:^|[\\n\\r])\\W{0,5}(?:coupon|codice|code|promo)(?:\\s+(?:sconto|discount|promo|codice|code)\\b)?\\W{0,10}(${COUPON_RE_KEYWORD.source})`, 'im')) ??
     text.match(new RegExp(`[✂🎟]\\W*(?:coupon|codice|code|promo)?(?:\\s+(?:sconto|discount)\\b)?\\W{0,10}(${COUPON_RE.source})`, 'iu'));
   const couponCode = couponM ? couponM[1].toUpperCase() : '';
 
@@ -34,11 +38,13 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
   // Prezzi con € o $ sia dopo (12,99€ / 1.234,56€) sia prima (€12.99 / $1,234.56)
   // Gestisce separatore migliaia europeo (punto): 1.399,00€ → 1399.00
   // e separatore migliaia anglosassone (virgola): 1,399.00€ → 1399.00
-  // Lookbehind (?<!-) esclude importi di sconto come "-15,00€"
-  const PRICE_EU_RE  = /(?<!-\s*)(\d{1,3}(?:\.\d{3})*,\d{2})\s*[€$]/gu;  // 1.399,00€
-  const PRICE_INT_RE = /(?<!-\s*)(\d{1,3}(?:,\d{3})*\.\d{2})\s*[€$]/gu;  // 1,399.00€
-  const PRICE_EU_PRE  = /[€$]\s*(\d{1,3}(?:\.\d{3})*,\d{2})/gu; // €1.399,00
-  const PRICE_INT_PRE = /[€$]\s*(\d{1,3}(?:,\d{3})*\.\d{2})/gu; // €1,399.00
+  // (?<![\d-]) esclude: importi negativi "-15,00€" E match parziali nel mezzo di un numero
+  // (es. "1100,00€" era parsato come "100,00€" con \d{1,3} che iniziava dal 2° carattere).
+  // \d{1,4} gestisce prezzi a 4 cifre senza separatore migliaia (es. 1100,00€ / 2500,00€).
+  const PRICE_EU_RE  = /(?<![\d-])(\d{1,4}(?:\.\d{3})*,\d{2})\s*[€$]/gu;  // 1.399,00€ / 1100,00€
+  const PRICE_INT_RE = /(?<![\d-])(\d{1,4}(?:,\d{3})*\.\d{2})\s*[€$]/gu;  // 1,399.00€
+  const PRICE_EU_PRE  = /[€$]\s*(\d{1,4}(?:\.\d{3})*,\d{2})/gu; // €1.399,00 / €1100,00
+  const PRICE_INT_PRE = /[€$]\s*(\d{1,4}(?:,\d{3})*\.\d{2})/gu; // €1,399.00
   // Prezzi interi senza decimali: 15€ — lookbehind evita di catturare "99" da "34,99€"
   const PRICE_WHOLE_AF  = /(?<![-,.])\b(\d{1,4})\s*[€$]/gu;
   const PRICE_WHOLE_PRE = /[€$]\s*(\d{1,4})(?![,.\d])/gu;
