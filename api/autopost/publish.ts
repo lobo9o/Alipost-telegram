@@ -1798,11 +1798,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         ? (ALI_CURRENCY_SYM[(cfg.aliexpress?.targetCountry ?? '').toUpperCase()] ?? '€')
         : '€';
 
-      // PostTap: carica config dalla tabella dedicata — solo per post Amazon
+      // PostTap: carica config dalla tabella dedicata — solo per post Amazon (o multi-post con articoli misti)
       const [ptRowPub] = await sql`SELECT enabled, cookie FROM posttap_sessions WHERE user_id = ${baseUserId}`.catch(() => [] as any[]);
       const ptConfigPub: PostTapConfig | undefined = ptRowPub?.enabled && ptRowPub?.cookie
         ? { enabled: true, cookie: ptRowPub.cookie } : undefined;
-      const ptActivePub = ptConfigPub && post.platform === 'amazon' ? ptConfigPub : undefined;
+      // Per i multi-post (es. riepilogo) ptActivePub è sempre abilitato se config presente:
+      // ogni prodotto viene wrappato individualmente solo se amazon (vedi mpPtUrls loop sotto).
+      // Per post singoli: solo se amazon.
+      const ptActivePub = ptConfigPub && (isMulti || post.platform === 'amazon') ? ptConfigPub : undefined;
       const ptCtxPub = ptActivePub ? { config: ptActivePub, userId, botToken } : undefined;
       const ptAffiliateUrl = await wrapWithPostTap(affiliateUrl, post.title ?? '', ptActivePub, { userId, botToken });
 
