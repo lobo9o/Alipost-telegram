@@ -260,13 +260,19 @@ async function handleQuizCallback(cb: any) {
     show_alert: true,
   });
 
-  // Aggiorna post nel canale
-  await tg('editMessageText', {
-    chat_id: quiz.channel_id,
-    message_id: Number(quiz.message_id),
-    text: `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n<i>Il buono è stato inviato in privato al vincitore.</i>`,
-    parse_mode: 'HTML',
-  }).catch(() => {});
+  // Aggiorna post nel canale (editCaption se ha immagine, editText altrimenti)
+  const winnerText = `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n<i>Il buono è stato inviato in privato al vincitore.</i>`;
+  if (quiz.image) {
+    await tg('editMessageCaption', {
+      chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
+      caption: winnerText, parse_mode: 'HTML',
+    }).catch(() => {});
+  } else {
+    await tg('editMessageText', {
+      chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
+      text: winnerText, parse_mode: 'HTML',
+    }).catch(() => {});
+  }
 
   const prizePlain =
     `🎁 Hai vinto il Quiz!\n\n` +

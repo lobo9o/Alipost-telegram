@@ -37,10 +37,12 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const [question, setQuestion]   = useState('');
-  const [answers, setAnswers]     = useState<QuizAnswer[]>([makeAnswer(true), makeAnswer(), makeAnswer(), makeAnswer()]);
-  const [prizeCode, setPrizeCode] = useState('');
-  const [channel, setChannel]     = useState('');
+  const [headerText, setHeaderText] = useState('🎯 QUIZ — Vinci un Buono Amazon!');
+  const [question, setQuestion]     = useState('');
+  const [answers, setAnswers]       = useState<QuizAnswer[]>([makeAnswer(true), makeAnswer(), makeAnswer(), makeAnswer()]);
+  const [prizeCode, setPrizeCode]   = useState('');
+  const [channel, setChannel]       = useState('');
+  const [image, setImage]           = useState<string>('');
 
   const channels = allChannels.length ? allChannels : [];
 
@@ -78,11 +80,21 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
   };
 
   const resetForm = () => {
+    setHeaderText('🎯 QUIZ — Vinci un Buono Amazon!');
     setQuestion('');
     setAnswers([makeAnswer(true), makeAnswer(), makeAnswer(), makeAnswer()]);
     setPrizeCode('');
     setChannel(channels[0] ?? '');
+    setImage('');
     setError('');
+  };
+
+  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setImage(ev.target?.result as string ?? '');
+    reader.readAsDataURL(file);
   };
 
   const handleCreate = async () => {
@@ -98,7 +110,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
       const r = await fetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-user-id': activeProfileId },
-        body: JSON.stringify({ question: question.trim(), answers, prizeCode: prizeCode.trim(), channelId: channel }),
+        body: JSON.stringify({ headerText: headerText.trim(), question: question.trim(), answers, prizeCode: prizeCode.trim(), channelId: channel, image: image || undefined }),
       });
       const data = await r.json();
       if (!data.ok) { setError(data.error ?? 'Errore'); setSaving(false); return; }
@@ -129,6 +141,26 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
         ) : (
           <div className="card" style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, marginBottom: 12 }}>Nuovo Quiz</div>
+
+            <span className="lbl">Immagine (opzionale)</span>
+            {image ? (
+              <div style={{ position: 'relative', marginBottom: 10 }}>
+                <img src={image} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 8 }} />
+                <button onClick={() => setImage('')}
+                  style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,.55)', border: 'none', borderRadius: '50%', color: '#fff', width: 26, height: 26, cursor: 'pointer', fontSize: 14 }}>✕</button>
+              </div>
+            ) : (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, cursor: 'pointer' }}>
+                <div className="btn" style={{ padding: '6px 14px', fontSize: 13, margin: 0 }}>📷 Scegli foto</div>
+                <span style={{ fontSize: 12, color: 'var(--t2)' }}>nessuna immagine selezionata</span>
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageFile} />
+              </label>
+            )}
+
+            <span className="lbl">Testo sopra alla domanda</span>
+            <input className="inp" style={{ marginBottom: 12 }}
+              placeholder="🎯 QUIZ — Vinci un Buono Amazon!"
+              value={headerText} onChange={e => setHeaderText(e.target.value)} />
 
             <span className="lbl">Domanda</span>
             <textarea className="inp" rows={3} style={{ resize: 'none', marginBottom: 12 }}
