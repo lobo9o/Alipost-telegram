@@ -18,13 +18,9 @@ interface Quiz {
   message_id: number | null;
 }
 
-const LETTERS = ['A', 'B', 'C', 'D'];
-const EMPTY_ANSWERS: QuizAnswer[] = [
-  { text: '', correct: true },
-  { text: '', correct: false },
-  { text: '', correct: false },
-  { text: '', correct: false },
-];
+const LETTERS = ['A','B','C','D','E','F','G','H'];
+
+function makeAnswer(correct = false): QuizAnswer { return { text: '', correct }; }
 
 function statusBadge(status: Quiz['status']) {
   if (status === 'active')    return <span style={{ background: 'var(--a1)', color: '#fff', borderRadius: 8, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>Attivo</span>;
@@ -41,9 +37,8 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Form state
   const [question, setQuestion]   = useState('');
-  const [answers, setAnswers]     = useState<QuizAnswer[]>(EMPTY_ANSWERS.map(a => ({ ...a })));
+  const [answers, setAnswers]     = useState<QuizAnswer[]>([makeAnswer(true), makeAnswer(), makeAnswer(), makeAnswer()]);
   const [prizeCode, setPrizeCode] = useState('');
   const [channel, setChannel]     = useState('');
 
@@ -52,9 +47,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/quiz', {
-        headers: { 'x-internal-user-id': activeProfileId },
-      });
+      const r = await fetch('/api/quiz', { headers: { 'x-internal-user-id': activeProfileId } });
       const data = await r.json();
       setQuizzes(Array.isArray(data) ? data : []);
     } catch { setQuizzes([]); }
@@ -63,27 +56,41 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const setCorrect = (idx: number) => {
+  const setCorrect = (idx: number) =>
     setAnswers(prev => prev.map((a, i) => ({ ...a, correct: i === idx })));
+
+  const setAnswerText = (idx: number, text: string) =>
+    setAnswers(prev => prev.map((a, i) => i === idx ? { ...a, text } : a));
+
+  const addAnswer = () => {
+    if (answers.length >= 8) return;
+    setAnswers(prev => [...prev, makeAnswer()]);
   };
 
-  const setAnswerText = (idx: number, text: string) => {
-    setAnswers(prev => prev.map((a, i) => i === idx ? { ...a, text } : a));
+  const removeAnswer = (idx: number) => {
+    if (answers.length <= 2) return;
+    setAnswers(prev => {
+      const next = prev.filter((_, i) => i !== idx);
+      // se rimosso era l'unica corretta, segna la prima
+      if (!next.some(a => a.correct)) next[0].correct = true;
+      return next;
+    });
   };
 
   const resetForm = () => {
     setQuestion('');
-    setAnswers(EMPTY_ANSWERS.map(a => ({ ...a })));
+    setAnswers([makeAnswer(true), makeAnswer(), makeAnswer(), makeAnswer()]);
     setPrizeCode('');
     setChannel(channels[0] ?? '');
     setError('');
   };
 
   const handleCreate = async () => {
-    if (!question.trim())          return setError('Inserisci la domanda');
-    if (answers.some(a => !a.text.trim())) return setError('Compila tutte le 4 risposte');
-    if (!prizeCode.trim())         return setError('Inserisci il codice buono Amazon');
-    if (!channel)                  return setError('Seleziona il canale');
+    if (!question.trim())                        return setError('Inserisci la domanda');
+    if (answers.some(a => !a.text.trim()))       return setError('Compila tutte le risposte');
+    if (!answers.some(a => a.correct))           return setError('Seleziona la risposta corretta');
+    if (!prizeCode.trim())                       return setError('Inserisci il codice buono Amazon');
+    if (!channel)                                return setError('Seleziona il canale');
 
     setSaving(true);
     setError('');
@@ -104,15 +111,12 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
 
   const handleCancel = async (id: string) => {
     if (!window.confirm('Annullare questo quiz?')) return;
-    await fetch(`/api/quiz?id=${id}`, {
-      method: 'DELETE',
-      headers: { 'x-internal-user-id': activeProfileId },
-    });
+    await fetch(`/api/quiz?id=${id}`, { method: 'DELETE', headers: { 'x-internal-user-id': activeProfileId } });
     await load();
   };
 
   return (
-    <div className="page">
+    <div className="pg">
       <PageHeader title="Quiz & Premi" onBack={() => nav('dash')} />
 
       <div style={{ padding: '0 16px 16px' }}>
@@ -126,12 +130,14 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
             <div style={{ fontWeight: 700, marginBottom: 12 }}>Nuovo Quiz</div>
 
             <span className="lbl">Domanda</span>
-            <textarea className="inp" rows={3}
-              style={{ resize: 'none', marginBottom: 12 }}
+            <textarea className="inp" rows={3} style={{ resize: 'none', marginBottom: 12 }}
               placeholder="es. Qual è la capitale dell'Italia?"
               value={question} onChange={e => setQuestion(e.target.value)} />
 
-            <span className="lbl">Risposte — segna quella corretta con il cerchio</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span className="lbl" style={{ margin: 0 }}>Risposte — tocca il cerchio per segnare quella corretta</span>
+            </div>
+
             {answers.map((a, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                 <button
@@ -146,10 +152,22 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
                 <input className="inp" style={{ flex: 1, margin: 0 }}
                   placeholder={`Risposta ${LETTERS[i]}`}
                   value={a.text} onChange={e => setAnswerText(i, e.target.value)} />
+                {answers.length > 2 && (
+                  <button onClick={() => removeAnswer(i)}
+                    style={{ background: 'none', border: 'none', color: 'var(--re)', fontSize: 18, cursor: 'pointer', flexShrink: 0, padding: '0 2px' }}>
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
 
-            <span className="lbl" style={{ marginTop: 4 }}>Codice Buono Amazon</span>
+            {answers.length < 8 && (
+              <button className="btn" style={{ width: '100%', marginBottom: 12, fontSize: 13 }} onClick={addAnswer}>
+                + Aggiungi risposta
+              </button>
+            )}
+
+            <span className="lbl">Codice Buono Amazon</span>
             <input className="inp" placeholder="es. ABCD-EFGH-1234"
               value={prizeCode} onChange={e => setPrizeCode(e.target.value)} />
 
@@ -174,7 +192,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
 
         {loading ? (
           <div style={{ textAlign: 'center', color: 'var(--t2)', padding: 32 }}>Caricamento…</div>
-        ) : quizzes.length === 0 ? (
+        ) : quizzes.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', color: 'var(--t2)', padding: 32 }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>🎯</div>
             <div>Nessun quiz ancora</div>
@@ -185,7 +203,6 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
               <span style={{ fontWeight: 700, fontSize: 14, flex: 1, marginRight: 8 }}>{q.question}</span>
               {statusBadge(q.status)}
             </div>
-
             <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 6 }}>
               {(q.answers as QuizAnswer[]).map((a, i) => (
                 <span key={i} style={{ marginRight: 10 }}>
@@ -193,17 +210,14 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
                 </span>
               ))}
             </div>
-
             <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 4 }}>
               Canale: <b>{q.channel_id}</b> · {new Date(q.created_at).toLocaleDateString('it-IT')}
             </div>
-
             {q.status === 'won' && q.winner_username && (
               <div style={{ fontSize: 12, color: '#22c55e', marginBottom: 4 }}>
                 🏆 Vinto da <b>{q.winner_username}</b>
               </div>
             )}
-
             {q.status === 'active' && (
               <button className="btn bre" style={{ marginTop: 4, padding: '4px 12px', fontSize: 12 }}
                 onClick={() => handleCancel(q.id)}>
