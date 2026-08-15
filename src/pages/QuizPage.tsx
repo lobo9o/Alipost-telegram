@@ -109,8 +109,9 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
     setSaving(false);
   };
 
-  const handleCancel = async (id: string) => {
-    if (!window.confirm('Annullare questo quiz?')) return;
+  const handleDelete = async (id: string, active: boolean) => {
+    const msg = active ? 'Annullare e eliminare questo quiz?' : 'Eliminare questo quiz?';
+    if (!window.confirm(msg)) return;
     await fetch(`/api/quiz?id=${id}`, { method: 'DELETE', headers: { 'x-internal-user-id': activeProfileId } });
     await load();
   };
@@ -201,7 +202,15 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
           <div key={q.id} className="card" style={{ marginBottom: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
               <span style={{ fontWeight: 700, fontSize: 14, flex: 1, marginRight: 8 }}>{q.question}</span>
-              {statusBadge(q.status)}
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                {statusBadge(q.status)}
+                <button
+                  onClick={() => handleDelete(q.id, q.status === 'active')}
+                  title="Elimina"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--re)', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>
+                  🗑
+                </button>
+              </div>
             </div>
             <div style={{ fontSize: 12, color: 'var(--t2)', marginBottom: 6 }}>
               {(q.answers as QuizAnswer[]).map((a, i) => (
@@ -214,15 +223,9 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
               Canale: <b>{q.channel_id}</b> · {new Date(q.created_at).toLocaleDateString('it-IT')}
             </div>
             {q.status === 'won' && q.winner_username && (
-              <div style={{ fontSize: 12, color: '#22c55e', marginBottom: 4 }}>
+              <div style={{ fontSize: 12, color: '#22c55e' }}>
                 🏆 Vinto da <b>{q.winner_username}</b>
               </div>
-            )}
-            {q.status === 'active' && (
-              <button className="btn bre" style={{ marginTop: 4, padding: '4px 12px', fontSize: 12 }}
-                onClick={() => handleCancel(q.id)}>
-                Annulla Quiz
-              </button>
             )}
           </div>
         ))}

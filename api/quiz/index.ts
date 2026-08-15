@@ -95,7 +95,7 @@ export default async function handler(req: any, res: any) {
     return res.json({ ok: true, id: quiz.id, messageId });
   }
 
-  // ── DELETE: annulla quiz ─────────────────────────────────────
+  // ── DELETE: annulla o elimina quiz ──────────────────────────
   if (req.method === 'DELETE') {
     const id = req.query.id;
     if (!id) return res.status(400).json({ error: 'ID mancante' });
@@ -103,6 +103,7 @@ export default async function handler(req: any, res: any) {
     const [quiz] = await sql`SELECT * FROM quizzes WHERE id = ${id} AND user_id = ${userId}`.catch(() => []);
     if (!quiz) return res.status(404).json({ error: 'Quiz non trovato' });
 
+    // Se ancora attivo: aggiorna il messaggio Telegram prima di eliminare
     if (quiz.status === 'active' && quiz.message_id) {
       await tg('editMessageText', {
         chat_id: quiz.channel_id,
@@ -112,7 +113,7 @@ export default async function handler(req: any, res: any) {
       }).catch(() => {});
     }
 
-    await sql`UPDATE quizzes SET status = 'cancelled' WHERE id = ${id}`.catch(() => {});
+    await sql`DELETE FROM quizzes WHERE id = ${id}`.catch(() => {});
     return res.json({ ok: true });
   }
 
