@@ -198,6 +198,114 @@ async function savePostToDB(userId: string, data: ConvData) {
   }
 }
 
+// ── Quiz callback handler ─────────────────────────────────────────
+
+async function handleQuizCallback(cb: any) {
+  const [, quizId, answerIdxStr] = (cb.data as string).split(':');
+  const answerIdx  = parseInt(answerIdxStr, 10);
+  const winnerTgId = cb.from?.id as number;
+  const winnerName = cb.from?.username
+    ? `@${cb.from.username}`
+    : (cb.from?.first_name ?? String(winnerTgId));
+
+  const [quiz] = await sql`SELECT * FROM quizzes WHERE id = ${quizId}`.catch(() => []);
+
+  if (!quiz || quiz.status !== 'active') {
+    const prev = quiz?.winner_username ?? 'qualcun altro';
+    await tg('answerCallbackQuery', {
+      callback_query_id: cb.id,
+      text: `⏰ Troppo tardi! Ha già vinto ${prev}`,
+      show_alert: true,
+    });
+    return;
+  }
+
+  const answers = (Array.isArray(quiz.answers) ? quiz.answers : []) as Array<{ text: string; correct: boolean }>;
+  const isCorrect = answers[answerIdx]?.correct === true;
+
+  if (!isCorrect) {
+    await tg('answerCallbackQuery', {
+      callback_query_id: cb.id,
+      text: '❌ Risposta sbagliata, riprova!',
+      show_alert: false,
+    });
+    return;
+  }
+
+  // Claim atomico: solo il primo ad arrivare vince
+  const claimed = await sql`
+    UPDATE quizzes SET
+      status          = 'won',
+      winner_tg_id    = ${winnerTgId},
+      winner_username = ${winnerName},
+      won_at          = now()
+    WHERE id = ${quizId} AND status = 'active'
+    RETURNING id
+  `.catch(() => []);
+
+  if (!claimed.length) {
+    const [updated] = await sql`SELECT winner_username FROM quizzes WHERE id = ${quizId}`.catch(() => []);
+    await tg('answerCallbackQuery', {
+      callback_query_id: cb.id,
+      text: `⏰ Troppo tardi! Ha già vinto ${updated?.winner_username ?? 'qualcun altro'}`,
+      show_alert: true,
+    });
+    return;
+  }
+
+  // Notifica vincitore
+  await tg('answerCallbackQuery', {
+    callback_query_id: cb.id,
+    text: '🏆 Hai vinto! Ti mando il buono in privato...',
+    show_alert: true,
+  });
+
+  // Aggiorna post nel canale
+  await tg('editMessageText', {
+    chat_id: quiz.channel_id,
+    message_id: Number(quiz.message_id),
+    text: `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n<i>Il buono è stato inviato in privato al vincitore.</i>`,
+    parse_mode: 'HTML',
+  }).catch(() => {});
+
+  const prizeMsg =
+    `🎁 <b>Hai vinto il Quiz!</b>\n\n` +
+    `Ecco il tuo codice Buono Amazon:\n\n` +
+    `<code>${quiz.prize_code}</code>\n\n` +
+    `<i>Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄</i>`;
+
+  // Prova prima con Bot API
+  const dmResult = await tg('sendMessage', {
+    chat_id: winnerTgId,
+    text: prizeMsg,
+    parse_mode: 'HTML',
+  }).catch(() => null);
+
+  if (!dmResult?.ok) {
+    // Fallback: MTProto del profilo che ha creato il quiz
+    try {
+      const getTgClient = (globalThis as any).__getTgClient;
+      const client = getTgClient?.(String(quiz.user_id));
+      if (client) {
+        const plain = prizeMsg.replace(/<[^>]+>/g, '');
+        await (client as any).sendMessage(winnerTgId, { message: plain });
+      } else {
+        throw new Error('client non disponibile');
+      }
+    } catch {
+      // Ultimo resort: metti il codice nel post del canale (non ideale ma garantisce la consegna)
+      await tg('editMessageText', {
+        chat_id: quiz.channel_id,
+        message_id: Number(quiz.message_id),
+        text:
+          `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n` +
+          `<i>Il vincitore non ha ancora avviato una chat con il bot — contattaci in privato per ricevere il buono.</i>`,
+        parse_mode: 'HTML',
+      }).catch(() => {});
+    }
+  }
+}
+
 // ── Update handler principale ─────────────────────────────────────
 
 export async function handleUpdate(update: any) {
@@ -207,6 +315,13 @@ export async function handleUpdate(update: any) {
   let chatId: number, userId: string, userMsgId: number | undefined;
 
   if (cb) {
+    // Quiz callback: gestisci separatamente (ha il proprio answerCallbackQuery)
+    if (typeof cb.data === 'string' && cb.data.startsWith('quiz:')) {
+      await handleQuizCallback(cb).catch(e =>
+        console.error('[tg-bot] quiz callback errore:', e.message?.slice(0, 120))
+      );
+      return;
+    }
     chatId    = cb.message?.chat?.id;
     userId    = String(cb.from?.id);
     await tg('answerCallbackQuery', { callback_query_id: cb.id });

@@ -59,6 +59,7 @@ async function main() {
     customPostsHandler,
     customPostsIdHandler,
     postTapHandler,
+    quizHandler,
   ] = await Promise.all([
     loadHandler('api/settings/index.ts'),
     loadHandler('api/tags.ts'),
@@ -87,6 +88,7 @@ async function main() {
     loadHandler('api/custom-posts/index.ts'),
     loadHandler('api/custom-posts/[id].ts'),
     loadHandler('api/posttap.ts'),
+    loadHandler('api/quiz/index.ts'),
   ]);
 
   const app = express();
@@ -143,6 +145,7 @@ async function main() {
   app.all('/api/custom-posts', customPostsHandler);
   app.all('/api/custom-posts/:id', withId(customPostsIdHandler));
   app.all('/api/posttap', postTapHandler);
+  app.all('/api/quiz', quizHandler);
 
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
