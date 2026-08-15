@@ -268,42 +268,53 @@ async function handleQuizCallback(cb: any) {
     parse_mode: 'HTML',
   }).catch(() => {});
 
-  const prizeMsg =
-    `🎁 <b>Hai vinto il Quiz!</b>\n\n` +
+  const prizePlain =
+    `🎁 Hai vinto il Quiz!\n\n` +
     `Ecco il tuo codice Buono Amazon:\n\n` +
-    `<code>${quiz.prize_code}</code>\n\n` +
-    `<i>Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄</i>`;
+    `${quiz.prize_code}\n\n` +
+    `Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄`;
 
-  // Prova prima con Bot API
-  const dmResult = await tg('sendMessage', {
-    chat_id: winnerTgId,
-    text: prizeMsg,
-    parse_mode: 'HTML',
-  }).catch(() => null);
+  // MTProto prima (messaggio arriva dal tuo account personale, non dal bot)
+  const baseUserId = String(quiz.user_id).split(':')[0];
+  const getTgClient = (globalThis as any).__getTgClient;
+  const client = getTgClient?.(baseUserId);
+  let sent = false;
 
-  if (!dmResult?.ok) {
-    // Fallback: MTProto del profilo che ha creato il quiz
+  if (client) {
     try {
-      const getTgClient = (globalThis as any).__getTgClient;
-      const client = getTgClient?.(String(quiz.user_id));
-      if (client) {
-        const plain = prizeMsg.replace(/<[^>]+>/g, '');
-        await (client as any).sendMessage(winnerTgId, { message: plain });
-      } else {
-        throw new Error('client non disponibile');
-      }
-    } catch {
-      // Ultimo resort: metti il codice nel post del canale (non ideale ma garantisce la consegna)
-      await tg('editMessageText', {
-        chat_id: quiz.channel_id,
-        message_id: Number(quiz.message_id),
-        text:
-          `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n` +
-          `<i>Il vincitore non ha ancora avviato una chat con il bot — contattaci in privato per ricevere il buono.</i>`,
-        parse_mode: 'HTML',
-      }).catch(() => {});
+      await (client as any).sendMessage(winnerTgId, { message: prizePlain });
+      sent = true;
+      console.log(`[quiz] buono inviato via MTProto a ${winnerTgId}`);
+    } catch (e: any) {
+      console.warn(`[quiz] MTProto DM fallito: ${e.message} — provo Bot API`);
     }
   }
+
+  if (!sent) {
+    // Fallback: Bot API (se MTProto non disponibile o privacy dell'utente blocca)
+    const dmResult = await tg('sendMessage', {
+      chat_id: winnerTgId,
+      text: prizePlain,
+    }).catch(() => null);
+
+    if (dmResult?.ok) {
+      sent = true;
+      console.log(`[quiz] buono inviato via Bot API a ${winnerTgId}`);
+    }
+  }
+
+  if (!sent) {
+    // Ultimo resort: aggiorna il post indicando di contattare in privato
+    await tg('editMessageText', {
+      chat_id: quiz.channel_id,
+      message_id: Number(quiz.message_id),
+      text:
+        `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n` +
+        `<i>Vincitore: contattaci in privato per ricevere il buono.</i>`,
+      parse_mode: 'HTML',
+    }).catch(() => {});
+  }
+
 }
 
 // ── Update handler principale ─────────────────────────────────────
