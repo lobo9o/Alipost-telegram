@@ -71,7 +71,7 @@ export default async function handler(req: any, res: any) {
 
     const [quiz] = await sql`
       INSERT INTO quizzes (user_id, channel_id, header_text, question, answers, prize_code, image)
-      VALUES (${userId}, ${channelId}, ${header}, ${sql.json(answers)}, ${prizeCode}, ${image || null})
+      VALUES (${userId}, ${channelId}, ${header}, ${question}, ${sql.json(answers)}, ${prizeCode}, ${image || null})
       RETURNING id
     `.catch(() => []);
     if (!quiz) return res.status(500).json({ error: 'Errore DB' });
