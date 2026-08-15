@@ -456,6 +456,7 @@ export function Dashboard({ nav }: { nav: (p: NavPage) => void }) {
     { id: 'published', ic: '✅', lb: 'Pubblicati', sub: `ultimi ${stats.pub}`, c: 'var(--gr)' },
     { id: 'monitor', ic: '📡', lb: 'Monitor Canali', sub: 'copia link da altri canali', c: 'var(--a3)' },
     { id: 'promo', ic: '📢', lb: 'Post Promo', sub: 'post personalizzati programmati', c: 'var(--am)' },
+    { id: 'quiz', ic: '🎯', lb: 'Quiz & Premi', sub: 'buoni Amazon per i follower', c: 'var(--gr)' },
     { id: 'layout', ic: '🎨', lb: 'Layout', sub: 'tag · testo · template', c: 'var(--a2)' },
     { id: 'settings', ic: '⚙️', lb: 'Impostazioni', sub: 'API · canali · orari', c: 'var(--t2)' },
   ];

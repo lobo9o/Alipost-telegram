@@ -26,7 +26,6 @@ const NAV_ITEMS: { id: NavPage; label: string }[] = [
   { id: 'queue', label: 'Coda' },
   { id: 'layout', label: 'Layout' },
   { id: 'settings', label: 'Config' },
-  { id: 'quiz', label: 'Quiz' },
 ];
 
 function BottomNav({ current, nav }: { current: NavPage; nav: (p: NavPage) => void }) {
