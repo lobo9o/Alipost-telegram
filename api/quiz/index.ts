@@ -30,15 +30,16 @@ async function initTable() {
       prize_code    TEXT         NOT NULL,
       image         TEXT,
       status        TEXT         NOT NULL DEFAULT 'active',
+      participants  JSONB        NOT NULL DEFAULT '[]',
       winner_tg_id  BIGINT,
       winner_username TEXT,
       created_at    TIMESTAMPTZ  DEFAULT now(),
       won_at        TIMESTAMPTZ
     )
   `.catch(() => {});
-  // Migrazione: aggiunge colonne mancanti su tabelle già esistenti
   await sql`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS header_text TEXT`.catch(() => {});
   await sql`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS image TEXT`.catch(() => {});
+  await sql`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS participants JSONB NOT NULL DEFAULT '[]'`.catch(() => {});
 }
 
 export default async function handler(req: any, res: any) {
@@ -51,15 +52,80 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     const rows = await sql`
       SELECT id, channel_id, header_text, question, answers, prize_code, status,
-             winner_username, created_at, won_at, message_id
+             participants, winner_username, created_at, won_at, message_id
       FROM quizzes WHERE user_id = ${userId}
       ORDER BY created_at DESC LIMIT 50
     `.catch(() => []);
     return res.json(rows);
   }
 
-  // ── POST: crea e pubblica quiz ───────────────────────────────
+  // ── POST: crea quiz o invia premio ───────────────────────────
   if (req.method === 'POST') {
+
+    // Invia premio a un partecipante specifico
+    if (req.query.action === 'send-prize') {
+      const { quizId, recipientTgId, recipientUsername } = req.body ?? {};
+      if (!quizId || !recipientTgId) return res.status(400).json({ error: 'Dati mancanti' });
+
+      const [quiz] = await sql`
+        SELECT * FROM quizzes WHERE id = ${quizId} AND user_id = ${userId}
+      `.catch(() => []);
+      if (!quiz) return res.status(404).json({ error: 'Quiz non trovato' });
+
+      const prizePlain =
+        `🎁 Hai vinto il Quiz!\n\n` +
+        `Ecco il tuo codice Buono Amazon:\n\n` +
+        `${quiz.prize_code}\n\n` +
+        `Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄`;
+
+      // MTProto prima, Bot API come fallback
+      const baseUserId = String(userId).split(':')[0];
+      const getTgClient = (globalThis as any).__getTgClient;
+      const client = getTgClient?.(baseUserId);
+      let sent = false;
+
+      if (client) {
+        try {
+          await (client as any).sendMessage(Number(recipientTgId), { message: prizePlain });
+          sent = true;
+        } catch (e: any) {
+          console.warn('[quiz] MTProto DM fallito:', e.message);
+        }
+      }
+      if (!sent) {
+        const r = await tg('sendMessage', { chat_id: Number(recipientTgId), text: prizePlain }).catch(() => null);
+        if (r?.ok) sent = true;
+      }
+      if (!sent) return res.status(500).json({ error: 'Impossibile inviare il messaggio — utente irraggiungibile' });
+
+      // Aggiorna quiz
+      await sql`
+        UPDATE quizzes SET status = 'won', winner_tg_id = ${Number(recipientTgId)},
+          winner_username = ${recipientUsername ?? String(recipientTgId)}, won_at = now()
+        WHERE id = ${quizId}
+      `.catch(() => {});
+
+      // Aggiorna post nel canale
+      const winnerText =
+        `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n` +
+        `🏆 Ha vinto: <b>${recipientUsername ?? String(recipientTgId)}</b>\n\n` +
+        `<i>Il buono è stato inviato in privato al vincitore.</i>`;
+      if (quiz.image) {
+        await tg('editMessageCaption', {
+          chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
+          caption: winnerText, parse_mode: 'HTML',
+        }).catch(() => {});
+      } else {
+        await tg('editMessageText', {
+          chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
+          text: winnerText, parse_mode: 'HTML',
+        }).catch(() => {});
+      }
+
+      return res.json({ ok: true });
+    }
+
+    // Crea e pubblica nuovo quiz
     const { question, answers, prizeCode, channelId, headerText, image } = req.body ?? {};
     if (!question || !Array.isArray(answers) || answers.length < 2 || !prizeCode || !channelId) {
       return res.status(400).json({ error: 'Dati mancanti' });
@@ -80,7 +146,7 @@ export default async function handler(req: any, res: any) {
     const caption =
       `${header}\n\n` +
       `❓ <b>${question}</b>\n\n` +
-      `<i>Clicca la risposta esatta — il primo che risponde correttamente vince! 🎁</i>`;
+      `<i>Clicca la risposta esatta — i primi 5 corretti partecipano all'estrazione! 🎁</i>`;
 
     const buttons = (answers as any[]).map((a: any, i: number) => ({
       text: `${letters[i] ?? String.fromCharCode(65 + i)} ${a.text}`,
@@ -92,7 +158,6 @@ export default async function handler(req: any, res: any) {
 
     let r: any;
     if (image) {
-      // Invia con immagine — base64 → multipart
       const form = new FormData();
       form.append('chat_id', channelId);
       form.append('caption', caption);
@@ -118,11 +183,10 @@ export default async function handler(req: any, res: any) {
 
     const messageId = r.result?.message_id;
     await sql`UPDATE quizzes SET message_id = ${messageId} WHERE id = ${quiz.id}`.catch(() => {});
-
     return res.json({ ok: true, id: quiz.id, messageId });
   }
 
-  // ── DELETE: annulla o elimina quiz ──────────────────────────
+  // ── DELETE: elimina quiz ─────────────────────────────────────
   if (req.method === 'DELETE') {
     const id = req.query.id;
     if (!id) return res.status(400).json({ error: 'ID mancante' });
@@ -132,17 +196,10 @@ export default async function handler(req: any, res: any) {
 
     if (quiz.status === 'active' && quiz.message_id) {
       const cancelText = `❌ <b>Quiz annullato</b>\n\n❓ ${quiz.question}`;
-      if (quiz.image) {
-        await tg('editMessageCaption', {
-          chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
-          caption: cancelText, parse_mode: 'HTML',
-        }).catch(() => {});
-      } else {
-        await tg('editMessageText', {
-          chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
-          text: cancelText, parse_mode: 'HTML',
-        }).catch(() => {});
-      }
+      await tg(quiz.image ? 'editMessageCaption' : 'editMessageText', {
+        chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
+        [quiz.image ? 'caption' : 'text']: cancelText, parse_mode: 'HTML',
+      }).catch(() => {});
     }
 
     await sql`DELETE FROM quizzes WHERE id = ${id}`.catch(() => {});

@@ -274,12 +274,13 @@ async function startUser(userId: string) {
   `;
   if (!session) return;
 
-  const channelRows = await sql<{ channel: string; auto_publish: boolean; dest_channel: string | null }[]>`
+  const channelRows = await sql<{ channel: string; auto_publish: boolean; dest_channel: string | null; force_errore: boolean }[]>`
     SELECT mc.channel, COALESCE(mc.auto_publish, false) AS auto_publish,
       CASE
         WHEN mc.user_id = ${userId} THEN mc.dest_channel
         ELSE split_part(mc.user_id, ':', 2)
-      END AS dest_channel
+      END AS dest_channel,
+      COALESCE(mc.force_errore, false) AS force_errore
     FROM tg_monitor_channels mc
     WHERE (mc.user_id = ${userId} OR mc.user_id LIKE ${userId + ':%'})
       AND mc.active = true
@@ -327,16 +328,16 @@ async function startUser(userId: string) {
   // Risolve ogni canale nel suo ID numerico
   const monitoredIds = new Set<string>();
   const unresolvedChannels: string[] = []; // canali username non risolti all'avvio
-  const channelEntities: Array<{ entity: any; core: string; lastMsgId: number; autoPublish: boolean; destChannel: string | null }> = [];
+  const channelEntities: Array<{ entity: any; core: string; lastMsgId: number; autoPublish: boolean; destChannel: string | null; forceErrore: boolean }> = [];
   // Mappa canale → lista destinazioni (gestisce lo stesso sorgente su più profili/canali dest)
-  const channelDestsMap = new Map<string, Array<{ auto_publish: boolean; dest_channel: string | null }>>();
-  for (const { channel, auto_publish, dest_channel } of channelRows) {
+  const channelDestsMap = new Map<string, Array<{ auto_publish: boolean; dest_channel: string | null; force_errore: boolean }>>();
+  for (const { channel, auto_publish, dest_channel, force_errore } of channelRows) {
     const arr = channelDestsMap.get(channel) ?? [];
-    arr.push({ auto_publish, dest_channel: dest_channel ?? null });
+    arr.push({ auto_publish, dest_channel: dest_channel ?? null, force_errore: force_errore ?? false });
     channelDestsMap.set(channel, arr);
   }
   // Mappa core numerico → destinations per fallback quando la risoluzione entità fallisce
-  const coreDestsMap = new Map<string, Array<{ auto_publish: boolean; dest_channel: string | null }>>();
+  const coreDestsMap = new Map<string, Array<{ auto_publish: boolean; dest_channel: string | null; force_errore: boolean }>>();
   const processedMsgIds = new Set<string>(); // dedup push+polling (chiave: core:msgId:destChannel)
 
   console.log(`[tg-monitor] ${userId} — canali da risolvere: ${[...channelDestsMap.keys()].join(', ')}`);
@@ -375,9 +376,9 @@ async function startUser(userId: string) {
           ? Math.min(storedState.last_msg_id, currentLastId) // mai andare oltre l'attuale (sicurezza)
           : currentLastId;
         // Un'entry per ogni profilo/destinazione che monitora questo canale sorgente
-        for (const { auto_publish: ap, dest_channel: dc } of dests) {
-          channelEntities.push({ entity, core: entityCore, lastMsgId: initLastId, autoPublish: ap, destChannel: dc });
-          console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId}${storedState ? '(db)' : '(live)'} autoPublish=${ap} destChannel=${dc ?? 'default'} (tentativo ${attempt})`);
+        for (const { auto_publish: ap, dest_channel: dc, force_errore: fe } of dests) {
+          channelEntities.push({ entity, core: entityCore, lastMsgId: initLastId, autoPublish: ap, destChannel: dc, forceErrore: fe ?? false });
+          console.log(`[tg-monitor] ${userId} — canale "${channel}" → id ${entity.id} lastMsgId=${initLastId}${storedState ? '(db)' : '(live)'} autoPublish=${ap} destChannel=${dc ?? 'default'} forceErrore=${fe ?? false} (tentativo ${attempt})`);
         }
         coreDestsMap.set(entityCore, dests); // aggiorna con il core corretto
         resolved = true;
@@ -419,11 +420,11 @@ async function startUser(userId: string) {
             addChannelIds(entity.id);
             // Popola channelEntities e coreDestsMap così auto_publish funziona correttamente
             const lazyCore = (() => { const s = String(entity.id).replace(/^-/, ''); return s.startsWith('100') && s.length >= 12 ? s.slice(3) : s; })();
-            const lazyDests = channelDestsMap.get(ch) ?? [{ auto_publish: false, dest_channel: null }];
+            const lazyDests = channelDestsMap.get(ch) ?? [{ auto_publish: false, dest_channel: null, force_errore: false }];
             const lazyMsgs = await client.getMessages(entity, { limit: 1 }).catch(() => [] as any[]);
             const lazyLastId = (lazyMsgs as any[])[0]?.id ?? 0;
-            for (const { auto_publish: ap, dest_channel: dc } of lazyDests) {
-              channelEntities.push({ entity, core: lazyCore, lastMsgId: lazyLastId, autoPublish: ap, destChannel: dc });
+            for (const { auto_publish: ap, dest_channel: dc, force_errore: fe } of lazyDests) {
+              channelEntities.push({ entity, core: lazyCore, lastMsgId: lazyLastId, autoPublish: ap, destChannel: dc, forceErrore: fe ?? false });
             }
             coreDestsMap.set(lazyCore, lazyDests);
             console.log(`[tg-monitor] ${userId} — risolto lazily "${ch}" → ${entity.id} autoPublish=${lazyDests[0].auto_publish}`);
@@ -500,13 +501,13 @@ async function startUser(userId: string) {
       const matchingEntities = channelEntities.filter(c => c.core === core);
       if (matchingEntities.length > 0) {
         for (const ce of matchingEntities) {
-          processMessage(userId, uniqueUrls, ce.autoPublish, text, ce.destChannel).catch(e => console.error('[tg-monitor] errore processMessage:', e));
+          processMessage(userId, uniqueUrls, ce.autoPublish, text, ce.destChannel, ce.forceErrore).catch(e => console.error('[tg-monitor] errore processMessage:', e));
         }
       } else {
         // Fallback a coreDestsMap se l'entità non era risolvibile all'avvio
-        const fallbackDests = coreDestsMap.get(core) ?? [{ auto_publish: false, dest_channel: null }];
-        for (const { auto_publish: ap, dest_channel: dc } of fallbackDests) {
-          processMessage(userId, uniqueUrls, ap, text, dc).catch(e => console.error('[tg-monitor] errore processMessage:', e));
+        const fallbackDests = coreDestsMap.get(core) ?? [{ auto_publish: false, dest_channel: null, force_errore: false }];
+        for (const { auto_publish: ap, dest_channel: dc, force_errore: fe } of fallbackDests) {
+          processMessage(userId, uniqueUrls, ap, text, dc, fe ?? false).catch(e => console.error('[tg-monitor] errore processMessage:', e));
         }
       }
     } catch (e) {
@@ -543,7 +544,7 @@ async function startUser(userId: string) {
           const uniqueUrls: string[] = [];
           const seen = new Set<string>();
           for (const url of urls) { const clean = url.replace(/[.,;!?)]+$/, ''); if (!seen.has(clean)) { seen.add(clean); uniqueUrls.push(clean); } }
-          processMessage(userId, uniqueUrls, info.autoPublish, text, info.destChannel).catch(e => console.error('[tg-monitor] errore processMessage (poll):', e));
+          processMessage(userId, uniqueUrls, info.autoPublish, text, info.destChannel, info.forceErrore).catch(e => console.error('[tg-monitor] errore processMessage (poll):', e));
         }
       } catch (e: any) {
         console.warn(`[tg-monitor] ${userId} — poll error ${info.core}: ${e.message}`);
@@ -663,7 +664,7 @@ async function fetchProduct(userId: string, url: string, headers: Record<string,
   return { ...product, _platform: actualPlatform };
 }
 
-async function processMessage(userId: string, urls: string[], autoPublish = false, messageText = '', destChannel: string | null = null) {
+async function processMessage(userId: string, urls: string[], autoPublish = false, messageText = '', destChannel: string | null = null, forceErrore = false) {
   // ── Dedup URL-level ATOMICO (prima di qualsiasi await) ────────────────────
   // Node.js è single-thread: nessun await → nessuna race condition tra push+poll.
   // Due chiamate concorrenti con la stessa URL arrivano qui in sequenza; la seconda
@@ -791,8 +792,8 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
 
   // Rileva errori di prezzo nel testo sorgente → imposta {custom}
   const PRICE_ERROR_RE = /errori?\s+di\s+prezzo|errori?\s+del\s+prezzo|errori?\s+sul\s+prezzo|errori?\s+nel\s+prezzo|errori?\s+prezzo|altri\s+\d*\s*errori?|prezzo\s+errato|prezzo\s+sbagliato|prezzo\s+anomalo|anomalia\s+(?:di\s+)?prezzo|probabile\s+errore|possibile\s+errore|sembra\s+(?:un\s+)?errore|forse\s+(?:un\s+)?errore|potrebbe\s+essere\s+(?:un\s+)?errore|glitch\s+(?:di\s+)?prezzo|prezzo\s+glitch|price\s+error|pricing\s+error|price\s+glitch|price\s+mistake|errore!/i;
-  const detectedCustom = PRICE_ERROR_RE.test(messageText) ? '❌ERRORE DI PREZZO❌' : '';
-  if (detectedCustom) console.log(`[tg-monitor] ${profileId} — rilevato errore di prezzo nel testo sorgente`);
+  const detectedCustom = (forceErrore || PRICE_ERROR_RE.test(messageText)) ? '❌ERRORE DI PREZZO❌' : '';
+  if (detectedCustom) console.log(`[tg-monitor] ${profileId} — rilevato errore di prezzo${forceErrore ? ' (forzato dal canale)' : ' nel testo sorgente'}`);
 
   // Costruisce e salva ogni post
   const savedPosts: any[] = [];

@@ -10,8 +10,9 @@ export default withErrorHandler(async (req, res) => {
   if (req.method === 'GET') {
     await sql`ALTER TABLE tg_monitor_channels ADD COLUMN IF NOT EXISTS auto_publish BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
     await sql`ALTER TABLE tg_monitor_channels ADD COLUMN IF NOT EXISTS dest_channel TEXT`.catch(() => {});
-    const rows = await sql<{ id: string; channel: string; active: boolean; auto_publish: boolean; dest_channel: string | null }[]>`
-      SELECT id, channel, active, auto_publish, dest_channel FROM tg_monitor_channels
+    await sql`ALTER TABLE tg_monitor_channels ADD COLUMN IF NOT EXISTS force_errore BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
+    const rows = await sql<{ id: string; channel: string; active: boolean; auto_publish: boolean; dest_channel: string | null; force_errore: boolean }[]>`
+      SELECT id, channel, active, auto_publish, dest_channel, COALESCE(force_errore, false) AS force_errore FROM tg_monitor_channels
       WHERE user_id = ${userId} ORDER BY created_at ASC
     `;
     return res.json(rows);
@@ -21,11 +22,14 @@ export default withErrorHandler(async (req, res) => {
   if (req.method === 'PATCH') {
     const id = req.query.id as string;
     if (!id) return res.status(400).json({ error: 'ID mancante' });
-    const { auto_publish, active, dest_channel } = req.body ?? {};
+    const { auto_publish, active, dest_channel, force_errore } = req.body ?? {};
 
     if (typeof dest_channel !== 'undefined') {
       const val = dest_channel === '' || dest_channel === null ? null : String(dest_channel);
       await sql`UPDATE tg_monitor_channels SET dest_channel = ${val} WHERE id = ${id} AND user_id = ${userId}`;
+    }
+    if (typeof force_errore === 'boolean') {
+      await sql`UPDATE tg_monitor_channels SET force_errore = ${force_errore} WHERE id = ${id} AND user_id = ${userId}`;
     }
     if (typeof active === 'boolean' && typeof auto_publish === 'boolean') {
       await sql`UPDATE tg_monitor_channels SET active = ${active}, auto_publish = ${auto_publish} WHERE id = ${id} AND user_id = ${userId}`;
@@ -33,7 +37,7 @@ export default withErrorHandler(async (req, res) => {
       await sql`UPDATE tg_monitor_channels SET active = ${active} WHERE id = ${id} AND user_id = ${userId}`;
     } else if (typeof auto_publish === 'boolean') {
       await sql`UPDATE tg_monitor_channels SET auto_publish = ${auto_publish} WHERE id = ${id} AND user_id = ${userId}`;
-    } else if (typeof dest_channel === 'undefined') {
+    } else if (typeof dest_channel === 'undefined' && typeof force_errore === 'undefined') {
       return res.status(400).json({ error: 'Nessun campo valido da aggiornare' });
     }
 

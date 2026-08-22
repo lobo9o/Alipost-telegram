@@ -1850,6 +1850,16 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
     setChannels(prev => prev.filter(c => c.id !== id));
   });
 
+  const handleToggleForceErrore = async (id: string, current: boolean) => {
+    const next = !current;
+    setChannels(ch => ch.map(c => c.id === id ? { ...c, force_errore: next } : c));
+    try { await tgMonitorApi.updateChannel(id, { force_errore: next }); }
+    catch (e: any) {
+      setChannels(ch => ch.map(c => c.id === id ? { ...c, force_errore: current } : c));
+      setErr(e.message ?? 'Errore aggiornamento canale');
+    }
+  };
+
   // mode: 'queue' = metti in coda, 'publish' = pubblica subito, 'pause' = ferma controllo
   const handleSetMode = async (id: string, mode: 'queue' | 'publish' | 'pause') => {
     const updates = mode === 'pause'
@@ -2004,6 +2014,23 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                         {btn('queue',   '📋 In coda',   'var(--a1)')}
                         {btn('publish', '⚡ Subito',    '#16a34a')}
                         {btn('pause',   '⏸ Pausa',     '#6b3d1e')}
+                      </div>
+                      <div style={{ borderTop: '1px solid var(--bdr)', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 12, color: 'var(--t2)' }}>❌ Segna come errore di prezzo</span>
+                        <button
+                          onClick={() => handleToggleForceErrore(ch.id, ch.force_errore ?? false)}
+                          style={{
+                            width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer', flexShrink: 0,
+                            background: ch.force_errore ? '#dc2626' : 'var(--bg3)',
+                            transition: 'background 0.2s',
+                            position: 'relative',
+                          }}>
+                          <span style={{
+                            position: 'absolute', top: 3, left: ch.force_errore ? 21 : 3,
+                            width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                            transition: 'left 0.2s',
+                          }} />
+                        </button>
                       </div>
                     </>
                   );

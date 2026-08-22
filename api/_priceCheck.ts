@@ -221,6 +221,16 @@ export async function checkPostPrice(
     // Senza originalPrice utile: non terminare su variazione di prezzo (troppi falsi positivi).
     // La terminazione avviene solo tramite scraping "non disponibile" (vedi sopra).
 
+    // Fallback senza originalPrice utile: termina se il prezzo attuale è almeno 3× quello pubblicato.
+    // Copre errori di prezzo non marcati come ERRORE (es. salvato 100€, attuale 763€ = 7.6×).
+    if (currentPrice > storedPrice * 3) {
+      return {
+        valid: false,
+        reason: `Prezzo rientrato: ${currentPrice.toFixed(2)} > 3× il prezzo pubblicato (${storedPrice.toFixed(2)})`,
+        currentPrice,
+      };
+    }
+
     return { valid: true, currentPrice };
 
   } catch (e) {
