@@ -2055,13 +2055,20 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                               {pfBtn('aliexpress', '🔴 Solo AliExpress')}
                             </div>
                           </div>
-                          {/* Toggle errore di prezzo */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: 12, color: 'var(--t2)' }}>❌ Segna come errore di prezzo</span>
-                            <button onClick={() => handleToggleForceErrore(ch.id, ch.force_errore ?? false)}
-                              style={{ width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer', flexShrink: 0, background: ch.force_errore ? '#dc2626' : 'var(--bg3)', position: 'relative' }}>
-                              <span style={{ position: 'absolute', top: 3, left: ch.force_errore ? 21 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff' }} />
-                            </button>
+                          {/* Errore di prezzo */}
+                          <div>
+                            <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 5 }}>❌ Errore di prezzo</div>
+                            <div style={{ display: 'flex', gap: 5 }}>
+                              {[{ v: false, label: '✅ No' }, { v: true, label: '❌ Sì' }].map(({ v, label }) => {
+                                const active = (ch.force_errore ?? false) === v;
+                                return (
+                                  <button key={String(v)} onClick={() => handleToggleForceErrore(ch.id, !v)}
+                                    style={{ flex: 1, padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: active ? 700 : 400, background: active ? (v ? '#dc2626' : 'var(--a1)') : 'var(--bg3)', color: active ? '#fff' : 'var(--t3)' }}>
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       )}
