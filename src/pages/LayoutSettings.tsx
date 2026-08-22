@@ -1860,6 +1860,12 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
       setErr(e.message ?? 'Errore aggiornamento canale');
     }
   };
+  // alias diretto: imposta il valore senza toggle
+  const handleSetForceErrore = async (id: string, value: boolean) => {
+    setChannels(ch => ch.map(c => c.id === id ? { ...c, force_errore: value } : c));
+    try { await tgMonitorApi.updateChannel(id, { force_errore: value }); }
+    catch (e: any) { setErr(e.message ?? 'Errore aggiornamento canale'); }
+  };
 
   const handleSetPlatformFilter = async (id: string, value: string) => {
     setChannels(ch => ch.map(c => c.id === id ? { ...c, platform_filter: value } : c));
@@ -2019,12 +2025,13 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                   };
                   const isOpen = openSettings.has(ch.id);
                   const pf = ch.platform_filter ?? 'all';
-                  const pfBtn = (val: string, label: string) => (
-                    <button onClick={() => handleSetPlatformFilter(ch.id, val)} style={{
+                  const fe = ch.force_errore ?? false;
+                  const sBtn = (active: boolean, label: string, onClick: () => void) => (
+                    <button onClick={onClick} style={{
                       flex: 1, padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11,
-                      fontWeight: pf === val ? 700 : 400,
-                      background: pf === val ? 'var(--a1)' : 'var(--bg3)',
-                      color: pf === val ? '#fff' : 'var(--t3)',
+                      fontWeight: active ? 700 : 400,
+                      background: active ? 'var(--a1)' : 'var(--bg3)',
+                      color: active ? '#fff' : 'var(--t3)',
                     }}>{label}</button>
                   );
                   return (
@@ -2050,24 +2057,17 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                           <div>
                             <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 5 }}>📦 Copia link da</div>
                             <div style={{ display: 'flex', gap: 5 }}>
-                              {pfBtn('all',        '🌐 Tutti')}
-                              {pfBtn('amazon',     '🟠 Solo Amazon')}
-                              {pfBtn('aliexpress', '🔴 Solo AliExpress')}
+                              {sBtn(pf === 'all',        '🌐 Tutti',          () => handleSetPlatformFilter(ch.id, 'all'))}
+                              {sBtn(pf === 'amazon',     '🟠 Solo Amazon',    () => handleSetPlatformFilter(ch.id, 'amazon'))}
+                              {sBtn(pf === 'aliexpress', '🔴 Solo AliExpress',() => handleSetPlatformFilter(ch.id, 'aliexpress'))}
                             </div>
                           </div>
                           {/* Errore di prezzo */}
                           <div>
                             <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 5 }}>❌ Errore di prezzo</div>
                             <div style={{ display: 'flex', gap: 5 }}>
-                              {[{ v: false, label: '✅ No' }, { v: true, label: '❌ Sì' }].map(({ v, label }) => {
-                                const active = (ch.force_errore ?? false) === v;
-                                return (
-                                  <button key={String(v)} onClick={() => handleToggleForceErrore(ch.id, !v)}
-                                    style={{ flex: 1, padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: active ? 700 : 400, background: active ? 'var(--a1)' : 'var(--bg3)', color: active ? '#fff' : 'var(--t3)' }}>
-                                    {label}
-                                  </button>
-                                );
-                              })}
+                              {sBtn(!fe, '✅ No', () => handleSetForceErrore(ch.id, false))}
+                              {sBtn( fe, '❌ Sì', () => handleSetForceErrore(ch.id, true))}
                             </div>
                           </div>
                         </div>
