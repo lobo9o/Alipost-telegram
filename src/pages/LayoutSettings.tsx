@@ -2052,23 +2052,12 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                         <span style={{ fontSize: 11, color: 'var(--t3)' }}>{isOpen ? '▲' : '▼'}</span>
                       </button>
                       {isOpen && (
-                        <div style={{ borderTop: '1px solid var(--bdr)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          {/* Filtro piattaforma */}
-                          <div>
-                            <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 5 }}>📦 Copia link da</div>
-                            <div style={{ display: 'flex', gap: 5 }}>
-                              {sBtn(pf === 'all',        '🌐 Tutti',          () => handleSetPlatformFilter(ch.id, 'all'))}
-                              {sBtn(pf === 'amazon',     '🟠 Solo Amazon',    () => handleSetPlatformFilter(ch.id, 'amazon'))}
-                              {sBtn(pf === 'aliexpress', '🔴 Solo AliExpress',() => handleSetPlatformFilter(ch.id, 'aliexpress'))}
-                            </div>
-                          </div>
-                          {/* Errore di prezzo */}
-                          <div>
-                            <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 5 }}>❌ Errore di prezzo</div>
-                            <div style={{ display: 'flex', gap: 5 }}>
-                              {sBtn(!fe, '✅ No', () => handleSetForceErrore(ch.id, false))}
-                              {sBtn( fe, '❌ Sì', () => handleSetForceErrore(ch.id, true))}
-                            </div>
+                        <div style={{ borderTop: '1px solid var(--bdr)', padding: '10px 14px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                            {sBtn(pf === 'amazon',     '🟠 Solo Amazon',     () => handleSetPlatformFilter(ch.id, pf === 'amazon' ? 'all' : 'amazon'))}
+                            {sBtn(pf === 'aliexpress', '🔴 Solo AliExpress', () => handleSetPlatformFilter(ch.id, pf === 'aliexpress' ? 'all' : 'aliexpress'))}
+                            {sBtn(!fe, '✅ No errore', () => handleSetForceErrore(ch.id, false))}
+                            {sBtn( fe, '❌ Sì errore', () => handleSetForceErrore(ch.id, true))}
                           </div>
                         </div>
                       )}
