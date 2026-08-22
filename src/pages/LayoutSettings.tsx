@@ -1790,6 +1790,7 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
   const [twofa, setTwofa] = useState('');
   const [newChannel, setNewChannel] = useState('');
   const [channels, setChannels] = useState<TgMonitorChannel[]>([]);
+  const [openSettings, setOpenSettings] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
@@ -1856,6 +1857,14 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
     try { await tgMonitorApi.updateChannel(id, { force_errore: next }); }
     catch (e: any) {
       setChannels(ch => ch.map(c => c.id === id ? { ...c, force_errore: current } : c));
+      setErr(e.message ?? 'Errore aggiornamento canale');
+    }
+  };
+
+  const handleSetPlatformFilter = async (id: string, value: string) => {
+    setChannels(ch => ch.map(c => c.id === id ? { ...c, platform_filter: value } : c));
+    try { await tgMonitorApi.updateChannel(id, { platform_filter: value }); }
+    catch (e: any) {
       setErr(e.message ?? 'Errore aggiornamento canale');
     }
   };
@@ -2008,6 +2017,16 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                       </button>
                     );
                   };
+                  const isOpen = openSettings.has(ch.id);
+                  const pf = ch.platform_filter ?? 'all';
+                  const pfBtn = (val: string, label: string) => (
+                    <button onClick={() => handleSetPlatformFilter(ch.id, val)} style={{
+                      flex: 1, padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11,
+                      fontWeight: pf === val ? 700 : 400,
+                      background: pf === val ? 'var(--a1)' : 'var(--bg3)',
+                      color: pf === val ? '#fff' : 'var(--t3)',
+                    }}>{label}</button>
+                  );
                   return (
                     <>
                       <div style={{ borderTop: '1px solid var(--bdr)', padding: '8px 14px', display: 'flex', gap: 6 }}>
@@ -2015,23 +2034,37 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                         {btn('publish', '⚡ Subito',    '#16a34a')}
                         {btn('pause',   '⏸ Pausa',     '#6b3d1e')}
                       </div>
-                      <div style={{ borderTop: '1px solid var(--bdr)', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--t2)' }}>❌ Segna come errore di prezzo</span>
-                        <button
-                          onClick={() => handleToggleForceErrore(ch.id, ch.force_errore ?? false)}
-                          style={{
-                            width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer', flexShrink: 0,
-                            background: ch.force_errore ? '#dc2626' : 'var(--bg3)',
-                            transition: 'background 0.2s',
-                            position: 'relative',
-                          }}>
-                          <span style={{
-                            position: 'absolute', top: 3, left: ch.force_errore ? 21 : 3,
-                            width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                            transition: 'left 0.2s',
-                          }} />
-                        </button>
-                      </div>
+                      {/* Intestazione tendina impostazioni */}
+                      <button onClick={() => setOpenSettings(prev => {
+                          const next = new Set(prev);
+                          isOpen ? next.delete(ch.id) : next.add(ch.id);
+                          return next;
+                        })}
+                        style={{ width: '100%', borderTop: '1px solid var(--bdr)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', padding: '7px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', cursor: 'pointer' }}>
+                        <span style={{ fontSize: 12, color: 'var(--t2)' }}>⚙️ Impostazioni avanzate</span>
+                        <span style={{ fontSize: 11, color: 'var(--t3)' }}>{isOpen ? '▲' : '▼'}</span>
+                      </button>
+                      {isOpen && (
+                        <div style={{ borderTop: '1px solid var(--bdr)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {/* Filtro piattaforma */}
+                          <div>
+                            <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 5 }}>📦 Copia link da</div>
+                            <div style={{ display: 'flex', gap: 5 }}>
+                              {pfBtn('all',        '🌐 Tutti')}
+                              {pfBtn('amazon',     '🟠 Solo Amazon')}
+                              {pfBtn('aliexpress', '🔴 Solo AliExpress')}
+                            </div>
+                          </div>
+                          {/* Toggle errore di prezzo */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 12, color: 'var(--t2)' }}>❌ Segna come errore di prezzo</span>
+                            <button onClick={() => handleToggleForceErrore(ch.id, ch.force_errore ?? false)}
+                              style={{ width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer', flexShrink: 0, background: ch.force_errore ? '#dc2626' : 'var(--bg3)', position: 'relative' }}>
+                              <span style={{ position: 'absolute', top: 3, left: ch.force_errore ? 21 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff' }} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </>
                   );
                 })()}
