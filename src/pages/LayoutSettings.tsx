@@ -2063,7 +2063,7 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                                 const active = (ch.force_errore ?? false) === v;
                                 return (
                                   <button key={String(v)} onClick={() => handleToggleForceErrore(ch.id, !v)}
-                                    style={{ flex: 1, padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: active ? 700 : 400, background: active ? (v ? '#dc2626' : 'var(--a1)') : 'var(--bg3)', color: active ? '#fff' : 'var(--t3)' }}>
+                                    style={{ flex: 1, padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: active ? 700 : 400, background: active ? 'var(--a1)' : 'var(--bg3)', color: active ? '#fff' : 'var(--t3)' }}>
                                     {label}
                                   </button>
                                 );
