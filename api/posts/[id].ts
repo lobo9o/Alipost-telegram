@@ -554,7 +554,19 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     // Genera immagine terminata server-side identica al path automatico (publish.ts):
     // 1) applica il template (prezzi, badge store), 2) applica grayscale + overlay testo.
     let effectiveNewImage: string | undefined = typeof newImage === 'string' && newImage.startsWith('data:') ? newImage : undefined;
-    if (terminata && postData?.image && String(postData.image).startsWith('http')) {
+
+    // Se postData non arriva dal client (il client non lo invia), caricalo da published_posts
+    let resolvedPostData = postData;
+    if (terminata && (!resolvedPostData?.image || !String(resolvedPostData.image).startsWith('http'))) {
+      const [pubRow] = await sql<any[]>`
+        SELECT image, platform, original_price AS "originalPrice", discounted_price AS "discountedPrice",
+               discount_percent AS "discountPercent", product_id AS "productId", source_url AS "sourceUrl", custom_text AS "customText"
+        FROM published_posts WHERE id = ${id} AND user_id = ${userId} LIMIT 1
+      `.catch(() => []);
+      if (pubRow?.image && String(pubRow.image).startsWith('http')) resolvedPostData = pubRow;
+    }
+
+    if (terminata && resolvedPostData?.image && String(resolvedPostData.image).startsWith('http')) {
       const baseUserIdTerm = userId.includes(':') ? userId.split(':')[0] : userId;
       try {
         const [[sRow], [tRow]] = await Promise.all([
@@ -571,7 +583,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         };
 
         // Applica prima il template (stesso comportamento del path automatico in publish.ts)
-        let baseForTerm: string | Buffer = String(postData.image);
+        let baseForTerm: string | Buffer = String(resolvedPostData.image);
         try {
           const [termTpl] = await sql`
             SELECT id, config FROM templates
@@ -584,13 +596,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
             const termTplCfg = parseTemplateCfg(termTpl);
             if (termTplCfg) {
               const CSYM2: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CAD: 'CA$', BRL: 'R$', PLN: 'zł', RUB: '₽' };
-              const cs2 = postData.platform === 'aliexpress'
+              const cs2 = resolvedPostData.platform === 'aliexpress'
                 ? ((cfgT.aliexpress?.targetCountry ?? '').toUpperCase() === 'US' ? '$' : '€')
                 : (CSYM2[String(cfgT.amazon?.currency ?? 'EUR').toUpperCase()] ?? '€');
-              const tplBuf = await generateTemplateImageServer(termTplCfg, String(postData.image), String(postData.platform ?? 'amazon'), {
-                prezzo:           `${cs2}${Number(postData.discountedPrice).toFixed(2)}`,
-                prezzoPrecedente: `${cs2}${Number(postData.originalPrice).toFixed(2)}`,
-                sconto:           `-${Number(postData.discountPercent)}%`,
+              const tplBuf = await generateTemplateImageServer(termTplCfg, String(resolvedPostData.image), String(resolvedPostData.platform ?? 'amazon'), {
+                prezzo:           `${cs2}${Number(resolvedPostData.discountedPrice).toFixed(2)}`,
+                prezzoPrecedente: `${cs2}${Number(resolvedPostData.originalPrice).toFixed(2)}`,
+                sconto:           `-${Number(resolvedPostData.discountPercent)}%`,
               }).catch(() => null);
               if (tplBuf) {
                 const b64tpl = String(tplBuf).replace(/^data:image\/\w+;base64,/, '');
