@@ -1,3 +1,5 @@
+import sql from './db.js';
+
 const POSTTAP_API = 'https://creators.posttap.com/api/create-shortlink';
 
 export interface PostTapConfig {
@@ -8,14 +10,30 @@ export interface PostTapConfig {
 // Cache permanente per la durata del processo: i shortlink non scadono
 const _cache = new Map<string, string>();
 
-// Throttle notifica scadenza: max 1 per utente per ora
-const _notifyThrottle = new Map<string, number>();
+// Cache in-memory: evita query DB ripetute nello stesso processo
+const _alreadyNotified = new Set<string>();
 
 async function _notifyExpired(userId: string, botToken: string): Promise<void> {
-  const lastSent = _notifyThrottle.get(userId) ?? 0;
-  if (Date.now() - lastSent < 3_600_000) return;
-  _notifyThrottle.set(userId, Date.now());
   const baseUserId = userId.includes(':') ? userId.split(':')[0] : userId;
+
+  // Fast path: già notificato in questa sessione del processo
+  if (_alreadyNotified.has(baseUserId)) return;
+
+  // Persistent check: già notificato in DB (sopravvive ai restart di pm2)
+  try {
+    const [row] = await sql<{ notified_expired: boolean }[]>`
+      SELECT notified_expired FROM posttap_sessions WHERE user_id = ${baseUserId}
+    `.catch(() => [] as any[]);
+    if (row?.notified_expired) {
+      _alreadyNotified.add(baseUserId);
+      return;
+    }
+  } catch { /* ignora errori DB */ }
+
+  // Marca come notificato prima di inviare (evita duplicati in caso di concorrenza)
+  _alreadyNotified.add(baseUserId);
+  await sql`UPDATE posttap_sessions SET notified_expired = TRUE WHERE user_id = ${baseUserId}`.catch(() => {});
+
   await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

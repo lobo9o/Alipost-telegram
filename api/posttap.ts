@@ -11,6 +11,7 @@ async function ensureTable() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await sql`ALTER TABLE posttap_sessions ADD COLUMN IF NOT EXISTS notified_expired BOOLEAN NOT NULL DEFAULT FALSE`.catch(() => {});
 }
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
@@ -30,10 +31,11 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // POST — salva
   const { enabled, cookie } = req.body ?? {};
   await sql`
-    INSERT INTO posttap_sessions (user_id, enabled, cookie, updated_at)
-    VALUES (${userId}, ${!!enabled}, ${cookie ?? ''}, NOW())
+    INSERT INTO posttap_sessions (user_id, enabled, cookie, updated_at, notified_expired)
+    VALUES (${userId}, ${!!enabled}, ${cookie ?? ''}, NOW(), FALSE)
     ON CONFLICT (user_id) DO UPDATE
-      SET enabled = EXCLUDED.enabled, cookie = EXCLUDED.cookie, updated_at = NOW()
+      SET enabled = EXCLUDED.enabled, cookie = EXCLUDED.cookie,
+          updated_at = NOW(), notified_expired = FALSE
   `;
   res.json({ ok: true });
 });
