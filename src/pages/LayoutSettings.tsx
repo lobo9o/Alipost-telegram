@@ -2028,7 +2028,7 @@ export function MonitorPage({ nav }: { nav: (p: NavPage) => void }) {
                   const fe = ch.force_errore ?? false;
                   const sBtn = (active: boolean, label: string, onClick: () => void) => (
                     <button onClick={onClick} style={{
-                      flex: 1, padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11,
+                      width: '100%', padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11,
                       fontWeight: active ? 700 : 400,
                       background: active ? 'var(--a1)' : 'var(--bg3)',
                       color: active ? '#fff' : 'var(--t3)',
