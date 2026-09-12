@@ -2,7 +2,7 @@ module.exports = {
   apps: [{
     name: 'postdealbot',
     script: 'node',
-    args: '--env-file=.env ./node_modules/.bin/tsx server.ts',
+    args: '--max-old-space-size=768 --env-file=.env ./node_modules/.bin/tsx server.ts',
     cwd: __dirname,
     watch: false,
     instances: 1,
