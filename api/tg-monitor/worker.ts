@@ -756,6 +756,9 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
 
   // isMulti basato sui prodotti reali trovati, non sugli URL (es. link cashback non è un prodotto)
   const isMulti = products.length > 1;
+  // hadMultipleUrls: true se il messaggio originale aveva >1 URL, anche se solo 1 ha risolto.
+  // Serve per non applicare textOriginalPrice dal testo quando il prezzo si riferisce a un altro prodotto.
+  const hadMultipleUrls = urls.length > 1;
 
   const productIds = products.map((p: any) => (p.asin ?? p.productId ?? '').toString()).filter(Boolean);
 
@@ -822,15 +825,16 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     const finalBoxcoupon = !isMulti ? (product.couponBox ?? false) : false;
 
     // Prezzi: per post singolo il testo ha priorità sull'API (più preciso).
-    // Per post multi-prodotto NON si sovrascrive: il prezzo nel testo potrebbe
-    // riferirsi a un solo prodotto e verrebbe applicato sbagliato a tutti gli altri.
+    // Per post multi-prodotto (isMulti O hadMultipleUrls) NON si sovrascrive: il prezzo nel testo
+    // potrebbe riferirsi a un solo prodotto e verrebbe applicato sbagliato agli altri.
+    // hadMultipleUrls copre il caso in cui un prodotto fallisce l'API e isMulti diventa false.
     let finalOriginalPrice   = product.originalPrice ?? 0;
     let finalDiscountedPrice = product.discountedPrice ?? 0;
-    if (!isMulti && textPrice > 0) {
+    if (!isMulti && !hadMultipleUrls && textPrice > 0) {
       console.log(`[tg-monitor] ${userId} — prezzi da testo: scontato=${textPrice} precedente=${textOriginalPrice || '(non trovato)'} | API: scontato=${finalDiscountedPrice} precedente=${finalOriginalPrice}`);
       finalDiscountedPrice = textPrice;
       if (textOriginalPrice > textPrice) finalOriginalPrice = textOriginalPrice;
-    } else if (!isMulti && textOriginalPrice > 0 && textOriginalPrice > finalDiscountedPrice) {
+    } else if (!isMulti && !hadMultipleUrls && textOriginalPrice > 0 && textOriginalPrice > finalDiscountedPrice) {
       console.log(`[tg-monitor] ${userId} — prezzo precedente da testo: ${textOriginalPrice} (API aveva orig=${finalOriginalPrice})`);
       finalOriginalPrice = textOriginalPrice;
     }
