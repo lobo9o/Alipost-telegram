@@ -207,8 +207,15 @@ async function scrapeAmazonPage(asin: string, domain: string, apiPrice = 0): Pro
     }
 
     // 2. .a-offscreen — span accessibili dentro .a-price (primo=scontato, secondo=originale)
+    // Rimuovi prima gli span con prezzo al kg/100g/l (priceperunit-value) che hanno il proprio
+    // a-offscreen: senza pulizia il secondo a-offscreen diventa il prezzo unitario al peso
     if (scrapedPrice === 0) {
-      const offscreenAll = [...html.matchAll(/class="a-offscreen">([^<]+)</g)];
+      // Rimuove ogni span.a-price che contiene "priceperunit" prima di estrarre a-offscreen
+      const htmlNoPpu = html.replace(
+        /<span[^>]*(?:priceperunit|pricePerUnit)[^>]*>(?:[^<]|<(?!\/span>))*<\/span>/gi,
+        '',
+      );
+      const offscreenAll = [...htmlNoPpu.matchAll(/class="a-offscreen">([^<]+)</g)];
       if (offscreenAll[0]) scrapedPrice = parsePriceStr(offscreenAll[0][1]);
       if (offscreenAll[1]) scrapedOrigPrice = parsePriceStr(offscreenAll[1][1]);
     }
