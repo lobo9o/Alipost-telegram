@@ -306,10 +306,7 @@ export async function runPriceWatchCheck() {
       unavailable  = result.unavailable;
       console.log(`[price-watch] ${post.productId}: stored=${storedPrice} current=${currentPrice ?? '?'} unavailable=${unavailable}`);
 
-      runPriceCache.set(
-        post.productId,
-        (currentPrice !== null && currentPrice > storedPrice * 1.02) ? currentPrice : null,
-      );
+      runPriceCache.set(post.productId, currentPrice);
     }
 
     // Prodotto non più disponibile su Amazon → termina subito
