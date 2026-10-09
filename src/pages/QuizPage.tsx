@@ -41,6 +41,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
   const [question, setQuestion]     = useState('');
   const [answers, setAnswers]       = useState<QuizAnswer[]>([makeAnswer(true), makeAnswer(), makeAnswer(), makeAnswer()]);
   const [prizeCode, setPrizeCode]   = useState('');
+  const [prizeLink, setPrizeLink]   = useState('');
   const [channel, setChannel]       = useState('');
   const [image, setImage]           = useState<string>('');
 
@@ -84,6 +85,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
     setQuestion('');
     setAnswers([makeAnswer(true), makeAnswer(), makeAnswer(), makeAnswer()]);
     setPrizeCode('');
+    setPrizeLink('');
     setChannel(channels[0] ?? '');
     setImage('');
     setError('');
@@ -101,7 +103,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
     if (!question.trim())                        return setError('Inserisci la domanda');
     if (answers.some(a => !a.text.trim()))       return setError('Compila tutte le risposte');
     if (!answers.some(a => a.correct))           return setError('Seleziona la risposta corretta');
-    if (!prizeCode.trim())                       return setError('Inserisci il codice buono Amazon');
+    if (!prizeCode.trim() && !prizeLink.trim())   return setError('Inserisci almeno il codice o il link del buono');
     if (!channel)                                return setError('Seleziona il canale');
 
     setSaving(true);
@@ -110,7 +112,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
       const r = await fetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-user-id': activeProfileId },
-        body: JSON.stringify({ headerText: headerText.trim(), question: question.trim(), answers, prizeCode: prizeCode.trim(), channelId: channel, image: image || undefined }),
+        body: JSON.stringify({ headerText: headerText.trim(), question: question.trim(), answers, prizeCode: prizeCode.trim(), prizeLink: prizeLink.trim() || undefined, channelId: channel, image: image || undefined }),
       });
       const data = await r.json();
       if (!data.ok) { setError(data.error ?? 'Errore'); setSaving(false); return; }
@@ -200,9 +202,13 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
               </button>
             )}
 
-            <span className="lbl">Codice Buono Amazon</span>
+            <span className="lbl">Codice Buono Amazon <span style={{ color: 'var(--t3)', fontWeight: 400 }}>(opzionale se inserisci il link)</span></span>
             <input className="inp" placeholder="es. ABCD-EFGH-1234"
               value={prizeCode} onChange={e => setPrizeCode(e.target.value)} />
+
+            <span className="lbl">Link Buono Amazon <span style={{ color: 'var(--t3)', fontWeight: 400 }}>(opzionale)</span></span>
+            <input className="inp" placeholder="es. https://www.amazon.it/gc/..."
+              value={prizeLink} onChange={e => setPrizeLink(e.target.value)} />
 
             <span className="lbl">Canale</span>
             <select className="inp" value={channel} onChange={e => setChannel(e.target.value)}>

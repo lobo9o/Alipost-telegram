@@ -274,11 +274,11 @@ async function handleQuizCallback(cb: any) {
     }).catch(() => {});
   }
 
-  const prizePlain =
-    `🎁 Hai vinto il Quiz!\n\n` +
-    `Ecco il tuo codice Buono Amazon:\n\n` +
-    `${quiz.prize_code}\n\n` +
-    `Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄`;
+  let prizePlain = `🎁 Hai vinto il Quiz!\n\n`;
+  if (quiz.prize_code) prizePlain += `Ecco il tuo codice Buono Amazon:\n\n${quiz.prize_code}\n\n`;
+  if (quiz.prize_link) prizePlain += `🔗 Link al buono: ${quiz.prize_link}\n\n`;
+  if (quiz.prize_code) prizePlain += `Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄`;
+  else prizePlain += `Buona fortuna la prossima volta agli altri! 😄`;
 
   // MTProto prima (messaggio arriva dal tuo account personale, non dal bot)
   const baseUserId = String(quiz.user_id).split(':')[0];

@@ -40,6 +40,16 @@ async function initTable() {
   await sql`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS header_text TEXT`.catch(() => {});
   await sql`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS image TEXT`.catch(() => {});
   await sql`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS participants JSONB NOT NULL DEFAULT '[]'`.catch(() => {});
+  await sql`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS prize_link TEXT`.catch(() => {});
+}
+
+function buildPrizeMessage(prizeCode: string, prizeLink?: string | null): string {
+  let msg = `🎁 Hai vinto il Quiz!\n\n`;
+  if (prizeCode) msg += `Ecco il tuo codice Buono Amazon:\n\n${prizeCode}\n\n`;
+  if (prizeLink) msg += `🔗 Link al buono: ${prizeLink}\n\n`;
+  if (prizeCode) msg += `Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄`;
+  else msg += `Buona fortuna la prossima volta agli altri! 😄`;
+  return msg;
 }
 
 export default async function handler(req: any, res: any) {
@@ -51,7 +61,7 @@ export default async function handler(req: any, res: any) {
   // ── GET: lista quiz ──────────────────────────────────────────
   if (req.method === 'GET') {
     const rows = await sql`
-      SELECT id, channel_id, header_text, question, answers, prize_code, status,
+      SELECT id, channel_id, header_text, question, answers, prize_code, prize_link, status,
              participants, winner_username, created_at, won_at, message_id
       FROM quizzes WHERE user_id = ${userId}
       ORDER BY created_at DESC LIMIT 50
@@ -72,11 +82,7 @@ export default async function handler(req: any, res: any) {
       `.catch(() => []);
       if (!quiz) return res.status(404).json({ error: 'Quiz non trovato' });
 
-      const prizePlain =
-        `🎁 Hai vinto il Quiz!\n\n` +
-        `Ecco il tuo codice Buono Amazon:\n\n` +
-        `${quiz.prize_code}\n\n` +
-        `Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄`;
+      const prizePlain = buildPrizeMessage(quiz.prize_code, quiz.prize_link);
 
       // MTProto prima, Bot API come fallback
       const baseUserId = String(userId).split(':')[0];
@@ -126,18 +132,19 @@ export default async function handler(req: any, res: any) {
     }
 
     // Crea e pubblica nuovo quiz
-    const { question, answers, prizeCode, channelId, headerText, image } = req.body ?? {};
-    if (!question || !Array.isArray(answers) || answers.length < 2 || !prizeCode || !channelId) {
+    const { question, answers, prizeCode, prizeLink, channelId, headerText, image } = req.body ?? {};
+    if (!question || !Array.isArray(answers) || answers.length < 2 || !channelId) {
       return res.status(400).json({ error: 'Dati mancanti' });
     }
+    if (!prizeCode && !prizeLink) return res.status(400).json({ error: 'Inserisci almeno il codice o il link del buono' });
     const correctIdx = (answers as any[]).findIndex((a: any) => a.correct);
     if (correctIdx < 0) return res.status(400).json({ error: 'Nessuna risposta corretta selezionata' });
 
     const header = String(headerText || '🎯 QUIZ — Vinci un Buono Amazon!').trim();
 
     const [quiz] = await sql`
-      INSERT INTO quizzes (user_id, channel_id, header_text, question, answers, prize_code, image)
-      VALUES (${userId}, ${channelId}, ${header}, ${question}, ${sql.json(answers)}, ${prizeCode}, ${image || null})
+      INSERT INTO quizzes (user_id, channel_id, header_text, question, answers, prize_code, prize_link, image)
+      VALUES (${userId}, ${channelId}, ${header}, ${question}, ${sql.json(answers)}, ${prizeCode || ''}, ${prizeLink || null}, ${image || null})
       RETURNING id
     `.catch(() => []);
     if (!quiz) return res.status(500).json({ error: 'Errore DB' });
