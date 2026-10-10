@@ -66,11 +66,22 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
   // POST — create new template
   const { id: clientId, ...config } = req.body ?? {};
   const newId = (clientId && typeof clientId === 'string' && clientId.trim()) ? clientId.trim() : null;
-  const [row] = await sql`
+  // ON CONFLICT: aggiorna solo se il template appartiene già a questo utente (base o profilo).
+  // Se il conflitto è su un template di un altro utente, inserisce con un nuovo UUID.
+  let [row] = await sql`
     INSERT INTO templates (id, user_id, nome, tipo, config)
     VALUES (COALESCE(${newId}, gen_random_uuid()::text), ${userId}, 'Template', 'normal', ${sql.json(config)})
-    ON CONFLICT (id) DO UPDATE SET user_id = ${userId}, config = EXCLUDED.config, updated_at = NOW()
+    ON CONFLICT (id) DO UPDATE SET config = EXCLUDED.config, updated_at = NOW()
+    WHERE templates.user_id = ${userId} OR templates.user_id = ${baseUserId}
     RETURNING id, config
   `;
+  if (!row) {
+    // Il conflitto era su un template di un altro utente: ne creiamo uno nuovo con UUID
+    [row] = await sql`
+      INSERT INTO templates (id, user_id, nome, tipo, config)
+      VALUES (gen_random_uuid()::text, ${userId}, 'Template', 'normal', ${sql.json(config)})
+      RETURNING id, config
+    `;
+  }
   res.status(201).json(parseConfig((row as any).config, (row as any).id));
 });
