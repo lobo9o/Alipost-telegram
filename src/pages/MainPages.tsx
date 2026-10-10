@@ -3633,6 +3633,59 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
     }
   };
 
+  const markTerminataAll = async (p: typeof published[0]) => {
+    if (!p.chatId || !p.messageId) { alert('message_id non disponibile'); return; }
+    const pending = (p.multiItems ?? []).filter(it => !it.terminata);
+    if (pending.length === 0) return;
+    if (!window.confirm(`Terminare tutti e ${pending.length} articoli di questo post multiplo?`)) return;
+
+    const terminataCfg = settings.terminata;
+    const telegramMode = terminataCfg.telegramMode ?? 'keep';
+    const terminataTagValue = tags.find(t => t.name === '{terminata}')?.value || '❌ Offerta terminata';
+
+    let newImage: string | undefined;
+    const allImages = (p.multiItems ?? []).map(it => it.image);
+    const allIndices = (p.multiItems ?? []).map((_, i) => i);
+    try {
+      newImage = await generateMultiTerminataImage(allImages, allIndices, terminataCfg);
+    } catch { /* niente overlay */ }
+
+    let newCaption: string | undefined;
+    if (telegramMode !== 'keep' && p.multiItems) {
+      const sections = p.multiItems.map(it => {
+        const itLayout = layouts.find(l => l.id === it.layoutId) ?? layouts.find(l => l.tipo === 'multi');
+        const itCur = it.platform === 'aliexpress' ? aliCurrencySym(settings.aliexpress.targetCountry) : '€';
+        const itPost = { id: it.id, platform: it.platform as Platform, sourceUrl: it.sourceUrl, productId: it.productId, title: it.title, image: it.image, emoji: it.emoji, originalPrice: it.originalPrice, discountedPrice: parseFloat(it.price) || 0, discountPercent: it.discountPercent, customText: it.customText, coupon: it.coupon || '', isHistoricalLow: it.isHistoricalLow, templateId: 'tpl1', layoutId: it.layoutId, keyboardId: 'kb1' } as CreatedPost;
+        if (telegramMode === 'only') return terminataTagValue;
+        if (telegramMode === 'append') {
+          const resolved = itLayout ? resolvePostTags(itLayout.contenuto, itPost, tags, itCur, terminataTagValue) : terminataTagValue;
+          return resolved || terminataTagValue;
+        }
+        let base = it.resolvedText ?? '';
+        if (!base) base = itLayout ? resolvePostTags(itLayout.contenuto, itPost, tags, itCur) : '';
+        return base;
+      });
+      newCaption = sections.join('\n');
+    }
+
+    const body: Record<string, any> = {
+      chatId: p.chatId, messageId: p.messageId, terminata: true,
+      newImage, telegramMode, multiItemAll: true,
+      ...(newCaption !== undefined ? { newCaption } : {}),
+    };
+
+    try {
+      await publishedApi.editTelegram(p.id, body as any);
+      setPublished(prev => prev.map(x => {
+        if (x.id !== p.id) return x;
+        const newItems = (x.multiItems ?? []).map(it => ({ ...it, terminata: true }));
+        return { ...x, multiItems: newItems, terminata: true };
+      }));
+    } catch (e) {
+      alert('Errore: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
   const renderEditForm = (p: typeof published[0], isMultiItem: boolean) => {
     // Determina il layout da cui estrarre i tag
     let layoutForTags: typeof layouts[0] | undefined;
@@ -3922,7 +3975,17 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
                     </div>
                   ))}
 
-                  {/* 5. Fallback per vecchi multi-post senza multiItems */}
+                  {/* 5. Bottone termina tutti */}
+                  {editingKey !== `${p.id}:multi` && !!(p.multiItems?.length) && !p.terminata && (
+                    <div style={{ paddingTop: 8 }}>
+                      <button className="btn bsm bgh" style={{ color: '#ef4444', width: '100%' }}
+                        onClick={() => markTerminataAll(p)}>
+                        ❌ Termina tutti gli articoli
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 6. Fallback per vecchi multi-post senza multiItems */}
                   {!(p.multiItems?.length) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
                       {p.image && p.image.startsWith('http') && (

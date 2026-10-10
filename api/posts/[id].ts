@@ -432,7 +432,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
       action,
       chatId, messageId, newCaption, terminata, newImage,
       telegramMode, telegramText, layoutContenuto: patchLayout, postData,
-      multiItemIndex, updatedFields,
+      multiItemIndex, multiItemAll, updatedFields,
     } = req.body ?? {};
 
     // ── action: editPublished — modifica completa di un post pubblicato ──────
@@ -683,6 +683,17 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               SELECT bool_and((elem->>'terminata')::boolean)
               FROM jsonb_array_elements(COALESCE(multi_items, '[]'::jsonb)) AS elem
             ) = true
+        `.catch(() => {});
+      } else if (multiItemAll) {
+        // Marca tutti gli item come terminati in un'unica query
+        await sql`
+          UPDATE published_posts
+          SET multi_items = (
+            SELECT jsonb_agg(elem || '{"terminata":true}'::jsonb)
+            FROM jsonb_array_elements(COALESCE(multi_items, '[]'::jsonb)) AS elem
+          ),
+          terminata = true
+          WHERE id = ${id} AND user_id = ${userId}
         `.catch(() => {});
       } else {
         await sql`UPDATE published_posts SET terminata = true WHERE id = ${id} AND user_id = ${userId}`.catch(() => {});
