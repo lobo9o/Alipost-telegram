@@ -2320,12 +2320,24 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           console.log(`[autopost] terminata: chatId=${chatIdStr} msgId=${msgIdNum} img=${!!termImg} mode=${telegramMode}`);
           if (chatIdStr && msgIdNum) {
             if (termImg) {
-              const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo', parse_mode: 'HTML' };
-              if (termCaption !== undefined) mediaObj.caption = termCaption.slice(0, 1024);
+              const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo' };
+              if (termCaption !== undefined) {
+                mediaObj.caption = termCaption.slice(0, 1024);
+                mediaObj.parse_mode = 'HTML';
+              }
               const form = new FormData();
               form.append('chat_id', chatIdStr);
               form.append('message_id', String(msgIdNum));
               form.append('media', JSON.stringify(mediaObj));
+              // Ricostruisce inline keyboard (persa da editMessageMedia)
+              if (pub.isMulti && Array.isArray(pub.multiItems) && (pub.multiItems as any[]).length > 0) {
+                const btns = (pub.multiItems as any[])
+                  .filter((it: any) => it.sourceUrl)
+                  .map((it: any, i: number) => [{ text: `🛒 Prodotto ${i + 1}`, url: String(it.sourceUrl) }]);
+                if (btns.length > 0) form.append('reply_markup', JSON.stringify({ inline_keyboard: btns }));
+              } else if (pub.sourceUrl) {
+                form.append('reply_markup', JSON.stringify({ inline_keyboard: [[{ text: '🛒 Vai al prodotto', url: String(pub.sourceUrl) }]] }));
+              }
               form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
               const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
               const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };

@@ -28,8 +28,8 @@ export async function generateTerminataImageServer(
 
   if (!config.overlayText) return step1;
 
-  // Usa la larghezza come riferimento, uguale all'anteprima (containerW = larghezza immagine)
-  const refSize = imgW;
+  // Usa il lato più corto come riferimento: evita testo enorme su immagini composite orizzontali
+  const refSize = Math.min(imgW, imgH);
   const fs  = Math.round(((Number(config.overlayTextSize) || 7) / 100) * refSize);
   const tx  = Math.round(((Number(config.overlayTextX)    || 50) / 100) * imgW);
   const ty  = Math.round(((Number(config.overlayTextY)    || 50) / 100) * imgH);

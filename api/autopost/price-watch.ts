@@ -194,12 +194,18 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
 
   if (chatId && msgId) {
     if (termImg) {
-      const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo', parse_mode: 'HTML' };
-      if (caption !== undefined) mediaObj.caption = caption.slice(0, 1024);
+      const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo' };
+      if (caption !== undefined) {
+        mediaObj.caption = caption.slice(0, 1024);
+        mediaObj.parse_mode = 'HTML';
+      }
       const form = new FormData();
       form.append('chat_id', chatId);
       form.append('message_id', String(msgId));
       form.append('media', JSON.stringify(mediaObj));
+      if (post.sourceUrl) {
+        form.append('reply_markup', JSON.stringify({ inline_keyboard: [[{ text: '🛒 Vai al prodotto', url: String(post.sourceUrl) }]] }));
+      }
       form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
       const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
       const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
