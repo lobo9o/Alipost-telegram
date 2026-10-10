@@ -626,19 +626,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     let tgRes: Response;
     let tgData: { ok: boolean; description?: string };
 
-    // Ricostruisce keyboard per multi-post (persa da editMessageMedia)
-    let multiReplyMarkup: string | undefined;
-    if (terminata && (multiItemAll || typeof multiItemIndex === 'number')) {
-      const [multiRow] = await sql<any[]>`
-        SELECT multi_items FROM published_posts WHERE id = ${id} AND user_id = ${userId} LIMIT 1
-      `.catch(() => []);
-      const items = Array.isArray(multiRow?.multi_items) ? multiRow.multi_items as any[] : [];
-      const btns = items
-        .filter((it: any) => it.sourceUrl)
-        .map((it: any, i: number) => [{ text: `🛒 Prodotto ${i + 1}`, url: String(it.sourceUrl) }]);
-      if (btns.length > 0) multiReplyMarkup = JSON.stringify({ inline_keyboard: btns });
-    }
-
     if (effectiveNewImage) {
       const base64 = effectiveNewImage.replace(/^data:image\/\w+;base64,/, '');
       const imgBuffer = Buffer.from(base64, 'base64');
@@ -651,7 +638,6 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         mediaObj.parse_mode = 'HTML';
       }
       form.append('media', JSON.stringify(mediaObj));
-      if (multiReplyMarkup) form.append('reply_markup', multiReplyMarkup);
       form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'photo');
       tgRes = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form });
       tgData = await tgRes.json() as { ok: boolean; description?: string };

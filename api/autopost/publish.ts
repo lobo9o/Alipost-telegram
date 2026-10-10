@@ -2329,13 +2329,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               form.append('chat_id', chatIdStr);
               form.append('message_id', String(msgIdNum));
               form.append('media', JSON.stringify(mediaObj));
-              // Ricostruisce inline keyboard (persa da editMessageMedia)
-              if (pub.isMulti && Array.isArray(pub.multiItems) && (pub.multiItems as any[]).length > 0) {
-                const btns = (pub.multiItems as any[])
-                  .filter((it: any) => it.sourceUrl)
-                  .map((it: any, i: number) => [{ text: `🛒 Prodotto ${i + 1}`, url: String(it.sourceUrl) }]);
-                if (btns.length > 0) form.append('reply_markup', JSON.stringify({ inline_keyboard: btns }));
-              } else if (pub.sourceUrl) {
+              // Post singoli: mantiene il link acquisto; multi-post: keyboard rimossa (offerta terminata)
+              if (!pub.isMulti && pub.sourceUrl) {
                 form.append('reply_markup', JSON.stringify({ inline_keyboard: [[{ text: '🛒 Vai al prodotto', url: String(pub.sourceUrl) }]] }));
               }
               form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
