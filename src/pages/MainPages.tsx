@@ -260,9 +260,12 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
 // ── Canvas-accurate preview for published posts ───────────────
 function PublishedImagePreview({ post, template, currency }: { post: CreatedPost; template: Template | undefined; currency: string }) {
   const [imgSrc, setImgSrc] = React.useState<string | null>(null);
+  const canvasW = template?.canvasW ?? 1024;
+  const canvasH = template?.canvasH ?? 1024;
   React.useEffect(() => {
     if (!template || !post.image?.startsWith('http')) return;
     let cancelled = false;
+    setImgSrc(null);
     generatePostImage(template, post.image, post.isHistoricalLow ?? false, post.platform as 'amazon' | 'aliexpress', {
       prezzo: `${currency}${Number(post.discountedPrice).toFixed(2)}`,
       prezzoPrecedente: `${currency}${Number(post.originalPrice).toFixed(2)}`,
@@ -272,10 +275,30 @@ function PublishedImagePreview({ post, template, currency }: { post: CreatedPost
     return () => { cancelled = true; };
   }, [template, post.image, post.discountedPrice, post.originalPrice, post.discountPercent, post.customText, post.isHistoricalLow, post.platform, currency]);
 
+  const wrapStyle: React.CSSProperties = {
+    margin: '0 16px 12px', borderRadius: 10, overflow: 'hidden',
+    boxShadow: '0 2px 16px rgba(0,0,0,0.35)',
+    aspectRatio: `${canvasW}/${canvasH}`,
+    background: template?.bgColor ?? '#111',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  };
+
   if (imgSrc) {
-    return <img src={imgSrc} alt="" style={{ width: '100%', display: 'block' }} />;
+    return (
+      <div style={wrapStyle}>
+        <img src={imgSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+      </div>
+    );
   }
-  return <TemplateImagePreview post={post} template={template} />;
+  if (!template || !post.image?.startsWith('http')) {
+    return <TemplateImagePreview post={post} template={template} />;
+  }
+  // Placeholder durante la generazione: solo immagine prodotto
+  return (
+    <div style={wrapStyle}>
+      <img src={post.image} alt="" style={{ maxWidth: '60%', maxHeight: '60%', objectFit: 'contain' }} />
+    </div>
+  );
 }
 
 // ── Single post card (used in carousel) ───────────────────────
