@@ -114,9 +114,53 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
   const hasImage = post.image && post.image !== 'placeholder.jpg';
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(340);
+  // fittedFs[i] = font size in px (preview scale) calcolato con misura canvas reale dopo fonts.ready
+  const [fittedFs, setFittedFs] = useState<Record<number, number>>({});
+
   React.useEffect(() => {
     if (containerRef.current) setContainerW(containerRef.current.clientWidth);
   }, []);
+
+  React.useEffect(() => {
+    if (!template) return;
+    const canvasW = template.canvasW ?? 1024;
+    const canvasH = template.canvasH ?? 1024;
+
+    const texts = [
+      applyDecimalSep(applyCurrPos(`€${post.discountedPrice.toFixed(2)}`, template.prezzo.currencyPos), template.prezzo.decimalSep),
+      applyDecimalSep(applyCurrPos(`€${post.originalPrice.toFixed(2)}`, template.prezzoPrecedente.currencyPos), template.prezzoPrecedente.decimalSep),
+      applySconto(`-${post.discountPercent}%`, template.sconto.hidePercent, template.sconto.hideMinus),
+      post.customText ?? '',
+    ];
+    const els = [template.prezzo, template.prezzoPrecedente, template.sconto, template.testoCustom];
+
+    document.fonts.ready.then(() => {
+      const measureCanvas = document.createElement('canvas');
+      measureCanvas.width = canvasW; measureCanvas.height = canvasH;
+      const ctx = measureCanvas.getContext('2d');
+      if (!ctx) return;
+      const newFs: Record<number, number> = {};
+      els.forEach((el, i) => {
+        const bW = (el as any).boxW as number | undefined;
+        const bH = (el as any).boxH as number | undefined;
+        if (!bW || !bH || !el.enabled || !texts[i]) return;
+        const boxWpx = (bW / 100) * canvasW;
+        const boxHpx = (bH / 100) * canvasH;
+        let fs = Math.round(boxHpx * 0.82);
+        const makeFont = (s: number) => `${el.bold ? 'bold ' : ''}${s}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
+        ctx.font = makeFont(fs);
+        ctx.fillText('', -100, -100); // warm-up per questo font
+        while (fs > 6 && ctx.measureText(texts[i]).width > boxWpx * 0.92) {
+          fs--;
+          ctx.font = makeFont(fs);
+        }
+        // Scale al preview
+        const containerH = containerW * canvasH / canvasW;
+        newFs[i] = Math.round(fs * containerH / canvasH);
+      });
+      setFittedFs(newFs);
+    });
+  }, [template, containerW, post.discountedPrice, post.originalPrice, post.discountPercent, post.customText]);
 
   if (!template) {
     return (
@@ -211,7 +255,7 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
         };
         if (boxW && boxH) {
           const boxHpx = (boxH / 100) * containerH;
-          const approxFs = Math.round(boxHpx * 0.82);
+          const approxFs = fittedFs[i] ?? Math.round(boxHpx * 0.82);
           const jc = el.textAnchor === 'right' ? 'flex-end' : el.textAnchor === 'left' ? 'flex-start' : 'center';
           const content = decMatch
             ? <>{decMatch[1]}<span style={{ fontSize: `${approxFs * decScale}px`, verticalAlign: 'bottom' }}>{decMatch[2]}{decMatch[3]}</span></>
@@ -253,50 +297,6 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
           width: `${template.badge.size}%`, objectFit: 'contain', pointerEvents: 'none', zIndex: 5,
         }} />
       )}
-    </div>
-  );
-}
-
-// ── Canvas-accurate preview for published posts ───────────────
-function PublishedImagePreview({ post, template, currency }: { post: CreatedPost; template: Template | undefined; currency: string }) {
-  const [imgSrc, setImgSrc] = React.useState<string | null>(null);
-  const canvasW = template?.canvasW ?? 1024;
-  const canvasH = template?.canvasH ?? 1024;
-  React.useEffect(() => {
-    if (!template || !post.image?.startsWith('http')) return;
-    let cancelled = false;
-    setImgSrc(null);
-    generatePostImage(template, post.image, post.isHistoricalLow ?? false, post.platform as 'amazon' | 'aliexpress', {
-      prezzo: `${currency}${Number(post.discountedPrice).toFixed(2)}`,
-      prezzoPrecedente: `${currency}${Number(post.originalPrice).toFixed(2)}`,
-      sconto: `-${post.discountPercent}%`,
-      testoCustom: post.customText,
-    }).then(src => { if (!cancelled) setImgSrc(src); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [template, post.image, post.discountedPrice, post.originalPrice, post.discountPercent, post.customText, post.isHistoricalLow, post.platform, currency]);
-
-  const wrapStyle: React.CSSProperties = {
-    margin: '0 16px 12px', borderRadius: 10, overflow: 'hidden',
-    boxShadow: '0 2px 16px rgba(0,0,0,0.35)',
-    aspectRatio: `${canvasW}/${canvasH}`,
-    background: template?.bgColor ?? '#111',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  };
-
-  if (imgSrc) {
-    return (
-      <div style={wrapStyle}>
-        <img src={imgSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
-      </div>
-    );
-  }
-  if (!template || !post.image?.startsWith('http')) {
-    return <TemplateImagePreview post={post} template={template} />;
-  }
-  // Placeholder durante la generazione: solo immagine prodotto
-  return (
-    <div style={wrapStyle}>
-      <img src={post.image} alt="" style={{ maxWidth: '60%', maxHeight: '60%', objectFit: 'contain' }} />
     </div>
   );
 }
@@ -3929,7 +3929,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* ── Post singolo ── */}
             {!p.isMulti && (
               <>
-                <PublishedImagePreview post={pAsPost} template={mainTemplate} currency={pCurrency} />
+                <TemplateImagePreview post={pAsPost} template={mainTemplate} />
                 <div style={{ padding: '10px 12px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                     <SourceBadge platform={p.platform} />
