@@ -293,6 +293,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           published_at AS "publishedAt"
         FROM published_posts
         WHERE user_id = ${userId}
+          OR (${!userId.includes(':')} AND user_id LIKE ${userId + ':%'})
         ORDER BY published_at DESC
         LIMIT 100
       `;
