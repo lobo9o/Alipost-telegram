@@ -14,14 +14,14 @@ async function compressToThumb(dataUrl: string): Promise<string | undefined> {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = dataUrl;
     });
-    const maxW = 400;
+    const maxW = 600;
     const scale = Math.min(1, maxW / img.naturalWidth);
     const w = Math.round(img.naturalWidth * scale);
     const h = Math.round(img.naturalHeight * scale);
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     c.getContext('2d')!.drawImage(img, 0, 0, w, h);
-    return c.toDataURL('image/jpeg', 0.7);
+    return c.toDataURL('image/jpeg', 0.85);
   } catch { return undefined; }
 }
 
