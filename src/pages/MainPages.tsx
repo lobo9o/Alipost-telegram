@@ -9,6 +9,22 @@ import { productApi, postsApi, autopostApi, publishedApi, utilsApi, dealsApi, de
 import { generatePostImage, generateMultiPostImage, generateTerminataImage, generateMultiTerminataImage, applyCurrPos, applyDecimalSep, applySconto } from '../utils/imageCompose';
 import { getProductEmoji, shortenTitle } from '../lib/titleFormat';
 
+async function compressToThumb(dataUrl: string): Promise<string | undefined> {
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = dataUrl;
+    });
+    const maxW = 400;
+    const scale = Math.min(1, maxW / img.naturalWidth);
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d')!.drawImage(img, 0, 0, w, h);
+    return c.toDataURL('image/jpeg', 0.7);
+  } catch { return undefined; }
+}
+
 // ── Channel Switcher ──────────────────────────────────────────────────────────
 function ChannelSwitcher() {
   const { allChannels, activeProfileId, setActiveProfileId } = useApp();
@@ -2677,6 +2693,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
       const pubResult = await postsApi.publish(post.id, { post, layoutContenuto: layout?.contenuto, keyboardContenuto: keyboard?.contenuto, generatedImage, disableNotification, channelOverride });
       autopostApi.delete(id).catch(() => {}); // cleanup finale, fire-and-forget OK (status già aggiornato)
       const now = new Date().toISOString();
+      const thumb = generatedImage ? await compressToThumb(generatedImage) : undefined;
       const pubRecord = {
         id: post.id, emoji: post.emoji, title: post.title,
         price: Number(post.discountedPrice).toFixed(2),
@@ -2687,6 +2704,7 @@ export function QueuePage({ nav }: { nav: (p: NavPage) => void }) {
         isHistoricalLow: post.isHistoricalLow,
         chatId: pubResult.chatId ?? '', messageId: pubResult.messageId ?? 0,
         publishedAt: now, ts: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+        generatedImage: thumb,
       };
       setPublished(prev => [pubRecord, ...prev]);
       publishedApi.save(pubRecord).catch(() => {});
@@ -3929,7 +3947,10 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* ── Post singolo ── */}
             {!p.isMulti && (
               <>
-                <TemplateImagePreview post={pAsPost} template={mainTemplate} />
+                {(p as any).generatedImage
+                  ? <img src={(p as any).generatedImage} alt="" style={{ width: '100%', display: 'block' }} />
+                  : <TemplateImagePreview post={pAsPost} template={mainTemplate} />
+                }
                 <div style={{ padding: '10px 12px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                     <SourceBadge platform={p.platform} />

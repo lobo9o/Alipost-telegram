@@ -29,6 +29,7 @@ async function ensurePublishedTable() {
   `;
   await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS is_multi BOOLEAN DEFAULT false`.catch(() => {});
   await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS multi_items JSONB`.catch(() => {});
+  await sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS generated_image TEXT`.catch(() => {});
 }
 
 const TOKEN_URLS: Record<string, string> = {
@@ -290,7 +291,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           terminata,
           COALESCE(is_multi, false) AS "isMulti",
           multi_items AS "multiItems",
-          published_at AS "publishedAt"
+          published_at AS "publishedAt",
+          generated_image AS "generatedImage"
         FROM published_posts
         WHERE user_id = ${userId}
         ORDER BY published_at DESC
@@ -303,12 +305,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
     if (req.method === 'POST') {
       const p = req.body ?? {};
       const multiItemsJson = p.multiItems ? sql.json(p.multiItems) : null;
+      const genImg = (p.generatedImage && typeof p.generatedImage === 'string' && p.generatedImage.startsWith('data:image/')) ? p.generatedImage : null;
       await sql`
         INSERT INTO published_posts (
           id, user_id, emoji, title, image,
           original_price, discounted_price, discount_percent,
           platform, source_url, product_id, custom_text,
-          layout_id, is_historical_low, is_multi, multi_items, chat_id, message_id
+          layout_id, is_historical_low, is_multi, multi_items, chat_id, message_id,
+          generated_image
         ) VALUES (
           ${p.id}, ${userId}, ${p.emoji ?? ''}, ${p.title ?? ''}, ${p.image ?? ''},
           ${p.originalPrice ?? 0}, ${p.discountedPrice ?? parseFloat(p.price) ?? 0},
@@ -316,7 +320,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ${p.platform ?? 'amazon'}, ${p.sourceUrl ?? ''}, ${p.productId ?? ''},
           ${p.customText ?? ''}, ${p.layoutId ?? ''}, ${p.isHistoricalLow ?? false},
           ${p.isMulti ?? false}, ${multiItemsJson},
-          ${p.chatId ?? ''}, ${p.messageId ?? 0}
+          ${p.chatId ?? ''}, ${p.messageId ?? 0},
+          ${genImg}
         )
         ON CONFLICT (id) DO UPDATE SET
           chat_id = EXCLUDED.chat_id,
