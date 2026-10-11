@@ -303,6 +303,18 @@ export async function generatePostImage(
         : Math.max(12, el.fontSize * 2);
       return document.fonts.load(`${w} ${fs}px "${el.fontFamily}"`).catch(() => {});
     }));
+    // Lascia un frame al browser per registrare i font nel contesto canvas
+    // (document.fonts.load risolve prima che ctx.measureText usi il font corretto)
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    // Disegna caratteri invisibili per forzare il canvas a inizializzare ogni font
+    textEls.filter(el => el?.enabled && el?.fontFamily).forEach(el => {
+      const w = el.bold ? '700' : '400';
+      const fs = (el.boxW && el.boxH)
+        ? Math.max(12, Math.round((el.boxH / 100) * canvasH * 0.82))
+        : Math.max(12, el.fontSize * 2);
+      ctx.font = `${w} ${fs}px "${el.fontFamily}"`;
+      ctx.fillText('', -10, -10);
+    });
   }
 
   // Text elements
