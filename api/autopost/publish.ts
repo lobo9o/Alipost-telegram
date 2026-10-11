@@ -2090,6 +2090,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           multi_items = EXCLUDED.multi_items
       `.catch((e: any) => console.error('[autopost] published_posts insert error:', e?.message));
 
+      // Mantieni solo gli ultimi 100 post per canale
+      sql`
+        DELETE FROM published_posts
+        WHERE user_id = ${userId}
+        AND id NOT IN (
+          SELECT id FROM published_posts
+          WHERE user_id = ${userId}
+          ORDER BY published_at DESC
+          LIMIT 100
+        )
+      `.catch(() => {});
+
       // Registra prezzo in storico (fire-and-forget)
       if (post.productId && Number(post.discountedPrice ?? 0) > 0) {
         sql`INSERT INTO price_history (product_id, platform, price)

@@ -331,6 +331,17 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           multi_items = EXCLUDED.multi_items,
           terminata = false
       `;
+      // Mantieni solo gli ultimi 100 post per canale, cancella i più vecchi
+      await sql`
+        DELETE FROM published_posts
+        WHERE user_id = ${userId}
+        AND id NOT IN (
+          SELECT id FROM published_posts
+          WHERE user_id = ${userId}
+          ORDER BY published_at DESC
+          LIMIT 100
+        )
+      `.catch(() => {});
       res.status(201).json({ ok: true });
       return;
     }
