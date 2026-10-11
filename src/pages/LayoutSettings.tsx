@@ -1661,8 +1661,19 @@ const DEFAULT_TERMINATA: TerminataConfig = {
 function TerminataPanel() {
   const { settings, setSettings, layouts, templates } = useApp();
   const [cfg, setCfg] = useState<TerminataConfig>({ ...DEFAULT_TERMINATA, ...(settings.terminata ?? {}) });
-  const [saved, setSaved] = useState(false);
   const [terminataStep, setTerminataStep] = useState(1);
+  const firstRender = useRef(true);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const newSettings = { ...settings, terminata: cfg };
+      settingsApi.save(newSettings).catch(() => {});
+      setSettings(newSettings);
+    }, 600);
+  }, [cfg]);
 
   const handleTerminataArrow = (dx: number, dy: number) => {
     const s = terminataStep;
@@ -1675,14 +1686,6 @@ function TerminataPanel() {
 
   const update = <K extends keyof TerminataConfig>(k: K, v: TerminataConfig[K]) =>
     setCfg(prev => ({ ...prev, [k]: v }));
-
-  const save = async () => {
-    const newSettings = { ...settings, terminata: cfg };
-    await settingsApi.save(newSettings);
-    setSettings(newSettings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
 
   const activeTpl = templates[0];
 
@@ -1761,8 +1764,6 @@ function TerminataPanel() {
         </div>
       )}
 
-      <button className="btn bp bfull" style={{ marginTop: 8 }} onClick={save}>✅ Salva</button>
-      {saved && <div style={{ marginTop: 8, color: '#4ade80', fontSize: 13, textAlign: 'center' }}>✓ Salvato</div>}
     </>
   );
 }
