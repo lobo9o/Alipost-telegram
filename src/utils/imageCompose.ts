@@ -69,6 +69,11 @@ function drawTextEl(ctx: CanvasRenderingContext2D, el: TextEl, text: string, can
     const boxWpx = (el.boxW / 100) * canvasW;
     const boxHpx = (el.boxH / 100) * canvasH;
 
+    // Clipping al riquadro — evita overflow se il font non era ancora caricato durante la misura
+    ctx.beginPath();
+    ctx.rect(boxX, boxY, boxWpx, boxHpx);
+    ctx.clip();
+
     let fs = Math.round(boxHpx * 0.82);
     const combinedText = parts ? (parts.main + parts.dec + (parts.suffix || '')) : text;
     ctx.font = fontStr(fs);
@@ -293,7 +298,10 @@ export async function generatePostImage(
     const textEls = [template.prezzo, template.prezzoPrecedente, template.sconto, template.testoCustom];
     await Promise.all(textEls.filter(el => el?.enabled && el?.fontFamily).map(el => {
       const w = el.bold ? '700' : '400';
-      return document.fonts.load(`${w} ${el.fontSize * 2}px "${el.fontFamily}"`).catch(() => {});
+      const fs = (el.boxW && el.boxH)
+        ? Math.max(12, Math.round((el.boxH / 100) * canvasH * 0.82))
+        : Math.max(12, el.fontSize * 2);
+      return document.fonts.load(`${w} ${fs}px "${el.fontFamily}"`).catch(() => {});
     }));
   }
 
