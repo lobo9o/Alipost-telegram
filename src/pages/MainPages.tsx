@@ -257,6 +257,27 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
   );
 }
 
+// ── Canvas-accurate preview for published posts ───────────────
+function PublishedImagePreview({ post, template, currency }: { post: CreatedPost; template: Template | undefined; currency: string }) {
+  const [imgSrc, setImgSrc] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!template || !post.image?.startsWith('http')) return;
+    let cancelled = false;
+    generatePostImage(template, post.image, post.isHistoricalLow ?? false, post.platform as 'amazon' | 'aliexpress', {
+      prezzo: `${currency}${Number(post.discountedPrice).toFixed(2)}`,
+      prezzoPrecedente: `${currency}${Number(post.originalPrice).toFixed(2)}`,
+      sconto: `-${post.discountPercent}%`,
+      testoCustom: post.customText,
+    }).then(src => { if (!cancelled) setImgSrc(src); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [template, post.image, post.discountedPrice, post.originalPrice, post.discountPercent, post.customText, post.isHistoricalLow, post.platform, currency]);
+
+  if (imgSrc) {
+    return <img src={imgSrc} alt="" style={{ width: '100%', display: 'block' }} />;
+  }
+  return <TemplateImagePreview post={post} template={template} />;
+}
+
 // ── Single post card (used in carousel) ───────────────────────
 function PostCard({ postId, onDelete, onQueue, onPublish }: {
   postId: string;
@@ -3885,7 +3906,7 @@ export function PublishedPage({ nav }: { nav: (p: NavPage) => void }) {
             {/* ── Post singolo ── */}
             {!p.isMulti && (
               <>
-                <TemplateImagePreview post={pAsPost} template={mainTemplate} />
+                <PublishedImagePreview post={pAsPost} template={mainTemplate} currency={pCurrency} />
                 <div style={{ padding: '10px 12px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                     <SourceBadge platform={p.platform} />
