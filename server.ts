@@ -7,6 +7,7 @@ import { runDailyRecapCheck } from './api/autopost/daily-recap.js';
 import { runPriceWatchCheck } from './api/autopost/price-watch.js';
 import { runCustomPostScheduler } from './api/custom-posts/scheduler.js';
 import { startBotPoller } from './api/tg-bot/poller.js';
+import { startPrizeBotPoller } from './api/prize-bot/poller.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -157,6 +158,7 @@ async function main() {
     console.log(`[server] avviato su http://localhost:${PORT}`);
     initTgMonitor(PORT);
     startBotPoller().catch(e => console.error('[tg-bot] avvio fallito:', e.message));
+    startPrizeBotPoller().catch(e => console.error('[prize-bot] avvio fallito:', e.message));
   });
 
   // Riepilogo giornaliero: check ogni minuto

@@ -256,68 +256,24 @@ async function handleQuizCallback(cb: any) {
   // Notifica vincitore
   await tg('answerCallbackQuery', {
     callback_query_id: cb.id,
-    text: '🏆 Hai vinto! Ti mando il buono in privato...',
+    text: '🏆 Hai vinto! Clicca il bottone nel messaggio per ritirare il premio 🎁',
     show_alert: true,
   });
 
-  // Aggiorna post nel canale (editCaption se ha immagine, editText altrimenti)
-  const winnerText = `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n<i>Il buono è stato inviato in privato al vincitore.</i>`;
+  // Aggiorna post nel canale con bottone per ritirare il premio
+  const prizeUrl = `https://t.me/AssegnaPremioBot?start=prize_${quizId}`;
+  const replyMarkup = { inline_keyboard: [[{ text: '🎁 Ritira il tuo premio', url: prizeUrl }]] };
+  const winnerText = `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n<i>Clicca il bottone qui sotto per ritirare il premio.</i>`;
+
   if (quiz.image) {
     await tg('editMessageCaption', {
       chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
-      caption: winnerText, parse_mode: 'HTML',
+      caption: winnerText, parse_mode: 'HTML', reply_markup: replyMarkup,
     }).catch(() => {});
   } else {
     await tg('editMessageText', {
       chat_id: quiz.channel_id, message_id: Number(quiz.message_id),
-      text: winnerText, parse_mode: 'HTML',
-    }).catch(() => {});
-  }
-
-  let prizePlain = `🎁 Hai vinto il Quiz!\n\n`;
-  if (quiz.prize_code) prizePlain += `Ecco il tuo codice Buono Amazon:\n\n${quiz.prize_code}\n\n`;
-  if (quiz.prize_link) prizePlain += `🔗 Link al buono: ${quiz.prize_link}\n\n`;
-  if (quiz.prize_code) prizePlain += `Riscattalo su amazon.it/gc/redeem — buona fortuna la prossima volta agli altri! 😄`;
-  else prizePlain += `Buona fortuna la prossima volta agli altri! 😄`;
-
-  // MTProto prima (messaggio arriva dal tuo account personale, non dal bot)
-  const baseUserId = String(quiz.user_id).split(':')[0];
-  const getTgClient = (globalThis as any).__getTgClient;
-  const client = getTgClient?.(baseUserId);
-  let sent = false;
-
-  if (client) {
-    try {
-      await (client as any).sendMessage(winnerTgId, { message: prizePlain });
-      sent = true;
-      console.log(`[quiz] buono inviato via MTProto a ${winnerTgId}`);
-    } catch (e: any) {
-      console.warn(`[quiz] MTProto DM fallito: ${e.message} — provo Bot API`);
-    }
-  }
-
-  if (!sent) {
-    // Fallback: Bot API (se MTProto non disponibile o privacy dell'utente blocca)
-    const dmResult = await tg('sendMessage', {
-      chat_id: winnerTgId,
-      text: prizePlain,
-    }).catch(() => null);
-
-    if (dmResult?.ok) {
-      sent = true;
-      console.log(`[quiz] buono inviato via Bot API a ${winnerTgId}`);
-    }
-  }
-
-  if (!sent) {
-    // Ultimo resort: aggiorna il post indicando di contattare in privato
-    await tg('editMessageText', {
-      chat_id: quiz.channel_id,
-      message_id: Number(quiz.message_id),
-      text:
-        `✅ <b>Quiz concluso!</b>\n\n❓ ${quiz.question}\n\n🏆 Ha vinto: <b>${winnerName}</b>\n\n` +
-        `<i>Vincitore: contattaci in privato per ricevere il buono.</i>`,
-      parse_mode: 'HTML',
+      text: winnerText, parse_mode: 'HTML', reply_markup: replyMarkup,
     }).catch(() => {});
   }
 
