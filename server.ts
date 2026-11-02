@@ -8,6 +8,7 @@ import { runPriceWatchCheck } from './api/autopost/price-watch.js';
 import { runCustomPostScheduler } from './api/custom-posts/scheduler.js';
 import { startBotPoller } from './api/tg-bot/poller.js';
 import { startPrizeBotPoller } from './api/prize-bot/poller.js';
+import { cavalieriPostsHandler } from './api/public/cavalieri-posts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -104,6 +105,14 @@ async function main() {
     next();
   });
   app.options('*', (_req: any, res: any) => { res.status(204).end(); });
+
+  // Sito pubblico cavalieridelrisparmi.com
+  app.use((req: any, res: any, next: any) => {
+    const host = req.headers.host || '';
+    if (!host.includes('cavalieridelrisparmi')) return next();
+    if (req.path === '/posts' && req.method === 'GET') return cavalieriPostsHandler(req, res);
+    res.sendFile(path.join(__dirname, 'site', 'cavalieri.html'));
+  });
 
   // index.html: no-cache (forza ricaricamento dopo deploy)
   // static assets (js/css con hash): cache lunga

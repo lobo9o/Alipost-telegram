@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cavalieri del Risparmio — Le migliori offerte Amazon</title>
+  <meta name="description" content="Le migliori offerte Amazon e AliExpress selezionate ogni giorno dai Cavalieri del Risparmio.">
+  <meta property="og:title" content="Cavalieri del Risparmio">
+  <meta property="og:description" content="Le migliori offerte Amazon e AliExpress selezionate ogni giorno.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --red: #e63946; --red-dark: #c1121f;
+      --bg: #f1f5f9; --card: #fff;
+      --text: #1e293b; --text2: #64748b;
+      --border: #e2e8f0; --amber: #f59e0b;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1);
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: linear-gradient(135deg, #1e293b, #334155);
+      color: #fff; padding: 14px 16px;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,.3);
+    }
+    .header-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon { font-size: 26px; flex-shrink: 0; }
+    .brand-name { font-size: 17px; font-weight: 800; letter-spacing: -.5px; line-height: 1.1; }
+    .brand-sub { font-size: 10px; opacity: .65; font-weight: 400; display: block; }
+    .tg-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: #2AABEE; color: #fff; text-decoration: none;
+      padding: 7px 13px; border-radius: 20px; font-size: 12px; font-weight: 700;
+      white-space: nowrap; flex-shrink: 0; transition: background .15s;
+    }
+    .tg-btn:hover { background: #229ED9; }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 18px 12px 48px; }
+    .section-title { font-size: 13px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px; }
+    @media (min-width: 480px) { .grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); } }
+    @media (min-width: 768px) { .grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; } }
+
+    .card {
+      background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+      overflow: hidden; display: flex; flex-direction: column;
+      text-decoration: none; color: inherit;
+      transition: transform .18s, box-shadow .18s; cursor: pointer;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+
+    .card-img-wrap { position: relative; aspect-ratio: 1; background: #f8fafc; overflow: hidden; }
+    .card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .card-img-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 44px; background: linear-gradient(135deg,#f1f5f9,#e2e8f0); }
+
+    .badge { position: absolute; font-weight: 800; border-radius: 6px; }
+    .badge-discount { top: 7px; left: 7px; background: var(--red); color: #fff; font-size: 12px; padding: 2px 7px; }
+    .badge-low      { top: 7px; right: 7px; background: var(--amber); color: #fff; font-size: 9px; padding: 2px 6px; }
+    .badge-platform { bottom: 7px; right: 7px; background: rgba(0,0,0,.55); color: #fff; font-size: 9px; padding: 2px 6px; text-transform: uppercase; letter-spacing: .4px; border-radius: 4px; }
+
+    .card-body { padding: 9px 10px 11px; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+    .card-title { font-size: 12px; font-weight: 600; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+    .card-prices { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+    .price-current { font-size: 17px; font-weight: 800; color: var(--red); letter-spacing: -.5px; }
+    .price-original { font-size: 11px; color: var(--text2); text-decoration: line-through; }
+    .btn-buy { display: block; background: var(--red); color: #fff; text-align: center; padding: 7px; border-radius: 8px; font-size: 12px; font-weight: 700; margin-top: 4px; transition: background .15s; }
+    .btn-buy:hover { background: var(--red-dark); }
+
+    #loading { text-align: center; padding: 40px; color: var(--text2); font-size: 14px; }
+    .spinner { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--red); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 10px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #load-more-wrap { text-align: center; margin-top: 22px; }
+    #btn-load-more { background: #fff; border: 2px solid var(--red); color: var(--red); padding: 9px 28px; border-radius: 24px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; }
+    #btn-load-more:hover { background: var(--red); color: #fff; }
+    .no-more { color: var(--text2); font-size: 13px; }
+
+    .empty { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+    footer { background: #1e293b; color: rgba(255,255,255,.5); text-align: center; padding: 18px 16px; font-size: 11px; margin-top: 40px; }
+    footer a { color: rgba(255,255,255,.7); text-decoration: none; }
+    footer a:hover { color: #fff; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <span class="brand-icon">🛡️</span>
+      <div>
+        <div class="brand-name">Cavalieri del Risparmio</div>
+        <span class="brand-sub">Le migliori offerte ogni giorno</span>
+      </div>
+    </div>
+    <a href="https://t.me/cavalieridelrisparmio" target="_blank" rel="noopener" class="tg-btn">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.247-1.97 9.289c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L6.918 14.33l-2.967-.924c-.644-.204-.657-.644.136-.953l11.57-4.461c.537-.194 1.006.131.905.255z"/></svg>
+      Unisciti al canale
+    </a>
+  </div>
+</header>
+
+<main>
+  <div class="section-title">Ultime offerte</div>
+  <div class="grid" id="grid"></div>
+  <div id="loading"><div class="spinner"></div>Caricamento offerte...</div>
+  <div id="load-more-wrap" style="display:none"></div>
+</main>
+
+<footer>
+  <p>© 2026 <a href="https://t.me/cavalieridelrisparmio" target="_blank">Cavalieri del Risparmio</a> — I prezzi possono variare. I link contengono codici affiliati.</p>
+</footer>
+
+<script>
+  let page = 1, busy = false, done = false;
+
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const fmt = p => '€' + parseFloat(p).toFixed(2).replace('.',',');
+
+  function card(p) {
+    const a = document.createElement('a');
+    a.className = 'card';
+    a.href = p.sourceUrl || '#';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer sponsored';
+
+    const img = p.generatedImage || p.image || '';
+    const imgHtml = img
+      ? `<img class="card-img" src="${esc(img)}" alt="${esc(p.title)}" loading="lazy">`
+      : `<div class="card-img-placeholder">${p.emoji || '🛒'}</div>`;
+
+    a.innerHTML = `
+      <div class="card-img-wrap">
+        ${imgHtml}
+        ${p.discountPercent > 0 ? `<span class="badge badge-discount">-${p.discountPercent}%</span>` : ''}
+        ${p.isHistoricalLow ? `<span class="badge badge-low">🏆 MIN</span>` : ''}
+        <span class="badge-platform">${p.platform === 'amazon' ? 'Amazon' : 'AliExpress'}</span>
+      </div>
+      <div class="card-body">
+        <div class="card-title">${esc(p.title)}</div>
+        <div class="card-prices">
+          <span class="price-current">${fmt(p.discountedPrice)}</span>
+          ${parseFloat(p.originalPrice) > parseFloat(p.discountedPrice) ? `<span class="price-original">${fmt(p.originalPrice)}</span>` : ''}
+        </div>
+        <span class="btn-buy">Compra ora</span>
+      </div>`;
+    return a;
+  }
+
+  async function load() {
+    if (busy || done) return;
+    busy = true;
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('load-more-wrap').style.display = 'none';
+    try {
+      const r = await fetch('/posts?page=' + page);
+      if (!r.ok) throw new Error();
+      const posts = await r.json();
+      const grid = document.getElementById('grid');
+      if (!posts.length && page === 1) {
+        grid.innerHTML = '<div class="empty"><div class="empty-icon">🛡️</div><p>Nessuna offerta al momento.<br>Torna presto!</p></div>';
+        return;
+      }
+      posts.forEach(p => grid.appendChild(card(p)));
+      page++;
+      const wrap = document.getElementById('load-more-wrap');
+      if (posts.length < 24) {
+        done = true;
+        wrap.innerHTML = '<p class="no-more">Hai visto tutte le offerte! 🎉</p>';
+      } else {
+        wrap.innerHTML = '<button id="btn-load-more">Carica altri</button>';
+        document.getElementById('btn-load-more').onclick = load;
+      }
+      wrap.style.display = 'block';
+    } catch {
+      document.getElementById('loading').innerHTML = '<p>Errore nel caricamento. <a href="javascript:load()">Riprova</a></p>';
+    } finally {
+      busy = false;
+      document.getElementById('loading').style.display = 'none';
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>
