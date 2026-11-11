@@ -5,6 +5,27 @@ import { NewMessage } from 'telegram/events/index.js';
 
 const PRODUCT_URL_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.[a-z.]+|amzn\.to|amzn\.eu|amzlink\.to|aliexpress\.com|s\.click\.aliexpress\.com|a\.aliexpress\.com)[^\s<>"')]+/gi;
 
+// I link "nascosti" (MessageEntityTextUrl, es. "👉 APRI SU AMAZON" con URL dietro) non compaiono
+// in msg.message: senza di loro la divisione in sezioni per URL dei post multi-prodotto fallisce
+// e ogni prodotto riceve il testo intero (→ stesso coupon per tutti). Inseriamo l'URL subito dopo
+// il testo del link, così indexOf(url) trova la posizione reale. Gli offset Telegram sono in
+// unità UTF-16, come gli indici delle stringhe JS. Si procede dall'ultimo per non spostare gli offset.
+function injectEntityUrls(text: string, entities: any[] | undefined): string {
+  if (!entities?.length) return text;
+  const withUrl = entities
+    .filter(e => (e.url ?? e.href) && typeof e.offset === 'number' && typeof e.length === 'number')
+    .sort((a, b) => b.offset - a.offset);
+  let out = text;
+  for (const e of withUrl) {
+    const url: string = e.url ?? e.href;
+    if (text.includes(url)) continue;
+    const end = e.offset + e.length;
+    if (end > out.length) continue;
+    out = out.slice(0, end) + ` (${url})` + out.slice(end);
+  }
+  return out;
+}
+
 function extractCouponFromText(text: string): { couponCode: string; textPrice: number; textOriginalPrice: number; textCountry: string } {
   // Coupon: "Coupon: ZSCADDR6" / "Coupon Sconto: SSIT12" / "✂️ Coupon➡️ H45Z8AJZ" / "codice: X" / "✂ ABCD1234"
   // I codici coupon Amazon reali contengono sempre almeno una cifra (SSIT12, H45Z8AJZ, ZSCADDR6).
@@ -502,13 +523,13 @@ async function startUser(userId: string) {
       const matchingEntities = channelEntities.filter(c => c.core === core);
       if (matchingEntities.length > 0) {
         for (const ce of matchingEntities) {
-          processMessage(userId, uniqueUrls, ce.autoPublish, text, ce.destChannel, ce.forceErrore, ce.platformFilter).catch(e => console.error('[tg-monitor] errore processMessage:', e));
+          processMessage(userId, uniqueUrls, ce.autoPublish, injectEntityUrls(text, entities), ce.destChannel, ce.forceErrore, ce.platformFilter).catch(e => console.error('[tg-monitor] errore processMessage:', e));
         }
       } else {
         // Fallback a coreDestsMap se l'entità non era risolvibile all'avvio
         const fallbackDests = coreDestsMap.get(core) ?? [{ auto_publish: false, dest_channel: null, force_errore: false, platform_filter: 'all' }];
         for (const { auto_publish: ap, dest_channel: dc, force_errore: fe, platform_filter: pf } of fallbackDests) {
-          processMessage(userId, uniqueUrls, ap, text, dc, fe ?? false, pf ?? 'all').catch(e => console.error('[tg-monitor] errore processMessage:', e));
+          processMessage(userId, uniqueUrls, ap, injectEntityUrls(text, entities), dc, fe ?? false, pf ?? 'all').catch(e => console.error('[tg-monitor] errore processMessage:', e));
         }
       }
     } catch (e) {
@@ -545,7 +566,7 @@ async function startUser(userId: string) {
           const uniqueUrls: string[] = [];
           const seen = new Set<string>();
           for (const url of urls) { const clean = url.replace(/[.,;!?)]+$/, ''); if (!seen.has(clean)) { seen.add(clean); uniqueUrls.push(clean); } }
-          processMessage(userId, uniqueUrls, info.autoPublish, text, info.destChannel, info.forceErrore, info.platformFilter).catch(e => console.error('[tg-monitor] errore processMessage (poll):', e));
+          processMessage(userId, uniqueUrls, info.autoPublish, injectEntityUrls(text, (msg as any).entities), info.destChannel, info.forceErrore, info.platformFilter).catch(e => console.error('[tg-monitor] errore processMessage (poll):', e));
         }
       } catch (e: any) {
         console.warn(`[tg-monitor] ${userId} — poll error ${info.core}: ${e.message}`);
@@ -819,7 +840,13 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     // Coupon: per post singolo l'API ha priorità (clip coupon Amazon preciso).
     // Per post multi-prodotto il testo ha priorità: ogni prodotto ha il suo coupon specifico
     // nel canale sorgente, più preciso del coupon generico del brand restituito dall'API.
-    const urlTextCoupon = isMulti ? (textCouponsPerUrl[(product as any)._urlIdx ?? 0] || textCoupon) : textCoupon;
+    // Fallback al coupon globale solo se nessuna sezione ne ha uno proprio (es. coupon unico
+    // in fondo al post valido per tutti). Se le sezioni hanno coupon specifici, un prodotto
+    // senza coupon nella sua sezione resta senza (prima ereditava quello di un altro prodotto).
+    const anySectionCoupon = textCouponsPerUrl.some(Boolean);
+    const urlTextCoupon = isMulti
+      ? (textCouponsPerUrl[(product as any)._urlIdx ?? 0] || (anySectionCoupon ? '' : textCoupon))
+      : textCoupon;
     const finalCoupon   = isMulti ? (urlTextCoupon || product.coupon) : (product.coupon || textCoupon);
     // couponBox può essere true anche senza product.coupon (coupon rilevato ma senza importo numerico)
     const finalBoxcoupon = !isMulti ? (product.couponBox ?? false) : false;
