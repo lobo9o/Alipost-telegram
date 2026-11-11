@@ -54,7 +54,19 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
     .filter(line => !/[\d.,]+\s*[€$]\s*di\s+(?:sconto|risparmio)\b/i.test(line))
     .filter(line => !/\bsconto\s+(?:di|del)\s*[\d.,]+\s*[€$]/i.test(line))
     .filter(line => !/\brisparmia(?:ndo)?\s+[\d.,]+\s*[€$]/i.test(line))
+    // Varianti con "euro" a parole e importi di sconto/buono (es. "20 euro di sconto", "coupon da 20€")
+    .filter(line => !/[\d.,]+\s*(?:€|\$|euro)\s*(?:di\s+)?(?:sconto|risparmio|coupon|buono|in\s+meno)\b/i.test(line))
+    .filter(line => !/\b(?:sconto|coupon|buono|risparmi[ao]?)\s+(?:di|da|del)?\s*[\d.,]+\s*(?:€|\$|euro)/i.test(line))
     .join('\n');
+
+  // Righe che dichiarano esplicitamente il prezzo ("💰 A soli 27,22€ anziché 40,00€", "Prezzo: 9,99€").
+  // Se esistono e contengono prezzi, si usano SOLO quelle: così i commenti con importi
+  // ("spedizione 5€", "risparmi 20€", "con 76€ di sconto") non vengono scambiati per il prezzo.
+  const PRICE_LINE_RE = /\ba\s+sol[io]\b|\bsolo\s+a\b|anzich|invece\s+di|\bprezzo\b|\bora\s+a\b|\bscende\s+a\b|💰|💶|💵|💸|🏷/i;
+  // "prezzo consigliato/di listino/medio…" indica il prezzo di riferimento, non quello finale:
+  // quelle righe non sono prioritarie (restano comunque nel calcolo completo di fallback).
+  const REF_PRICE_RE = /prezzo\s+(?:consigliato|di\s+listino|medio|pieno|precedente|originale|abituale)/i;
+  const priorityText = priceText.split('\n').filter(line => PRICE_LINE_RE.test(line) && !REF_PRICE_RE.test(line)).join('\n');
 
   // Prezzi con € o $ sia dopo (12,99€ / 1.234,56€) sia prima (€12.99 / $1,234.56)
   // Gestisce separatore migliaia europeo (punto): 1.399,00€ → 1399.00
@@ -71,6 +83,7 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
   const PRICE_WHOLE_PRE = /[€$]\s*(\d{1,4})(?![,.\d])/gu;
   const parseEU  = (s: string) => parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
   const parseINT = (s: string) => parseFloat(s.replace(/,/g, '')) || 0;
+  const pricesIn = (priceText: string): number[] => {
   const priceAfter  = [
     ...[...priceText.matchAll(PRICE_EU_RE)].map(m => parseEU(m[1])),
     ...[...priceText.matchAll(PRICE_INT_RE)].map(m => parseINT(m[1])),
@@ -81,7 +94,10 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
     ...[...priceText.matchAll(PRICE_INT_PRE)].map(m => parseINT(m[1])),
     ...[...priceText.matchAll(PRICE_WHOLE_PRE)].map(m => parseInt(m[1], 10)),
   ];
-  const prices = [...priceAfter, ...priceBefore].filter(p => p > 0.5 && p < 100000);
+  return [...priceAfter, ...priceBefore].filter(p => p > 0.5 && p < 100000);
+  };
+  const priorityPrices = priorityText ? pricesIn(priorityText) : [];
+  const prices = priorityPrices.length ? priorityPrices : pricesIn(priceText);
 
   const textPrice = prices.length ? Math.min(...prices) : 0;
   const maxPrice  = prices.length >= 2 ? Math.max(...prices) : 0;
@@ -813,14 +829,20 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   // Per post multi-prodotto: estrai coupon per sezione di testo (una per URL).
   // Il testo del canale sorgente ha coupon specifici per ogni prodotto (es. P20PDAMZ, P15ITJUN)
   // che sono più precisi del coupon generico restituito dall'API (es. PROSCENIC per tutti).
+  // Stessa sezione usata anche per prezzi e "spunta il box coupon" di ogni prodotto.
+  const BOX_COUPON_RE = /spunta|box\s*["“”']?\s*coupon|coupon\s+(?:in|nella|sulla)\s+pagina|attiva\s+(?:il\s+)?coupon|abilita\s+(?:il\s+)?coupon|applica\s+(?:il\s+)?coupon/i;
   const textCouponsPerUrl: string[] = [];
-  if (isMulti) {
+  const sectionsPerUrl: { price: number; orig: number; box: boolean; found: boolean }[] = [];
+  if (isMulti || hadMultipleUrls) {
     let remaining = messageText;
     for (const url of urls) {
       const urlPos = remaining.indexOf(url);
       const sectionEnd = urlPos >= 0 ? urlPos + url.length : remaining.length;
-      const { couponCode } = extractCouponFromText(remaining.slice(0, sectionEnd));
+      const section = remaining.slice(0, sectionEnd);
+      const { couponCode, textPrice: sp, textOriginalPrice: so } = extractCouponFromText(section);
       textCouponsPerUrl.push(couponCode);
+      // found=false se l'URL non è nel testo: la sezione sarebbe il resto del messaggio, inaffidabile
+      sectionsPerUrl.push({ price: sp, orig: so, box: BOX_COUPON_RE.test(section), found: urlPos >= 0 });
       if (urlPos >= 0) remaining = remaining.slice(urlPos + url.length);
     }
     if (textCouponsPerUrl.some(Boolean)) console.log(`[tg-monitor] ${userId} — coupon per URL: ${textCouponsPerUrl.map((c, i) => `url${i}="${c || '-'}"`).join(' ')}`);
@@ -849,7 +871,10 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
       : textCoupon;
     const finalCoupon   = isMulti ? (urlTextCoupon || product.coupon) : (product.coupon || textCoupon);
     // couponBox può essere true anche senza product.coupon (coupon rilevato ma senza importo numerico)
-    const finalBoxcoupon = !isMulti ? (product.couponBox ?? false) : false;
+    const section = (isMulti || hadMultipleUrls) ? sectionsPerUrl[(product as any)._urlIdx ?? 0] : undefined;
+    // Multi: box coupon solo se la sezione del prodotto lo dice ("✂️ Spunta il box coupon") e
+    // non c'è già un codice coupon da mostrare.
+    const finalBoxcoupon = !isMulti ? (product.couponBox ?? false) : (!!section?.found && section.box && !finalCoupon);
 
     // Prezzi: per post singolo il testo ha priorità sull'API (più preciso).
     // Per post multi-prodotto (isMulti O hadMultipleUrls) NON si sovrascrive: il prezzo nel testo
@@ -864,6 +889,18 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     } else if (!isMulti && !hadMultipleUrls && textOriginalPrice > 0 && textOriginalPrice > finalDiscountedPrice) {
       console.log(`[tg-monitor] ${userId} — prezzo precedente da testo: ${textOriginalPrice} (API aveva orig=${finalOriginalPrice})`);
       finalOriginalPrice = textOriginalPrice;
+    } else if (section?.found && section.price > 0) {
+      // Multi: prezzi dalla sezione del prodotto, con controllo di coerenza rispetto all'API
+      // (se la sezione è disallineata, es. link in cima al blocco, i prezzi sarebbero di un altro prodotto).
+      const api = finalDiscountedPrice;
+      const plausible = api <= 0 || (section.price >= api * 0.4 && section.price <= api * 1.25);
+      if (plausible) {
+        console.log(`[tg-monitor] ${userId} — prezzi da sezione url${(product as any)._urlIdx}: scontato=${section.price} precedente=${section.orig || '-'} | API: scontato=${api} precedente=${finalOriginalPrice}`);
+        finalDiscountedPrice = section.price;
+        if (section.orig > section.price) finalOriginalPrice = section.orig;
+      } else {
+        console.log(`[tg-monitor] ${userId} — prezzo sezione url${(product as any)._urlIdx} (${section.price}) incoerente con API (${api}) → uso API`);
+      }
     }
 
     // Sicurezza: se i due prezzi sono uguali (o il precedente è minore), non mostrare "X invece di X"
