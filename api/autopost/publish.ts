@@ -953,6 +953,52 @@ async function fetchOfferingId(domain: string, asin: string): Promise<string | n
   }
 }
 
+// Colonna con la tastiera inviata alla pubblicazione: serve per rimetterla identica quando
+// l'offerta termina (editMessageMedia/editMessageCaption senza reply_markup la cancellano).
+let replyMarkupColReady: Promise<unknown> | null = null;
+export function ensureReplyMarkupCol() {
+  replyMarkupColReady ??= sql`ALTER TABLE published_posts ADD COLUMN IF NOT EXISTS reply_markup JSONB`
+    .catch((e: any) => { replyMarkupColReady = null; console.warn('[autopost] reply_markup col:', e?.message); });
+  return replyMarkupColReady;
+}
+
+// Tastiera da mettere sul post terminato: quella salvata alla pubblicazione; per i post vecchi
+// (pubblicati prima del salvataggio) la ricostruisce dalla tastiera del layout del post.
+// Mai una tastiera inventata: se non c'è nulla da ricostruire, restituisce undefined.
+export async function terminataReplyMarkup(pub: Record<string, any>, userIds: string[]): Promise<object | undefined> {
+  if (pub.replyMarkup && Array.isArray(pub.replyMarkup.inline_keyboard) && pub.replyMarkup.inline_keyboard.length) {
+    return pub.replyMarkup;
+  }
+  const affUrl = String(pub.sourceUrl ?? '');
+  if (!affUrl) return undefined;
+  const ids = userIds.filter(Boolean);
+  const [layout] = pub.layoutId ? await sql`
+    SELECT keyboard_id FROM layouts WHERE id = ${pub.layoutId} AND user_id IN ${sql(ids)}
+  `.catch(() => [null]) : [null];
+  if (!layout?.keyboard_id) return undefined;
+  const [kb] = await sql`
+    SELECT body FROM keyboards WHERE id = ${layout.keyboard_id} AND user_id IN ${sql(ids)}
+  `.catch(() => [null]);
+  if (!kb?.body) return undefined;
+  return buildKeyboard(String(kb.body), pub, affUrl).catch(() => undefined);
+}
+
+// Tastiera originale di un post pubblicato, per qualsiasi modifica del messaggio Telegram
+// (modifica manuale, terminata manuale, aggiornamento prezzo). Multi senza tastiera salvata → undefined.
+export async function keyboardForPublishedId(id: string): Promise<object | undefined> {
+  if (!id) return undefined;
+  await ensureReplyMarkupCol();
+  const [row] = await sql<any[]>`
+    SELECT user_id, layout_id AS "layoutId", source_url AS "sourceUrl", title, platform,
+           product_id AS "productId", COALESCE(is_multi, false) AS "isMulti", reply_markup AS "replyMarkup"
+    FROM published_posts WHERE id = ${id} LIMIT 1
+  `.catch(() => []);
+  if (!row) return undefined;
+  if (row.isMulti && !row.replyMarkup) return undefined;
+  const uid = String(row.user_id);
+  return terminataReplyMarkup(row, [uid, uid.split(':')[0]]);
+}
+
 async function buildKeyboard(
   contenuto: string | undefined,
   post: Record<string, any>,
@@ -2068,12 +2114,14 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         : null;
       const pubEmoji = isMulti ? '🗂️' : (post.emoji ?? '');
       const pubTitle = isMulti ? `Post multiplo (${postsArr.length} prodotti)` : (post.title ?? '');
+      await ensureReplyMarkupCol();
       await sql`
         INSERT INTO published_posts (
           id, user_id, emoji, title, image,
           original_price, discounted_price, discount_percent,
           platform, source_url, product_id, custom_text,
-          layout_id, is_historical_low, is_multi, multi_items, chat_id, message_id, published_at, last_checked_at, dest_channel
+          layout_id, is_historical_low, is_multi, multi_items, chat_id, message_id, published_at, last_checked_at, dest_channel,
+          reply_markup
         ) VALUES (
           ${post.id}, ${userId}, ${pubEmoji}, ${pubTitle}, ${post.image ?? ''},
           ${post.originalPrice ?? 0}, ${post.discountedPrice ?? 0}, ${post.discountPercent ?? 0},
@@ -2081,13 +2129,15 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           ${post.customText ?? ''}, ${post.layoutId ?? ''}, ${post.isHistoricalLow ?? false},
           ${isMulti}, ${multiItemsForDB}, ${chatId}, ${messageId}, now(),
           ${String(post.customText ?? '').toUpperCase().includes('ERRORE') ? null : sql`now()`},
-          ${destCh ?? null}
+          ${destCh ?? null},
+          ${replyMarkup ? sql.json(replyMarkup as any) : null}
         )
         ON CONFLICT (id) DO UPDATE SET
           chat_id = EXCLUDED.chat_id,
           message_id = EXCLUDED.message_id,
           is_multi = EXCLUDED.is_multi,
-          multi_items = EXCLUDED.multi_items
+          multi_items = EXCLUDED.multi_items,
+          reply_markup = COALESCE(EXCLUDED.reply_markup, published_posts.reply_markup)
       `.catch((e: any) => console.error('[autopost] published_posts insert error:', e?.message));
 
       // Mantieni solo gli ultimi 100 post per canale
@@ -2149,8 +2199,10 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           custom_text AS "customText", emoji,
           layout_id AS "layoutId",
           COALESCE(is_multi, false) AS "isMulti",
-          COALESCE(multi_items, '[]'::jsonb) AS "multiItems"
+          COALESCE(multi_items, '[]'::jsonb) AS "multiItems",
+          reply_markup AS "replyMarkup"
       `;
+      await ensureReplyMarkupCol();
       // Query separata per post ERRORE: priorità assoluta, slot dedicati, intervallo breve
       const erroreToCheck = secondaryPattern
         ? await sql`
@@ -2329,7 +2381,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
           const chatIdStr = String(pub.chatId ?? channels[0] ?? '');
           const msgIdNum  = Number(pub.messageId ?? 0);
 
-          console.log(`[autopost] terminata: chatId=${chatIdStr} msgId=${msgIdNum} img=${!!termImg} mode=${telegramMode}`);
+          const termKeyboard = !pub.isMulti ? await terminataReplyMarkup(pub as any, [pubUserId, userId, baseUserId]) : undefined;
+          console.log(`[autopost] terminata: chatId=${chatIdStr} msgId=${msgIdNum} img=${!!termImg} mode=${telegramMode} tastiera=${termKeyboard ? (pub as any).replyMarkup ? 'salvata' : 'ricostruita' : 'nessuna'}`);
           if (chatIdStr && msgIdNum) {
             if (termImg) {
               const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo' };
@@ -2341,10 +2394,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               form.append('chat_id', chatIdStr);
               form.append('message_id', String(msgIdNum));
               form.append('media', JSON.stringify(mediaObj));
-              // Post singoli: mantiene il link acquisto; multi-post: keyboard rimossa (offerta terminata)
-              if (!pub.isMulti && pub.sourceUrl) {
-                form.append('reply_markup', JSON.stringify({ inline_keyboard: [[{ text: '🛒 Vai al prodotto', url: String(pub.sourceUrl) }]] }));
-              }
+              // Post singoli: rimette la tastiera originale del post; multi-post: keyboard rimossa (offerta terminata)
+              if (termKeyboard) form.append('reply_markup', JSON.stringify(termKeyboard));
               form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
               const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
               const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
@@ -2353,13 +2404,13 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               // Nessuna nuova immagine ma cambio testo
               const captR = await fetch(`${tgBase}/editMessageCaption`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatIdStr, message_id: msgIdNum, caption: termCaption.slice(0, 1024), parse_mode: 'HTML' }),
+                body: JSON.stringify({ chat_id: chatIdStr, message_id: msgIdNum, caption: termCaption.slice(0, 1024), parse_mode: 'HTML', ...(termKeyboard ? { reply_markup: termKeyboard } : {}) }),
               }).catch(() => null);
               const captD = captR ? await captR.json().catch(() => ({ ok: false })) as { ok: boolean } : { ok: false };
               if (!captD.ok) {
                 await fetch(`${tgBase}/editMessageText`, {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ chat_id: chatIdStr, message_id: msgIdNum, text: termCaption.slice(0, 4096), parse_mode: 'HTML' }),
+                  body: JSON.stringify({ chat_id: chatIdStr, message_id: msgIdNum, text: termCaption.slice(0, 4096), parse_mode: 'HTML', ...(termKeyboard ? { reply_markup: termKeyboard } : {}) }),
                 }).catch(() => {});
               }
             }

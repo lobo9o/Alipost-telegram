@@ -4,7 +4,7 @@ import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { getProductEmoji } from '../_titleFormat.js';
 import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
-import { generateTemplateImageServer, parseTemplateCfg } from '../autopost/publish.js';
+import { generateTemplateImageServer, parseTemplateCfg, keyboardForPublishedId } from '../autopost/publish.js';
 import { wrapWithPostTap, type PostTapConfig } from '../../lib/postTap.js';
 
 // Wrappa le emoji di testo in <tg-emoji> usando emoji_ids del DB, poi chiama applyCustomEmoji.
@@ -488,6 +488,8 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         `.catch(() => {});
       }
 
+      // Tastiera originale: senza reply_markup Telegram la cancellerebbe con la modifica
+      const editKeyboard = await keyboardForPublishedId(id).catch(() => undefined);
       // Aggiorna Telegram — se c'è newImage usa editMessageMedia (sostituisce foto + didascalia)
       if (newImage && typeof newImage === 'string' && newImage.startsWith('data:')) {
         const base64ep = newImage.replace(/^data:image\/\w+;base64,/, '');
@@ -498,17 +500,18 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         const mediaObjEp: Record<string, string> = { type: 'photo', media: 'attach://photo' };
         if (newCaption) { mediaObjEp.caption = safeCaption(String(newCaption), 1024); mediaObjEp.parse_mode = 'HTML'; }
         formEp.append('media', JSON.stringify(mediaObjEp));
+        if (editKeyboard) formEp.append('reply_markup', JSON.stringify(editKeyboard));
         formEp.append('photo', new Blob([imgBufEp], { type: 'image/jpeg' }), 'photo.jpg');
         const tgRep = await fetch(`${tgBase2}/editMessageMedia`, { method: 'POST', body: formEp });
         const tgDep = await tgRep.json() as { ok: boolean; description?: string };
         if (!tgDep.ok) { res.status(500).json({ error: `Telegram: ${tgDep.description ?? 'errore'}` }); return; }
       } else if (newCaption) {
         // Solo testo
-        const tgBody = { chat_id: chatId, message_id: messageId, caption: safeCaption(String(newCaption), 1024), parse_mode: 'HTML' };
+        const tgBody = { chat_id: chatId, message_id: messageId, caption: safeCaption(String(newCaption), 1024), parse_mode: 'HTML', ...(editKeyboard ? { reply_markup: editKeyboard } : {}) };
         let tgR = await fetch(`${tgBase2}/editMessageCaption`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tgBody) });
         let tgD = await tgR.json() as { ok: boolean; description?: string };
         if (!tgD.ok && tgD.description?.includes('there is no caption')) {
-          tgR = await fetch(`${tgBase2}/editMessageText`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: safeCaption(String(newCaption), 4096), parse_mode: 'HTML' }) });
+          tgR = await fetch(`${tgBase2}/editMessageText`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: safeCaption(String(newCaption), 4096), parse_mode: 'HTML', ...(editKeyboard ? { reply_markup: editKeyboard } : {}) }) });
           tgD = await tgR.json() as { ok: boolean; description?: string };
         }
         if (!tgD.ok) { res.status(500).json({ error: `Telegram: ${tgD.description ?? 'errore'}` }); return; }
@@ -625,6 +628,9 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
     let tgRes: Response;
     let tgData: { ok: boolean; description?: string };
+    // Tastiera originale del post (Telegram la cancella se l'edit non la rimanda).
+    // Multi terminato per intero: nessuna tastiera, come nel path automatico.
+    const termKb = (terminata && multiItemAll) ? undefined : await keyboardForPublishedId(id).catch(() => undefined);
 
     if (effectiveNewImage) {
       const base64 = effectiveNewImage.replace(/^data:image\/\w+;base64,/, '');
@@ -638,19 +644,20 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
         mediaObj.parse_mode = 'HTML';
       }
       form.append('media', JSON.stringify(mediaObj));
+      if (termKb) form.append('reply_markup', JSON.stringify(termKb));
       form.append('photo', new Blob([imgBuffer], { type: 'image/jpeg' }), 'photo');
       tgRes = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form });
       tgData = await tgRes.json() as { ok: boolean; description?: string };
     } else if (caption !== undefined) {
       tgRes = await fetch(`${tgBase}/editMessageCaption`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption: safeCaption(caption, 1024), parse_mode: 'HTML' }),
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption: safeCaption(caption, 1024), parse_mode: 'HTML', ...(termKb ? { reply_markup: termKb } : {}) }),
       });
       tgData = await tgRes.json() as { ok: boolean; description?: string };
       if (!tgData.ok && tgData.description?.includes('there is no caption')) {
         tgRes = await fetch(`${tgBase}/editMessageText`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: safeCaption(caption, 4096), parse_mode: 'HTML' }),
+          body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: safeCaption(caption, 4096), parse_mode: 'HTML', ...(termKb ? { reply_markup: termKb } : {}) }),
         });
         tgData = await tgRes.json() as { ok: boolean; description?: string };
       }

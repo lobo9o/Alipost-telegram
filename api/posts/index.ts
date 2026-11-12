@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import { buildMessage } from '../_buildMessage.js';
+import { keyboardForPublishedId } from '../autopost/publish.js';
 
 // ── Ensure published_posts table exists (idempotent) ─────────────────────────
 async function ensurePublishedTable() {
@@ -240,15 +241,16 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
               affiliateUrl,
             );
 
+            const priceKb = await keyboardForPublishedId(String(post.id)).catch(() => undefined);
             let tgRes = await fetch(`${tgBase}/editMessageCaption`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chat_id: post.chat_id, message_id: post.message_id, caption: caption.slice(0, 1024), parse_mode: 'HTML' }),
+              body: JSON.stringify({ chat_id: post.chat_id, message_id: post.message_id, caption: caption.slice(0, 1024), parse_mode: 'HTML', ...(priceKb ? { reply_markup: priceKb } : {}) }),
             });
             let tgData = await tgRes.json() as { ok: boolean; description?: string };
             if (!tgData.ok && tgData.description?.includes('there is no caption')) {
               tgRes = await fetch(`${tgBase}/editMessageText`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: post.chat_id, message_id: post.message_id, text: caption.slice(0, 4096), parse_mode: 'HTML' }),
+                body: JSON.stringify({ chat_id: post.chat_id, message_id: post.message_id, text: caption.slice(0, 4096), parse_mode: 'HTML', ...(priceKb ? { reply_markup: priceKb } : {}) }),
               });
               tgData = await tgRes.json() as { ok: boolean; description?: string };
             }

@@ -2,7 +2,7 @@ import sql from '../../lib/db.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
 import { buildMessage } from '../_buildMessage.js';
 import { checkPostPrice } from '../_priceCheck.js';
-import { generateTemplateImageServer, parseTemplateCfg } from './publish.js';
+import { generateTemplateImageServer, parseTemplateCfg, ensureReplyMarkupCol, terminataReplyMarkup } from './publish.js';
 import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
 
 // In-memory: timestamp dell'ultimo check per ogni post (reset al riavvio)
@@ -192,6 +192,8 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
   }
   // 'keep' → caption undefined, non modifica il testo Telegram
 
+  // Tastiera originale del post (mai una tastiera generica al suo posto)
+  const termKeyboard = (chatId && msgId) ? await terminataReplyMarkup(post, [post.user_id, baseUserId]) : undefined;
   if (chatId && msgId) {
     if (termImg) {
       const mediaObj: Record<string, any> = { type: 'photo', media: 'attach://photo' };
@@ -203,15 +205,13 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
       form.append('chat_id', chatId);
       form.append('message_id', String(msgId));
       form.append('media', JSON.stringify(mediaObj));
-      if (post.sourceUrl) {
-        form.append('reply_markup', JSON.stringify({ inline_keyboard: [[{ text: '🛒 Vai al prodotto', url: String(post.sourceUrl) }]] }));
-      }
+      if (termKeyboard) form.append('reply_markup', JSON.stringify(termKeyboard));
       form.append('photo', new Blob([termImg], { type: 'image/jpeg' }), 'photo');
       const tgR = await fetch(`${tgBase}/editMessageMedia`, { method: 'POST', body: form }).catch(() => null);
       const tgD = tgR ? await tgR.json().catch(() => ({ ok: false })) as any : { ok: false };
       console.log(`[price-watch] Telegram editMessageMedia: ok=${tgD.ok}${tgD.ok ? '' : ' err=' + tgD.description}`);
     } else if (caption !== undefined) {
-      const tgBody = { chat_id: chatId, message_id: msgId, caption: caption.slice(0, 1024), parse_mode: 'HTML' };
+      const tgBody = { chat_id: chatId, message_id: msgId, caption: caption.slice(0, 1024), parse_mode: 'HTML', ...(termKeyboard ? { reply_markup: termKeyboard } : {}) };
       const tgR = await fetch(`${tgBase}/editMessageCaption`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,7 +222,7 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
         await fetch(`${tgBase}/editMessageText`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, message_id: msgId, text: terminataText.slice(0, 4096), parse_mode: 'HTML' }),
+          body: JSON.stringify({ chat_id: chatId, message_id: msgId, text: terminataText.slice(0, 4096), parse_mode: 'HTML', ...(termKeyboard ? { reply_markup: termKeyboard } : {}) }),
         }).catch(() => {});
       }
     }
@@ -254,6 +254,7 @@ async function terminatePost(post: any, currentPrice: number, cfg: Record<string
 
 export async function runPriceWatchCheck() {
   const now = Date.now();
+  await ensureReplyMarkupCol();
 
   const posts = await sql<any[]>`
     SELECT id, user_id, product_id AS "productId", platform,
@@ -265,7 +266,8 @@ export async function runPriceWatchCheck() {
            is_historical_low AS "isHistoricalLow",
            emoji,
            image, chat_id AS "chatId", message_id AS "messageId",
-           layout_id AS "layoutId"
+           layout_id AS "layoutId",
+           reply_markup AS "replyMarkup"
     FROM published_posts
     WHERE NOT COALESCE(terminata, false)
       AND COALESCE(is_multi, false) = false
