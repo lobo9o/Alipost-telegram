@@ -118,6 +118,10 @@ function extractCouponFromText(text: string): { couponCode: string; textPrice: n
 const activeClients = new Map<string, TelegramClient>();
 const activePolls = new Map<string, ReturnType<typeof setTimeout>>();
 const activeWatchdogs = new Map<string, ReturnType<typeof setInterval>>();
+// Numero di avvio per utente: un startUser superato da uno più recente (es. reload arrivato
+// mentre era ancora in connessione) si ritira e chiude il proprio client, invece di
+// lasciare due client attivi per lo stesso account.
+const startGeneration = new Map<string, number>();
 
 // Fascia attiva: 06:00-01:00 ora italiana. Fuori da essa il poll rallenta.
 function isActiveHours(): boolean {
@@ -292,6 +296,8 @@ async function startAll() {
 }
 
 async function stopUser(userId: string) {
+  // Qualsiasi avvio ancora in corso per questo utente è da considerare superato
+  startGeneration.set(userId, (startGeneration.get(userId) ?? 0) + 1);
   // Rimuovi subito da maps (sincrono) prima di qualsiasi async,
   // così startUser non trova valori stale se parte in parallelo
   const poll = activePolls.get(userId);
@@ -319,6 +325,9 @@ async function startUser(userId: string) {
     SELECT session_string FROM tg_sessions WHERE user_id = ${userId} AND status = 'active'
   `;
   if (!session) return;
+  const myGeneration = (startGeneration.get(userId) ?? 0) + 1;
+  startGeneration.set(userId, myGeneration);
+  const superseded = () => startGeneration.get(userId) !== myGeneration;
 
   const channelRows = await sql<{ channel: string; auto_publish: boolean; dest_channel: string | null; force_errore: boolean; platform_filter: string }[]>`
     SELECT mc.channel, COALESCE(mc.auto_publish, false) AS auto_publish,
@@ -360,6 +369,11 @@ async function startUser(userId: string) {
   // Carica i dialoghi per inizializzare il pts di ogni canale — senza questo
   // GramJS non riceve aggiornamenti dai canali non ancora "visti" dalla sessione
   await client.getDialogs({ limit: 100 }).catch(() => {});
+  if (superseded()) {
+    console.log(`[tg-monitor] ${userId} — avvio superato da uno più recente, chiudo questo client`);
+    try { await client.destroy(); } catch { /* ignora */ }
+    return;
+  }
   activeClients.set(userId, client);
 
   // Normalizza un ID canale Telegram nelle sue forme canoniche
@@ -440,6 +454,13 @@ async function startUser(userId: string) {
 
   if (!monitoredIds.size) {
     console.warn(`[tg-monitor] ${userId} — nessun canale risolvibile, monitoring non avviato`);
+    return;
+  }
+
+  if (superseded()) {
+    console.log(`[tg-monitor] ${userId} — avvio superato durante la risoluzione dei canali, chiudo questo client`);
+    if (activeClients.get(userId) === client) activeClients.delete(userId);
+    try { await client.destroy(); } catch { /* ignora */ }
     return;
   }
 
