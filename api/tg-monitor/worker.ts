@@ -301,7 +301,16 @@ async function stopUser(userId: string) {
   const existing = activeClients.get(userId);
   if (existing) {
     activeClients.delete(userId);
-    try { await existing.disconnect(); } catch { /* ignora */ }
+    // destroy() e non disconnect(): in GramJS 2.26 disconnect() lascia attivo il ciclo
+    // interno degli aggiornamenti (_updateLoop gira finché _destroyed è false), che prova
+    // un ping ogni ~39 s per sempre e tiene in memoria l'intero client. Con le
+    // riconnessioni proattive ogni 45 min si accumulavano ~75 client al giorno fino
+    // all'esaurimento della memoria. destroy() ferma il ciclo, chiude i mittenti e
+    // rimuove i gestori; non fa logout, quindi la sessione salvata resta valida.
+    try {
+      if (typeof (existing as any).destroy === 'function') await existing.destroy();
+      else await existing.disconnect();
+    } catch { /* ignora */ }
   }
 }
 
