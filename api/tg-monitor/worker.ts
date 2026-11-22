@@ -316,7 +316,10 @@ async function stopUser(userId: string) {
     try {
       if (typeof (existing as any).destroy === 'function') await existing.destroy();
       else await existing.disconnect();
-    } catch { /* ignora */ }
+    } catch (e: any) {
+      console.warn(`[tg-monitor] ${userId} — chiusura client fallita (${e?.message ?? e}), provo disconnect()`);
+      try { await existing.disconnect(); } catch { /* ignora */ }
+    }
   }
 }
 
@@ -467,6 +470,9 @@ async function startUser(userId: string) {
   // Ascolta TUTTI i messaggi, filtra manualmente per ID canale
   client.addEventHandler(async (event: any) => {
     try {
+      // Solo il client attivo dell'account elabora: un client sostituito (anche se la sua
+      // chiusura fosse fallita) resta inerte e non può creare elaborazioni doppie.
+      if (activeClients.get(userId) !== client) return;
       const msg = event.message;
       if (!msg) return;
 
@@ -585,7 +591,7 @@ async function startUser(userId: string) {
 
   // Polling di fallback: intervallo dinamico (30s fascia attiva 06:00-01:00, 5min di notte).
   const runPoll = async () => {
-    if (!activeClients.has(userId)) return;
+    if (activeClients.get(userId) !== client) return; // client sostituito: il suo polling si ferma
     for (const info of channelEntities) {
       try {
         const msgs = await client.getMessages(info.entity, { limit: 50, minId: info.lastMsgId }) as any[];
@@ -633,7 +639,7 @@ async function startUser(userId: string) {
         `.catch(() => {});
       }
     }
-    if (activeClients.has(userId)) {
+    if (activeClients.get(userId) === client) {
       activePolls.set(userId, setTimeout(runPoll, isActiveHours() ? 30_000 : 5 * 60_000));
     }
   };
@@ -644,7 +650,7 @@ async function startUser(userId: string) {
   // Il reconnect proattivo copre lo zombie MTProto (TCP ok ma Telegram smette di inviare update).
   let lastProactiveReconnect = Date.now();
   const watchdogId = setInterval(async () => {
-    if (!activeClients.has(userId)) { clearInterval(watchdogId); return; }
+    if (activeClients.get(userId) !== client) { clearInterval(watchdogId); return; } // client sostituito: watchdog spento
     try {
       await client.invoke(new Api.Ping({ pingId: BigInt(Date.now()) }));
     } catch (e: any) {
