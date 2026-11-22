@@ -52,7 +52,7 @@ export default withErrorHandler(async (req, res) => {
         );
         await client.connect();
         await client.invoke(new Api.auth.LogOut());
-        await client.disconnect();
+        await client.destroy(); // non disconnect(): in GramJS 2.26 lascerebbe attivo il ciclo aggiornamenti
       } catch { /* ignora errori di logout */ }
     }
     await sql`DELETE FROM tg_sessions WHERE user_id = ${baseUserId}`;
@@ -123,7 +123,7 @@ export default withErrorHandler(async (req, res) => {
       ON CONFLICT (user_id) DO UPDATE SET phone = EXCLUDED.phone, session_string = EXCLUDED.session_string, status = 'active'
     `;
 
-    await client.disconnect();
+    await client.destroy(); // non disconnect(): in GramJS 2.26 lascerebbe attivo il ciclo aggiornamenti
 
     const { reloadUser } = await import('./worker.js');
     reloadUser(baseUserId);
@@ -155,7 +155,7 @@ export default withErrorHandler(async (req, res) => {
       ON CONFLICT (user_id) DO UPDATE SET phone = EXCLUDED.phone, session_string = EXCLUDED.session_string, status = 'active'
     `;
 
-    await client.disconnect();
+    await client.destroy(); // non disconnect(): in GramJS 2.26 lascerebbe attivo il ciclo aggiornamenti
 
     const { reloadUser } = await import('./worker.js');
     reloadUser(baseUserId);
