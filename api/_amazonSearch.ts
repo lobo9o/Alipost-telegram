@@ -1,4 +1,5 @@
 // Logica di ricerca Amazon condivisa tra amazon-deals e deals-cache
+import { upstreamDetail, redactSecrets } from '../lib/redact.js';
 
 export const TOKEN_ENDPOINTS: Record<string, string> = {
   '2.1': 'https://creatorsapi.auth.us-east-1.amazoncognito.com/oauth2/token',
@@ -137,7 +138,7 @@ export async function getToken(credentialId: string, credentialSecret: string, v
   }
 
   const text = await res.text();
-  if (!res.ok) throw new Error(`Token Amazon (${res.status}): ${text.slice(0, 200)}`);
+  if (!res.ok) throw new Error(`Token Amazon (${res.status})${upstreamDetail(text)}`);
   return (JSON.parse(text) as { access_token: string }).access_token;
 }
 
@@ -165,9 +166,9 @@ export async function searchOne(
   });
   const text = await apiRes.text();
   const label = `${body.searchIndex ?? 'noIdx'} p${body.itemPage}`;
-  console.log('[amazon-search]', label, apiRes.status, text.slice(0, 100));
+  console.log('[amazon-search]', label, apiRes.status, apiRes.ok ? redactSecrets(text.slice(0, 100)) : upstreamDetail(text));
 
-  if (!apiRes.ok) throw new Error(`Amazon API ${apiRes.status}: ${text.slice(0, 200)}`);
+  if (!apiRes.ok) throw new Error(`Amazon API ${apiRes.status}${upstreamDetail(text)}`);
   const data = JSON.parse(text) as any;
   const sr    = pick(data, 'searchResult', 'SearchResult') as any;
   const items = (pick(sr, 'items', 'Items') as any[]) ?? [];

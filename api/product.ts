@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withErrorHandler, allowMethods, requireUserId } from './_utils.js';
 import sql from '../lib/db.js';
+import { upstreamDetail, redactSecrets } from '../lib/redact.js';
 import crypto from 'crypto';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -62,7 +63,7 @@ async function getToken(credentialId: string, credentialSecret: string, version:
 
   const tokenText = await res.text();
   // Mai registrare la risposta: con status 200 contiene il token di accesso
-  if (!res.ok) throw new Error(`Errore token Amazon (${res.status}): ${tokenText}`);
+  if (!res.ok) throw new Error(`Errore token Amazon (${res.status})${upstreamDetail(tokenText)}`);
   const data = JSON.parse(tokenText) as { access_token: string };
   return data.access_token;
 }
@@ -107,7 +108,7 @@ async function creatorsGetItem(
     const responseText = await res.text();
 
     console.log('[product] SUMMARY', JSON.stringify({
-      asin, attempt, status: res.status, resp: responseText.slice(0, 200),
+      asin, attempt, status: res.status, resp: res.ok ? redactSecrets(responseText.slice(0, 200)) : upstreamDetail(responseText),
     }));
 
     if (res.status === 429 && attempt < delays.length) {
@@ -117,7 +118,7 @@ async function creatorsGetItem(
       continue;
     }
 
-    if (!res.ok) throw new Error(`Creators API (${res.status}): ${responseText}`);
+    if (!res.ok) throw new Error(`Creators API (${res.status})${upstreamDetail(responseText)}`);
     return JSON.parse(responseText);
   }
 }
@@ -606,8 +607,8 @@ async function aliCall(method: string, appKey: string, appSecret: string, extra:
     body,
   });
   const text = await res.text();
-  console.log(`[ali] ${method} attempt=${attempt} ${res.status}:`, text.slice(0, 300));
-  if (!res.ok) throw new Error(`AliExpress API HTTP ${res.status}: ${text.slice(0, 200)}`);
+  console.log(`[ali] ${method} attempt=${attempt} ${res.status}:`, res.ok ? redactSecrets(text.slice(0, 300)) : upstreamDetail(text));
+  if (!res.ok) throw new Error(`AliExpress API HTTP ${res.status}${upstreamDetail(text)}`);
   const json = JSON.parse(text);
   if (json.error_response) {
     const e = json.error_response;
@@ -636,7 +637,7 @@ async function aliGetProductDetail(productId: string, appKey: string, appSecret:
 
   const resp = data?.aliexpress_affiliate_productdetail_get_response?.resp_result;
   if (!resp || resp.resp_code !== 200) {
-    throw new Error(`AliExpress prodotto [${resp?.resp_code ?? '?'}]: ${resp?.resp_msg ?? JSON.stringify(data).slice(0, 200)}`);
+    throw new Error(`AliExpress prodotto [${resp?.resp_code ?? '?'}]${upstreamDetail(resp?.resp_msg ? JSON.stringify({ resp_msg: resp.resp_msg }) : JSON.stringify(data))}`);
   }
   const product = resp?.result?.products?.product?.[0];
   if (!product) throw new Error('Prodotto non trovato su AliExpress (ID: ' + productId + ')');
@@ -690,7 +691,7 @@ async function aliGetAffiliateLink(productUrl: string, appKey: string, appSecret
 
   const resp = data?.aliexpress_affiliate_link_generate_response?.resp_result;
   if (!resp || resp.resp_code !== 200) {
-    throw new Error(`AliExpress link [${resp?.resp_code ?? '?'}]: ${resp?.resp_msg ?? JSON.stringify(data).slice(0, 200)}`);
+    throw new Error(`AliExpress link [${resp?.resp_code ?? '?'}]${upstreamDetail(resp?.resp_msg ? JSON.stringify({ resp_msg: resp.resp_msg }) : JSON.stringify(data))}`);
   }
   const link = resp?.result?.promotion_links?.promotion_link?.[0]?.promotion_link;
   if (!link) throw new Error('Link affiliato non restituito dall\'API (verifica Tracking ID)');

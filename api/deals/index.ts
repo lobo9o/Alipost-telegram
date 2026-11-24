@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
 import sql from '../../lib/db.js';
+import { redactSecrets, upstreamDetail } from '../../lib/redact.js';
 import crypto from 'crypto';
 
 const ALI_COUNTRY_MAP: Record<string, { currency: string; language: string }> = {
@@ -82,7 +83,7 @@ async function queryAli(
     body: new URLSearchParams(params).toString(),
   });
   const text = await apiRes.text();
-  console.log(`[deals] "${keyword.slice(0, 30)}" → ${apiRes.status} ${text.slice(0, 150)}`);
+  console.log(`[deals] "${keyword.slice(0, 30)}" → ${apiRes.status} ${apiRes.ok ? redactSecrets(text.slice(0, 150)) : upstreamDetail(text)}`);
 
   if (!apiRes.ok) return { products: [], total: 0 };
   const json = JSON.parse(text) as any;

@@ -111,3 +111,15 @@ test('connessione reale: Tunnel simulato su socket locale', async () => {
     assert.equal(inner.code, 200); assert.equal(JSON.parse(inner.body).id, '777');
   } finally { srv.close(); }
 });
+
+const { upstreamDetail, redactSecrets } = await import('../lib/redact.js');
+test('errori dei servizi esterni: solo codice e messaggio, segreti oscurati', () => {
+  assert.equal(upstreamDetail('{"error":"invalid_client","error_description":"Client authentication failed"}'), ': invalid_client · Client authentication failed');
+  const finto = 'Atc|' + 'Q'.repeat(60);
+  for (const body of [`{"access_token":"${finto}","error":"x"}`, `access_token=${finto}`, `Bearer ${finto}`, `{"message":"client_secret=abc123 rifiutato"}`, `<html>${'Z'.repeat(80)}</html>`]) {
+    const d = upstreamDetail(body) + redactSecrets(body);
+    assert.ok(!d.includes('QQQQQQQQ') && !d.includes('abc123') && !d.includes('ZZZZZZZZ'), d);
+  }
+  assert.ok(upstreamDetail('x'.repeat(5000)).length <= 162);
+  assert.equal(upstreamDetail(''), '');
+});

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
+import { redactSecrets } from '../../lib/redact.js';
 import { withErrorHandler, isAuthorizedJob } from '../_utils.js';
 import { checkPostPrice } from '../_priceCheck.js';
 import { getProductEmoji } from '../_titleFormat.js';
@@ -46,7 +47,7 @@ async function aliGenerateLink(productUrl: string, appKey: string, appSecret: st
     const json = await res.json() as any;
     const link = json?.aliexpress_affiliate_link_generate_response?.resp_result?.result?.promotion_links?.promotion_link?.[0]?.promotion_link;
     if (link) console.log('[autopost] aliGenerateLink ok:', link.slice(0, 60));
-    else console.warn('[autopost] aliGenerateLink: nessun link restituito per', productUrl.slice(0, 60), '| resp:', JSON.stringify(json).slice(0, 200));
+    else console.warn('[autopost] aliGenerateLink: nessun link restituito per', productUrl.slice(0, 60), '| resp:', redactSecrets(JSON.stringify(json).slice(0, 200)));
     return link || null;
   } catch (e: any) {
     console.warn('[autopost] aliGenerateLink error:', e.message);
