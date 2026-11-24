@@ -10,6 +10,17 @@ function getTgInitData(): string {
 let _activeProfileId: string | null = null;
 export function setApiProfileId(id: string | null) { _activeProfileId = id; }
 
+/** Header di autenticazione Telegram per le chiamate fatte fuori da req() */
+export function authHeaders(profileId?: string | null, json = false): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (json) headers['Content-Type'] = 'application/json';
+  const initData = getTgInitData();
+  if (initData) headers['x-tg-init-data'] = initData;
+  const profile = profileId ?? _activeProfileId;
+  if (profile) headers['x-profile-id'] = profile;
+  return headers;
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';

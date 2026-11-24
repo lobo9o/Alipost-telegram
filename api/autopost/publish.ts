@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
-import { withErrorHandler } from '../_utils.js';
+import { withErrorHandler, isAuthorizedJob } from '../_utils.js';
 import { checkPostPrice } from '../_priceCheck.js';
 import { getProductEmoji } from '../_titleFormat.js';
 import { applyCustomEmoji } from '../../lib/applyCustomEmoji.js';
@@ -1116,12 +1116,8 @@ export function parseTemplateCfg(row: any): Record<string, any> | null {
 }
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {
-  // Vercel invia CRON_SECRET come Bearer token nell'header Authorization.
-  // Richieste da localhost (worker interno) sono sempre autorizzate.
-  const cronSecret = process.env.CRON_SECRET;
-  const remoteIp: string = (req as any).ip ?? (req.socket as any)?.remoteAddress ?? '';
-  const isLocalhost = remoteIp === '127.0.0.1' || remoteIp === '::1' || remoteIp === '::ffff:127.0.0.1';
-  if (cronSecret && !isLocalhost && req.headers['authorization'] !== `Bearer ${cronSecret}`) {
+  // Solo i processi interni del server o una chiamata con CRON_SECRET
+  if (!isAuthorizedJob(req)) {
     res.status(401).json({ error: 'unauthorized' }); return;
   }
 

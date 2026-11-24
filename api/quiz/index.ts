@@ -1,4 +1,5 @@
 import sql from '../../lib/db.js';
+import { requireUserId } from '../_utils.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TG_BASE   = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -53,8 +54,8 @@ function buildPrizeMessage(prizeCode: string, prizeLink?: string | null): string
 }
 
 export default async function handler(req: any, res: any) {
-  const userId = String(req.headers['x-internal-user-id'] || req.query.userId || '');
-  if (!userId) return res.status(401).json({ error: 'Non autorizzato' });
+  const userId = requireUserId(req, res);
+  if (!userId) return;
 
   await initTable();
 

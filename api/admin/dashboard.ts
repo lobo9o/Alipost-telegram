@@ -1,7 +1,7 @@
+import { safeEqual } from '../_utils.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'postdealadmin';
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
 const channelNameCache = new Map<string, { name: string; username?: string }>();
@@ -560,7 +560,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = (req.body ?? {}) as Record<string, any>;
     const { password, action } = body;
 
-    if (password !== ADMIN_PASSWORD) {
+    // Nessuna password di riserva nel codice: senza configurazione l'area admin resta chiusa
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!adminPassword) {
+      res.status(503).json({ error: 'ADMIN_PASSWORD non configurata sul server' });
+      return;
+    }
+    if (typeof password !== 'string' || !safeEqual(password, adminPassword)) {
       res.status(401).json({ error: 'Password errata' });
       return;
     }

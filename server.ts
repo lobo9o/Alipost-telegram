@@ -101,7 +101,7 @@ async function main() {
   app.use((_req: any, res: any, next: any) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-tg-init-data, Authorization, x-internal-user-id, x-profile-id');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-tg-init-data, Authorization, x-profile-id');
     next();
   });
   app.options('*', (_req: any, res: any) => { res.status(204).end(); });

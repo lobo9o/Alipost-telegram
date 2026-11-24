@@ -1,4 +1,5 @@
 import sql from '../../lib/db.js';
+import { isAuthorizedJob, requireUserId } from '../_utils.js';
 
 // Tiene traccia dei riepiloghi già pubblicati oggi per evitare doppioni (in-memory, reset al restart)
 const sentToday = new Map<string, string>(); // key: "userId:channel" → value: "YYYY-MM-DD"
@@ -126,7 +127,11 @@ async function publishRecap(userId: string, title: string, serverPort: number) {
 
 export default async function handler(req: any, res: any) {
   // Endpoint per trigger manuale (POST con userId opzionale nel body)
-  const userId = req.body?.userId ?? req.query?.userId;
+  const job = isAuthorizedJob(req);
+  if (!job && req.method !== 'POST') return res.status(401).json({ error: 'unauthorized' });
+  // Dall'esterno si può agire solo sul proprio account, mai su un userId scelto da chi chiama
+  const userId = job ? (req.body?.userId ?? req.query?.userId) : requireUserId(req, res);
+  if (!job && !userId) return;
   const serverPort = parseInt(process.env.PORT || '3000', 10);
 
   if (req.method === 'POST' && userId) {

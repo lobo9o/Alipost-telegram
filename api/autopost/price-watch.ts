@@ -1,4 +1,5 @@
 import sql from '../../lib/db.js';
+import { isAuthorizedJob } from '../_utils.js';
 import { generateTerminataImageServer } from '../_imageServer.js';
 import { buildMessage } from '../_buildMessage.js';
 import { checkPostPrice } from '../_priceCheck.js';
@@ -350,6 +351,7 @@ export async function runPriceWatchCheck() {
 }
 
 export default async function handler(req: any, res: any) {
+  if (!isAuthorizedJob(req)) return res.status(401).json({ error: 'unauthorized' });
   await runPriceWatchCheck();
   res.json({ ok: true });
 }

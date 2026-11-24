@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import sql from '../../lib/db.js';
-import { withErrorHandler, allowMethods, requireUserId } from '../_utils.js';
+import { withErrorHandler, allowMethods, requireUserId, isAuthorizedJob } from '../_utils.js';
 import { buildMessage } from '../_buildMessage.js';
 import { keyboardForPublishedId } from '../autopost/publish.js';
 
@@ -140,8 +140,7 @@ export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) 
 
   // ── Price-check cron (triggered by Vercel Cron with CRON_SECRET) ──────────
   if (req.method === 'GET' && req.query.action === 'price-check') {
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && req.headers['authorization'] !== `Bearer ${cronSecret}`) {
+    if (!isAuthorizedJob(req)) {
       res.status(401).json({ error: 'unauthorized' }); return;
     }
     await ensurePublishedTable();

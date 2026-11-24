@@ -195,6 +195,35 @@ async function runMigration() {
   console.log('[DB] migrazione completata');
 }
 
+/** Confronto a tempo costante: non rivela quanti caratteri coincidono */
+export function safeEqual(a: string, b: string): boolean {
+  const h = (s: string) => crypto.createHash('sha256').update(String(s)).digest();
+  return crypto.timingSafeEqual(h(a), h(b));
+}
+
+const PROXY_HEADERS = ['cf-connecting-ip', 'cf-ray', 'x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'forwarded'];
+
+/**
+ * Vero solo per le chiamate fatte dal server a sé stesso.
+ * Dietro Cloudflare Tunnel ogni visitatore arriva dal socket locale: l'IP non basta.
+ * Il proxy aggiunge sempre i suoi header e conserva l'Host pubblico, e dall'esterno non si possono togliere.
+ */
+export function isInternalRequest(req: VercelRequest): boolean {
+  const ip: string = (req as any).ip ?? (req.socket as any)?.remoteAddress ?? '';
+  if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') return false;
+  if (PROXY_HEADERS.some(h => req.headers[h] !== undefined)) return false;
+  const host = String(req.headers.host ?? '').replace(/:\d+$/, '');
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+}
+
+/** Processo interno oppure chiamata con CRON_SECRET valido */
+export function isAuthorizedJob(req: VercelRequest): boolean {
+  if (isInternalRequest(req)) return true;
+  const secret = process.env.CRON_SECRET;
+  const auth = (req.headers['authorization'] as string | undefined) ?? '';
+  return !!secret && safeEqual(auth, `Bearer ${secret}`);
+}
+
 export function getUserId(req: VercelRequest): string | null {
   const initData = req.headers['x-tg-init-data'] as string | undefined;
   if (!initData) return null;
@@ -212,8 +241,8 @@ export function getUserId(req: VercelRequest): string | null {
     return null;
   }
 
-  // Se il bot token non è configurato, accettiamo senza verifica (fase di setup)
-  if (!botToken) return userId;
+  // Senza bot token l'identità non è verificabile: si accetta solo con un consenso esplicito (sviluppo locale)
+  if (!botToken) return process.env.ALLOW_UNVERIFIED_TELEGRAM === '1' ? userId : null;
 
   const hash = params.get('hash');
   if (!hash) return null;
@@ -227,7 +256,13 @@ export function getUserId(req: VercelRequest): string | null {
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
   const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
-  if (computedHash !== hash) return null;
+  if (!safeEqual(computedHash, hash)) return null;
+
+  // initData firmati ma vecchi non valgono: limita il riuso se vengono intercettati
+  const authDate = Number(params.get('auth_date'));
+  const maxAge = Number(process.env.TG_INIT_MAX_AGE_SEC) || 86400;
+  if (!authDate || Math.abs(Date.now() / 1000 - authDate) > maxAge) return null;
+
   const suffix = process.env.USER_SUFFIX || '';
   const baseId = userId + suffix;
 
@@ -242,14 +277,8 @@ export function getUserId(req: VercelRequest): string | null {
 export function requireUserId(req: VercelRequest, res: VercelResponse): string | null {
   const internalUserId = req.headers['x-internal-user-id'] as string | undefined;
   if (internalUserId) {
-    // Fidarsi se la richiesta viene da localhost (worker interno)
-    const remoteIp: string = (req as any).ip ?? (req.socket as any)?.remoteAddress ?? '';
-    const isLocalhost = remoteIp === '127.0.0.1' || remoteIp === '::1' || remoteIp === '::ffff:127.0.0.1';
-    // Oppure se ha un CRON_SECRET valido
-    const cronSecret = process.env.CRON_SECRET;
-    const authHeader = (req.headers['authorization'] as string | undefined) ?? '';
-    const validSecret = cronSecret && authHeader === `Bearer ${cronSecret}`;
-    if (isLocalhost || validSecret) return internalUserId;
+    // Solo i processi interni del server o chi ha il CRON_SECRET possono agire per conto di un utente
+    if (isAuthorizedJob(req)) return internalUserId;
   }
 
   const userId = getUserId(req);

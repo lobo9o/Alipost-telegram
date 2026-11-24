@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { NavPage } from '../types';
 import { useApp } from '../context/AppContext';
 import { PageHeader } from '../components/Shared';
+import { authHeaders } from '../lib/api';
 
 interface QuizAnswer { text: string; correct: boolean; }
 
@@ -50,7 +51,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/quiz', { headers: { 'x-internal-user-id': activeProfileId } });
+      const r = await fetch('/api/quiz', { headers: authHeaders(activeProfileId) });
       const data = await r.json();
       setQuizzes(Array.isArray(data) ? data : []);
     } catch { setQuizzes([]); }
@@ -111,7 +112,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
     try {
       const r = await fetch('/api/quiz', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-internal-user-id': activeProfileId },
+        headers: authHeaders(activeProfileId, true),
         body: JSON.stringify({ headerText: headerText.trim(), question: question.trim(), answers, prizeCode: prizeCode.trim(), prizeLink: prizeLink.trim() || undefined, channelId: channel, image: image || undefined }),
       });
       const data = await r.json();
@@ -126,7 +127,7 @@ export function QuizPage({ nav }: { nav: (p: NavPage) => void }) {
   const handleDelete = async (id: string, active: boolean) => {
     const msg = active ? 'Annullare e eliminare questo quiz?' : 'Eliminare questo quiz?';
     if (!window.confirm(msg)) return;
-    await fetch(`/api/quiz?id=${id}`, { method: 'DELETE', headers: { 'x-internal-user-id': activeProfileId } });
+    await fetch(`/api/quiz?id=${id}`, { method: 'DELETE', headers: authHeaders(activeProfileId) });
     await load();
   };
 
