@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import sql from '../lib/db.js';
+import { hasInternalToken, safeEqual } from '../lib/internalAuth.js';
 
 type Handler = (req: VercelRequest, res: VercelResponse) => Promise<void>;
 
@@ -195,20 +196,19 @@ async function runMigration() {
   console.log('[DB] migrazione completata');
 }
 
-/** Confronto a tempo costante: non rivela quanti caratteri coincidono */
-export function safeEqual(a: string, b: string): boolean {
-  const h = (s: string) => crypto.createHash('sha256').update(String(s)).digest();
-  return crypto.timingSafeEqual(h(a), h(b));
-}
+export { safeEqual };
 
 const PROXY_HEADERS = ['cf-connecting-ip', 'cf-ray', 'x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'forwarded'];
 
 /**
  * Vero solo per le chiamate fatte dal server a sé stesso.
- * Dietro Cloudflare Tunnel ogni visitatore arriva dal socket locale: l'IP non basta.
- * Il proxy aggiunge sempre i suoi header e conserva l'Host pubblico, e dall'esterno non si possono togliere.
+ * Prova principale: il token interno del processo (lib/internalAuth.ts), che da Internet non si
+ * può conoscere. Dietro Cloudflare Tunnel ogni visitatore arriva dal socket locale, quindi
+ * l'indirizzo da solo non basta: socket locale, assenza degli header del proxy e Host locale
+ * restano come controlli aggiuntivi.
  */
 export function isInternalRequest(req: VercelRequest): boolean {
+  if (!hasInternalToken(req.headers as Record<string, unknown>)) return false;
   const ip: string = (req as any).ip ?? (req.socket as any)?.remoteAddress ?? '';
   if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') return false;
   if (PROXY_HEADERS.some(h => req.headers[h] !== undefined)) return false;
@@ -216,7 +216,7 @@ export function isInternalRequest(req: VercelRequest): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
 }
 
-/** Processo interno oppure chiamata con CRON_SECRET valido */
+/** Funzioni pianificate (pubblicazione, controlli prezzo, cache offerte): processo interno oppure CRON_SECRET valido */
 export function isAuthorizedJob(req: VercelRequest): boolean {
   if (isInternalRequest(req)) return true;
   const secret = process.env.CRON_SECRET;
@@ -277,8 +277,8 @@ export function getUserId(req: VercelRequest): string | null {
 export function requireUserId(req: VercelRequest, res: VercelResponse): string | null {
   const internalUserId = req.headers['x-internal-user-id'] as string | undefined;
   if (internalUserId) {
-    // Solo i processi interni del server o chi ha il CRON_SECRET possono agire per conto di un utente
-    if (isAuthorizedJob(req)) return internalUserId;
+    // Solo il server stesso (token interno) può agire per conto di un utente; il CRON_SECRET no
+    if (isInternalRequest(req)) return internalUserId;
   }
 
   const userId = getUserId(req);

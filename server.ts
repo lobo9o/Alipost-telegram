@@ -9,6 +9,7 @@ import { runCustomPostScheduler } from './api/custom-posts/scheduler.js';
 import { startBotPoller } from './api/tg-bot/poller.js';
 import { startPrizeBotPoller } from './api/prize-bot/poller.js';
 import { cavalieriPostsHandler } from './api/public/cavalieri-posts.js';
+import { internalHeaders } from './lib/internalAuth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -27,10 +28,8 @@ function withId(handler: (req: any, res: any) => any) {
   };
 }
 
-const cronHeaders = () => {
-  const s = process.env.CRON_SECRET;
-  return s ? { authorization: `Bearer ${s}` } : {};
-};
+// Le chiamate pianificate verso sé stesso usano il token interno del processo (lib/internalAuth.ts)
+const cronHeaders = () => internalHeaders();
 
 async function main() {
   const [

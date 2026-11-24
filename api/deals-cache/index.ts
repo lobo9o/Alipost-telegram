@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { withErrorHandler, requireUserId, getUserId } from '../_utils.js';
+import { withErrorHandler, requireUserId, getUserId, isAuthorizedJob } from '../_utils.js';
 import { getToken, runAmazonSearch, runBrandKeywordsSearch, DEFAULT_BRAND_KEYWORDS, MARKETPLACE_DOMAINS, MARKETPLACE_CURRENCY } from '../_amazonSearch.js';
 import sql from '../../lib/db.js';
 
+// Aggiornamento pianificato: timer interno del server oppure CRON_SECRET (confronto a tempo costante).
+// Una chiamata interna per conto di un utente (x-internal-user-id) resta un aggiornamento del suo profilo.
 function isCronRequest(req: VercelRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  return req.headers['authorization'] === `Bearer ${secret}`;
+  return isAuthorizedJob(req) && !req.headers['x-internal-user-id'];
 }
 
 export default withErrorHandler(async (req: VercelRequest, res: VercelResponse) => {

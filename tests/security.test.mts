@@ -10,12 +10,14 @@ process.env.CRON_SECRET = 'segreto-di-test';
 delete process.env.ALLOW_UNVERIFIED_TELEGRAM;
 
 const { requireUserId, getUserId, isInternalRequest, isAuthorizedJob, safeEqual } = await import('../api/_utils.js');
+const { internalHeaders, INTERNAL_AUTH_HEADER } = await import('../lib/internalAuth.js');
 const quiz = (await import('../api/quiz/index.js')).default;
 const admin = (await import('../api/admin/dashboard.js')).default;
 const recap = (await import('../api/autopost/daily-recap.js')).default;
 
 const LOCAL = { ip: '127.0.0.1' };
-const INTERNAL = { host: 'localhost:3000' };
+const LOCALHOST = { host: 'localhost:3000' };
+const INTERNAL = { ...LOCALHOST, ...internalHeaders() };
 const TUNNEL = { host: 'postdealbot.it', 'cf-connecting-ip': '203.0.113.9', 'cf-ray': 'abc', 'x-forwarded-for': '203.0.113.9' };
 function mkReq(headers: any, extra: any = {}) { return { headers, query: {}, method: 'GET', socket: {}, ...LOCAL, ...extra } as any; }
 function mkRes() { const r: any = { code: 200, body: null, status(c: number) { r.code = c; return r; }, json(b: any) { r.body = b; return r; }, send(b: any) { r.body = b; return r; }, setHeader() {} }; return r; }
@@ -32,8 +34,24 @@ test('x-internal-user-id: dal Tunnel viene rifiutato anche se il socket è local
   assert.equal(requireUserId(mkReq({ ...TUNNEL, 'x-internal-user-id': '54225500' }), res), null);
   assert.equal(res.code, 401);
 });
-test('x-internal-user-id: accettato per il worker interno', () => {
+test('x-internal-user-id: accettato per il worker interno (token del processo)', () => {
   assert.equal(requireUserId(mkReq({ ...INTERNAL, 'x-internal-user-id': '777' }), mkRes()), '777');
+  assert.deepEqual(Object.keys(internalHeaders('777', true)).sort(), ['Content-Type', INTERNAL_AUTH_HEADER, 'x-internal-user-id'].sort());
+});
+test('x-internal-user-id: dal socket locale SENZA token viene rifiutato', () => {
+  const res = mkRes();
+  assert.equal(requireUserId(mkReq({ ...LOCALHOST, 'x-internal-user-id': '777' }), res), null);
+  assert.equal(res.code, 401);
+});
+test('x-internal-user-id: token interno errato o vuoto rifiutato', () => {
+  for (const t of ['sbagliato', '', 'x'.repeat(43)]) assert.equal(requireUserId(mkReq({ ...LOCALHOST, [INTERNAL_AUTH_HEADER]: t, 'x-internal-user-id': '777' }), mkRes()), null);
+});
+test('x-internal-user-id: token valido ma arrivato dal Tunnel rifiutato (difesa in profondità)', () => {
+  assert.equal(requireUserId(mkReq({ ...TUNNEL, ...internalHeaders(), 'x-internal-user-id': '777' }), mkRes()), null);
+});
+test('token interno: uguale fra copie diverse del modulo nello stesso processo', async () => {
+  const altra = await import('../lib/internalAuth.ts?copia=' + Date.now());
+  assert.equal(altra.internalHeaders()[INTERNAL_AUTH_HEADER], internalHeaders()[INTERNAL_AUTH_HEADER]);
 });
 test('x-internal-user-id: rifiutato con Host pubblico senza header proxy', () => {
   assert.equal(requireUserId(mkReq({ host: 'postdealbot.it', 'x-internal-user-id': '1' }), mkRes()), null);
@@ -41,9 +59,12 @@ test('x-internal-user-id: rifiutato con Host pubblico senza header proxy', () =>
 test('x-internal-user-id: rifiutato da IP esterno', () => {
   assert.equal(requireUserId(mkReq({ ...INTERNAL, 'x-internal-user-id': '1' }, { ip: '203.0.113.9' }), mkRes()), null);
 });
-test('CRON_SECRET: valido apre, errato no', () => {
-  assert.equal(requireUserId(mkReq({ ...TUNNEL, 'x-internal-user-id': '5', authorization: 'Bearer segreto-di-test' }), mkRes()), '5');
-  assert.equal(requireUserId(mkReq({ ...TUNNEL, 'x-internal-user-id': '5', authorization: 'Bearer sbagliato' }), mkRes()), null);
+test('CRON_SECRET: apre solo le funzioni pianificate, non permette di agire per conto di un utente', () => {
+  assert.equal(requireUserId(mkReq({ ...TUNNEL, 'x-internal-user-id': '5', authorization: 'Bearer segreto-di-test' }), mkRes()), null);
+  assert.equal(isAuthorizedJob(mkReq({ ...TUNNEL, authorization: 'Bearer segreto-di-test' })), true);
+  assert.equal(isAuthorizedJob(mkReq({ ...TUNNEL, authorization: 'Bearer sbagliato' })), false);
+  assert.equal(isAuthorizedJob(mkReq({ ...LOCALHOST })), false);
+  assert.equal(isAuthorizedJob(mkReq({ ...INTERNAL })), true);
 });
 test('Telegram: firma valida', () => { assert.equal(getUserId(mkReq({ 'x-tg-init-data': initData(42) })), '42'); });
 test('Telegram: firma falsa rifiutata', () => { assert.equal(getUserId(mkReq({ 'x-tg-init-data': initData(42, 0, '999:altro') })), null); });
@@ -85,7 +106,8 @@ test('connessione reale: Tunnel simulato su socket locale', async () => {
   const call = (headers: any) => new Promise<any>((ok, no) => { http.get({ host: '127.0.0.1', port, path: '/p', headers }, (r) => { let b = ''; r.on('data', d => b += d); r.on('end', () => ok({ code: r.statusCode, body: b })); }).on('error', no); });
   try {
     assert.equal((await call({ host: 'postdealbot.it', 'cf-connecting-ip': '203.0.113.9', 'x-internal-user-id': '54225500' })).code, 401);
-    const inner = await call({ host: 'localhost:' + port, 'x-internal-user-id': '777' });
+    assert.equal((await call({ host: 'localhost:' + port, 'x-internal-user-id': '777' })).code, 401);
+    const inner = await call({ host: 'localhost:' + port, ...internalHeaders('777') });
     assert.equal(inner.code, 200); assert.equal(JSON.parse(inner.body).id, '777');
   } finally { srv.close(); }
 });

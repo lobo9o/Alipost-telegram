@@ -1,5 +1,6 @@
 import sql from '../../lib/db.js';
 import { isAuthorizedJob, requireUserId } from '../_utils.js';
+import { internalHeaders } from '../../lib/internalAuth.js';
 
 // Tiene traccia dei riepiloghi già pubblicati oggi per evitare doppioni (in-memory, reset al restart)
 const sentToday = new Map<string, string>(); // key: "userId:channel" → value: "YYYY-MM-DD"
@@ -121,7 +122,7 @@ async function publishRecap(userId: string, title: string, serverPort: number) {
   // Forza pubblicazione immediata
   await fetch(`http://localhost:${serverPort}/api/autopost/publish`, {
     method: 'GET',
-    headers: { 'x-internal-user-id': userId },
+    headers: internalHeaders(userId),
   }).catch(() => {});
 }
 

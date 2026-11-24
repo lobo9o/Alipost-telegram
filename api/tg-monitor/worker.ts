@@ -1,4 +1,5 @@
 import sql from '../../lib/db.js';
+import { internalHeaders } from '../../lib/internalAuth.js';
 import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage } from 'telegram/events/index.js';
@@ -212,11 +213,9 @@ async function wasRecentlyQueuedDB(userId: string, productIds: string[], destCha
 }
 
 let serverPort = 3000;
-let cronSecret = '';
 
 export function initTgMonitor(port: number) {
   serverPort = port;
-  cronSecret = process.env.CRON_SECRET || '';
   // Crea tabella per persistere lastMsgId tra riavvii
   sql`CREATE TABLE IF NOT EXISTS tg_monitor_state (
     user_id TEXT NOT NULL,
@@ -240,8 +239,7 @@ export function initTgMonitor(port: number) {
   // Price-check: ogni 30 minuti chiama publish che controlla le offerte scadute su tutti i post
   setInterval(async () => {
     try {
-      const headers: Record<string, string> = { 'content-type': 'application/json' };
-      if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
+      const headers = internalHeaders(null, true);
       await fetch(`http://localhost:${serverPort}/api/autopost/publish`, { method: 'POST', headers, body: '{}' });
       console.log('[tg-monitor] price-check (publish) completato');
     } catch (e: any) {
@@ -787,11 +785,8 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     return;
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'x-internal-user-id': profileId,
-  };
-  if (cronSecret) headers['authorization'] = `Bearer ${cronSecret}`;
+  // Chiamate interne per conto del profilo: token del processo, mai CRON_SECRET o indirizzo locale
+  const headers = internalHeaders(profileId, true);
 
   const { getLayoutAndKeyboard, templateId } = await getUserLayouts(profileId);
   console.log(`[tg-monitor] ${profileId} — templateId=${templateId || '(nessuno)'}`);
