@@ -123,6 +123,7 @@ async function publishRecap(userId: string, title: string, serverPort: number) {
   await fetch(`http://localhost:${serverPort}/api/autopost/publish`, {
     method: 'GET',
     headers: internalHeaders(userId),
+    redirect: 'error', // il token interno non deve mai seguire un redirect
   }).catch(() => {});
 }
 

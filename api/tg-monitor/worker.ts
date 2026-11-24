@@ -240,7 +240,7 @@ export function initTgMonitor(port: number) {
   setInterval(async () => {
     try {
       const headers = internalHeaders(null, true);
-      await fetch(`http://localhost:${serverPort}/api/autopost/publish`, { method: 'POST', headers, body: '{}' });
+      await fetch(`http://localhost:${serverPort}/api/autopost/publish`, { method: 'POST', headers, body: '{}', redirect: 'error' });
       console.log('[tg-monitor] price-check (publish) completato');
     } catch (e: any) {
       console.warn('[tg-monitor] price-check errore:', e.message);
@@ -714,7 +714,7 @@ async function fetchProduct(userId: string, url: string, headers: Record<string,
 
   const productRes = await fetch(
     `http://localhost:${serverPort}/api/product`,
-    { method: 'POST', headers, body: JSON.stringify({ platform, url }) }
+    { method: 'POST', headers, body: JSON.stringify({ platform, url }), redirect: 'error' }
   );
   if (productRes.status === 429) {
     console.warn(`[tg-monitor] /api/product rate-limited (429) per ${url}`);
@@ -982,7 +982,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
     };
 
     const postRes = await fetch(`http://localhost:${serverPort}/api/posts`, {
-      method: 'POST', headers, body: JSON.stringify(post),
+      method: 'POST', headers, body: JSON.stringify(post), redirect: 'error',
     });
     if (!postRes.ok) { console.warn('[tg-monitor] errore salvataggio post:', await postRes.text()); continue; }
     savedPosts.push(await postRes.json());
@@ -994,6 +994,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
   const queueRes = await fetch(`http://localhost:${serverPort}/api/autopost`, {
     method: 'POST',
     headers,
+    redirect: 'error',
     body: JSON.stringify({
       id: crypto.randomUUID(),
       posts: savedPosts,
@@ -1016,7 +1017,7 @@ async function processMessage(userId: string, urls: string[], autoPublish = fals
       for (let i = 0; i < 3; i++) {
         try {
           const r = await fetch(`http://localhost:${serverPort}/api/autopost/publish`, {
-            method: 'POST', headers, body: JSON.stringify({}),
+            method: 'POST', headers, body: JSON.stringify({}), redirect: 'error',
           });
           if (r.ok) return;
           console.warn(`[tg-monitor] trigger publish tentativo ${i + 1} fallito: HTTP ${r.status}`);

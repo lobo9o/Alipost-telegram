@@ -186,7 +186,7 @@ async function main() {
 
   // Autopost ogni minuto
   cron.schedule('* * * * *', () => {
-    fetch(`http://localhost:${PORT}/api/autopost/publish`, { headers: cronHeaders() })
+    fetch(`http://localhost:${PORT}/api/autopost/publish`, { headers: cronHeaders(), redirect: 'error' })
       .then(r => r.json())
       .then((d: any) => {
         if (d.published?.length) console.log('[cron] pubblicati:', d.published);
@@ -198,7 +198,7 @@ async function main() {
 
   // Refresh deals cache ogni 4 ore
   cron.schedule('0 */4 * * *', () => {
-    fetch(`http://localhost:${PORT}/api/deals-cache`, { method: 'POST', headers: cronHeaders() })
+    fetch(`http://localhost:${PORT}/api/deals-cache`, { method: 'POST', headers: cronHeaders(), redirect: 'error' })
       .then(r => r.json())
       .then((d: any) => console.log(`[cron deals-cache] refresh: ${d.refreshed ?? 0} utenti`))
       .catch(e => console.error('[cron deals-cache]', e));
@@ -206,7 +206,7 @@ async function main() {
 
   // Price check ogni giorno alle 9:00
   cron.schedule('0 9 * * *', () => {
-    fetch(`http://localhost:${PORT}/api/posts?action=price-check`, { headers: cronHeaders() })
+    fetch(`http://localhost:${PORT}/api/posts?action=price-check`, { headers: cronHeaders(), redirect: 'error' })
       .catch(e => console.error('[cron price-check]', e));
   });
 }
