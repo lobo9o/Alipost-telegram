@@ -61,7 +61,7 @@ async function getToken(credentialId: string, credentialSecret: string, version:
   }
 
   const tokenText = await res.text();
-  console.log(`[product] token ${res.status}:`, tokenText.slice(0, 120));
+  // Mai registrare la risposta: con status 200 contiene il token di accesso
   if (!res.ok) throw new Error(`Errore token Amazon (${res.status}): ${tokenText}`);
   const data = JSON.parse(tokenText) as { access_token: string };
   return data.access_token;
