@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout, LinkItem, NewPostItem, PublishedMultiItem } from '../types';
+import { NavPage, CreatedPost, QueueItem, Platform, Template, Tag, TextLayout, LinkItem, NewPostItem, PublishedMultiItem, TextEl } from '../types';
 import { PageHeader, SourceBadge, StatusBadge, SwitchTabs, EmptyState, InfoBanner, ErrorBanner, ToggleRow, TelegramPreview } from '../components/Shared';
 import { genId } from '../data/mock';
 import { detectAmazonLink } from '../services/amazonService';
@@ -125,58 +125,83 @@ function CustomTextEditor({ initialValue, onSave, rows = 2 }: { initialValue: st
   );
 }
 
+// Testi dell'anteprima, nello stesso ordine e con la stessa formattazione dell'immagine vera
+function previewTextItems(post: CreatedPost, template: Template): { el: TextEl; text: string }[] {
+  return [
+    { el: template.prezzo,          text: applyDecimalSep(applyCurrPos(`€${post.discountedPrice.toFixed(2)}`, template.prezzo.currencyPos), template.prezzo.decimalSep) },
+    { el: template.prezzoPrecedente, text: applyDecimalSep(applyCurrPos(`€${post.originalPrice.toFixed(2)}`, template.prezzoPrecedente.currencyPos), template.prezzoPrecedente.decimalSep) },
+    { el: template.sconto,          text: applySconto(`-${post.discountPercent}%`, template.sconto.hidePercent, template.sconto.hideMinus) },
+    { el: template.testoCustom,     text: post.customText ?? '' },
+  ];
+}
+
+// Stesso algoritmo di measureFitFontSize (LayoutSettings.tsx, editor dei layout) e di imageCompose:
+// riduce la dimensione finché il testo occupa al massimo il 92% della larghezza del riquadro.
+// letterSpacing (px, scala dell'anteprima) si aggiunge per ogni carattere, come ctx.letterSpacing nel canvas.
+function measureFitFontSize(text: string, boxWpx: number, maxFs: number, fontFamily: string, bold: boolean, letterSpacing = 0): number {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return maxFs;
+    const n = Array.from(text).length;
+    const largh = () => ctx.measureText(text).width + letterSpacing * n;
+    let fs = maxFs;
+    ctx.font = `${bold ? 'bold ' : ''}${fs}px ${fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
+    while (fs > 6 && largh() > boxWpx * 0.92) {
+      fs -= 0.5;
+      ctx.font = `${bold ? 'bold ' : ''}${fs}px ${fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
+    }
+    return Math.round(fs * 10) / 10;
+  } catch { return maxFs; }
+}
+
 // ── Template image preview (reused in PostCard + standalone) ──
 function TemplateImagePreview({ post, template }: { post: CreatedPost; template: Template | undefined }) {
   const hasImage = post.image && post.image !== 'placeholder.jpg';
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(340);
-  // fittedFs[i] = font size in px (preview scale) calcolato con misura canvas reale dopo fonts.ready
-  const [fittedFs, setFittedFs] = useState<Record<number, number>>({});
-
   React.useEffect(() => {
-    if (containerRef.current) setContainerW(containerRef.current.clientWidth);
+    const node = containerRef.current;
+    if (!node) return;
+    setContainerW(node.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setContainerW(node.clientWidth));
+    ro.observe(node);
+    return () => ro.disconnect();
   }, []);
 
+  // Testi a riquadro (boxW/boxH): dimensione adattata alla larghezza come nell'immagine vera
+  // (imageCompose / server): da boxH × 0,82 si riduce finché il testo occupa al massimo il 92% di boxW.
+  // La misura avviene dopo il caricamento effettivo di ciascun font.
+  const items = template ? previewTextItems(post, template) : [];
+  const fitKey = template ? JSON.stringify([containerW, template.canvasW, template.canvasH,
+    items.map(({ el, text }) => [text, el.enabled, el.fontFamily, el.bold, (el as any).boxW, (el as any).boxH, el.letterSpacing])]) : '';
+  const [fitted, setFitted] = useState<{ key: string; fs: Record<number, number> }>({ key: '', fs: {} });
   React.useEffect(() => {
     if (!template) return;
+    let annullato = false;
     const canvasW = template.canvasW ?? 1024;
     const canvasH = template.canvasH ?? 1024;
-
-    const texts = [
-      applyDecimalSep(applyCurrPos(`€${post.discountedPrice.toFixed(2)}`, template.prezzo.currencyPos), template.prezzo.decimalSep),
-      applyDecimalSep(applyCurrPos(`€${post.originalPrice.toFixed(2)}`, template.prezzoPrecedente.currencyPos), template.prezzoPrecedente.decimalSep),
-      applySconto(`-${post.discountPercent}%`, template.sconto.hidePercent, template.sconto.hideMinus),
-      post.customText ?? '',
-    ];
-    const els = [template.prezzo, template.prezzoPrecedente, template.sconto, template.testoCustom];
-
-    document.fonts.ready.then(() => {
-      const measureCanvas = document.createElement('canvas');
-      measureCanvas.width = canvasW; measureCanvas.height = canvasH;
-      const ctx = measureCanvas.getContext('2d');
-      if (!ctx) return;
-      const newFs: Record<number, number> = {};
-      els.forEach((el, i) => {
+    const containerH = containerW * canvasH / canvasW;
+    const da = items.filter(({ el, text }) => el.enabled && text && (el as any).boxW && (el as any).boxH);
+    const carica = (el: TextEl) => (document.fonts?.load
+      ? document.fonts.load(`${el.bold ? 'bold ' : ''}16px "${el.fontFamily}"`).catch(() => [])
+      : Promise.resolve([]));
+    Promise.all(da.map(({ el }) => carica(el))).then(() => {
+      if (annullato) return;
+      const fs: Record<number, number> = {};
+      items.forEach(({ el, text }, i) => {
         const bW = (el as any).boxW as number | undefined;
         const bH = (el as any).boxH as number | undefined;
-        if (!bW || !bH || !el.enabled || !texts[i]) return;
-        const boxWpx = (bW / 100) * canvasW;
-        const boxHpx = (bH / 100) * canvasH;
-        let fs = Math.round(boxHpx * 0.82);
-        const makeFont = (s: number) => `${el.bold ? 'bold ' : ''}${s}px ${el.fontFamily || 'Impact'}, 'Open Sans', sans-serif`;
-        ctx.font = makeFont(fs);
-        ctx.fillText('', -100, -100); // warm-up per questo font
-        while (fs > 6 && ctx.measureText(texts[i]).width > boxWpx * 0.92) {
-          fs--;
-          ctx.font = makeFont(fs);
-        }
-        // Scale al preview
-        const containerH = containerW * canvasH / canvasW;
-        newFs[i] = Math.round(fs * containerH / canvasH);
+        if (!bW || !bH || !el.enabled || !text) return;
+        const ls = el.letterSpacing ? el.letterSpacing * containerW / canvasW : 0;
+        fs[i] = measureFitFontSize(text, (bW / 100) * containerW, Math.round((bH / 100) * containerH * 0.82), el.fontFamily, el.bold, ls);
       });
-      setFittedFs(newFs);
+      setFitted({ key: fitKey, fs });
     });
-  }, [template, containerW, post.discountedPrice, post.originalPrice, post.discountPercent, post.customText]);
+    return () => { annullato = true; };
+  }, [fitKey]);
+  const fittedFs = fitted.key === fitKey ? fitted.fs : {};
 
   if (!template) {
     return (
@@ -251,12 +276,7 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
       })()}
 
       {/* Text elements with actual values */}
-      {([
-        { el: template.prezzo,          text: applyDecimalSep(applyCurrPos(`€${post.discountedPrice.toFixed(2)}`, template.prezzo.currencyPos), template.prezzo.decimalSep) },
-        { el: template.prezzoPrecedente, text: applyDecimalSep(applyCurrPos(`€${post.originalPrice.toFixed(2)}`, template.prezzoPrecedente.currencyPos), template.prezzoPrecedente.decimalSep) },
-        { el: template.sconto,          text: applySconto(`-${post.discountPercent}%`, template.sconto.hidePercent, template.sconto.hideMinus) },
-        { el: template.testoCustom,     text: post.customText },
-      ] as const).map(({ el, text }, i) => {
+      {items.map(({ el, text }, i) => {
         if (!el.enabled || !text) return null;
         const decScale = (el as any).decimalFontScale != null && (el as any).decimalFontScale < 1 ? (el as any).decimalFontScale : 1;
         const decMatch = decScale < 1 ? text.match(/^(.*?)([.,]\d{1,3})([\D]*)$/) : null;
@@ -268,6 +288,7 @@ function TemplateImagePreview({ post, template }: { post: CreatedPost; template:
           textDecoration: (el as any).strikethrough ? `line-through ${(el as any).strikethroughColor || el.color}` : 'none',
           pointerEvents: 'none',
           WebkitTextStroke: el.strokeEnabled ? `${el.strokeWidth * fontScale}px ${el.strokeColor}` : undefined,
+          letterSpacing: el.letterSpacing ? `${el.letterSpacing * containerW / canvasW}px` : undefined,
         };
         if (boxW && boxH) {
           const boxHpx = (boxH / 100) * containerH;
